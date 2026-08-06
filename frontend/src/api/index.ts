@@ -1,0 +1,173 @@
+import api from './client';
+import type { StudentProfile, Document, PaginatedResponse, DashboardStats, ApprovableChange, AuditLog, DocumentPeriod, Event } from '../types';
+
+// ── Auth ──────────────────────────────────────────────────────────────
+export const authApi = {
+  login: (identifier: string, password: string) =>
+    api.post('/auth/login', { identifier, password }).then((r) => r.data),
+
+  refresh: (refreshToken: string) =>
+    api.post('/auth/refresh', { refreshToken }).then((r) => r.data),
+
+  logout: (refreshToken: string) =>
+    api.post('/auth/logout', { refreshToken }).then((r) => r.data),
+
+  forgotPassword: (email: string) =>
+    api.post('/auth/forgot-password', { email }).then((r) => r.data),
+
+  resetPassword: (token: string, newPassword: string) =>
+    api.post(`/auth/reset-password/${token}`, { newPassword }).then((r) => r.data),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.post('/auth/change-password', { currentPassword, newPassword }).then((r) => r.data),
+};
+
+// ── Student Profile ───────────────────────────────────────────────────
+export const studentApi = {
+  getProfile: (profileId: string): Promise<StudentProfile> =>
+    api.get(`/students/${profileId}/profile`).then((r) => r.data),
+
+  getDocuments: (profileId: string): Promise<Document[]> =>
+    api.get(`/students/${profileId}/documents`).then((r) => r.data),
+
+  updateContact: (profileId: string, data: Partial<StudentProfile>) =>
+    api.patch(`/students/${profileId}/contact`, data).then((r) => r.data),
+
+  updatePersonal: (profileId: string, data: Partial<StudentProfile>) =>
+    api.patch(`/students/${profileId}/personal`, data).then((r) => r.data),
+
+  updateFamily: (profileId: string, data: Partial<StudentProfile>) =>
+    api.patch(`/students/${profileId}/family`, data).then((r) => r.data),
+
+  updateEducation: (profileId: string, data: Partial<StudentProfile>) =>
+    api.patch(`/students/${profileId}/education`, data).then((r) => r.data),
+
+  updateBankInfo: (profileId: string, iban: string, bankName: string) =>
+    api.patch(`/students/${profileId}/bank-info`, { iban, bankName }).then((r) => r.data),
+
+  uploadPhoto: (profileId: string, file: File) => {
+    const fd = new FormData();
+    fd.append('photo', file);
+    return api.post(`/students/${profileId}/photo`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data);
+  },
+};
+
+// ── Documents ─────────────────────────────────────────────────────────
+export const documentApi = {
+  getPeriods: (): Promise<DocumentPeriod[]> =>
+    api.get('/documents/periods').then((r) => r.data),
+
+  uploadStatic: (profileId: string, type: string, file: File) => {
+    const fd = new FormData();
+    fd.append('profileId', profileId);
+    fd.append('type', type);
+    fd.append('file', file);
+    return api.post('/documents/static', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+
+  uploadTranscript: (profileId: string, data: Record<string, string>, file: File) => {
+    const fd = new FormData();
+    fd.append('profileId', profileId);
+    Object.entries(data).forEach(([k, v]) => fd.append(k, v));
+    fd.append('file', file);
+    return api.post('/documents/transcript', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+
+  uploadStudentCertificate: (profileId: string, data: Record<string, string>, file: File) => {
+    const fd = new FormData();
+    fd.append('profileId', profileId);
+    Object.entries(data).forEach(([k, v]) => fd.append(k, v));
+    fd.append('file', file);
+    return api.post('/documents/student-certificate', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+
+  uploadVolunteerReport: (profileId: string, data: Record<string, string>, file: File) => {
+    const fd = new FormData();
+    fd.append('profileId', profileId);
+    Object.entries(data).forEach(([k, v]) => fd.append(k, v));
+    fd.append('file', file);
+    return api.post('/documents/volunteer-report', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+};
+
+// ── Approvals ─────────────────────────────────────────────────────────
+export const approvalApi = {
+  getQueue: (params?: Record<string, string>): Promise<PaginatedResponse<ApprovableChange>> =>
+    api.get('/approvals/queue', { params }).then((r) => r.data),
+
+  approve: (id: string) =>
+    api.post(`/approvals/${id}/approve`).then((r) => r.data),
+
+  reject: (id: string, rejectionNote: string) =>
+    api.post(`/approvals/${id}/reject`, { rejectionNote }).then((r) => r.data),
+
+  bulkApprove: (ids: string[]) =>
+    api.post('/approvals/bulk-approve', { ids }).then((r) => r.data),
+};
+
+// ── Admin ─────────────────────────────────────────────────────────────
+export const adminApi = {
+  getDashboard: (): Promise<DashboardStats> =>
+    api.get('/admin/dashboard').then((r) => r.data),
+
+  listStudents: (params?: Record<string, string>): Promise<PaginatedResponse<StudentProfile>> =>
+    api.get('/admin/students', { params }).then((r) => r.data),
+
+  getCsvTemplate: () =>
+    api.get('/admin/students/csv-template', { responseType: 'blob' }).then((r) => r.data),
+
+  bulkCreate: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/admin/students/bulk-create', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      responseType: 'blob',
+    }).then((r) => r.data);
+  },
+
+  bulkCreateJson: (data: { tcs: string; scholarshipGroup: string }) =>
+    api.post('/admin/students/bulk-create', data).then((r) => r.data),
+
+  resetPassword: (id: string): Promise<{ password: string }> =>
+    api.post(`/admin/students/${id}/reset-password`).then((r) => r.data),
+
+  listPeriods: (): Promise<DocumentPeriod[]> =>
+    api.get('/admin/periods').then((r) => r.data),
+
+  createPeriod: (data: Partial<DocumentPeriod>) =>
+    api.post('/admin/periods', data).then((r) => r.data),
+
+  updatePeriod: (id: string, data: Partial<DocumentPeriod>) =>
+    api.patch(`/admin/periods/${id}`, data).then((r) => r.data),
+
+  listUsers: () =>
+    api.get('/admin/users').then((r) => r.data),
+
+  createUser: (data: { email: string; username?: string; password: string; role?: string }) =>
+    api.post('/admin/users', data).then((r) => r.data),
+
+  deleteUser: (id: string) =>
+    api.delete(`/admin/users/${id}`).then((r) => r.data),
+};
+
+// ── Audit Logs ────────────────────────────────────────────────────────
+export const auditApi = {
+  getLogs: (params?: Record<string, string>): Promise<PaginatedResponse<AuditLog>> =>
+    api.get('/audit-logs', { params }).then((r) => r.data),
+};
+
+// ── Events & Trainings ────────────────────────────────────────────────
+export const eventApi = {
+  listEvents: (): Promise<Event[]> =>
+    api.get('/events').then((r) => r.data),
+
+  createEvent: (formData: FormData): Promise<Event> =>
+    api.post('/events', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data),
+
+  deleteEvent: (id: string): Promise<void> =>
+    api.delete(`/events/${id}`).then((r) => r.data),
+};

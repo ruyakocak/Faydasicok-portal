@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Uploads (sensitive files)
+backend/uploads/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Prisma
+backend/prisma/migrations/
+
+# Bootstrap artifacts
+bootstrap-npm.js
+.local-bin/
+
+# Databases (SQLite)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+backend/dev.db
+backend/prisma/dev.db

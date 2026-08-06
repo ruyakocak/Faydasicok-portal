@@ -1,0 +1,276 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ─────────────────────────────────────────────
+// USER & AUTH
+// ─────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  tcKimlikNo   String?   @unique // Only for students
+  email        String?   @unique // For admin/reviewer
+  username     String?   @unique // For admin (e.g. "admin")
+  passwordHash String
+  role         String    @default("STUDENT") // STUDENT, REVIEWER, ADMIN
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  studentProfile    StudentProfile?
+  refreshTokens     RefreshToken[]
+  passwordResets    PasswordReset[]
+  approvableChanges ApprovableChange[] @relation("ChangedBy")
+  approvedChanges   ApprovableChange[] @relation("ApprovedBy")
+  auditLogsBy       AuditLog[]         @relation("AuditLogUser")
+  auditLogsApproved AuditLog[]         @relation("AuditLogApprover")
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("password_resets")
+}
+
+// ─────────────────────────────────────────────
+// STUDENT PROFILE
+// ─────────────────────────────────────────────
+
+model StudentProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ── Personal Info (admin-approvable fields) ──
+  firstName          String  @default("")
+  lastName           String  @default("")
+  gender             String? // Erkek / Kadın
+  birthDate          DateTime?
+  birthPlace         String?
+  registeredCity     String? // Nüfusa kayıtlı şehir
+  scholarshipSources String? // Burs alınan yer(ler) — JSON array as string
+  scholarshipDate    DateTime? // Burs talep tarihi
+  scholarshipGroup   String? // Sedefteki İnciler / İz Bırakanlar
+  studentStatus      String   @default("INCOMPLETE") // INCOMPLETE, ACTIVE, PASSIVE, GRADUATED
+  enrollmentStatus   String   @default("ENROLLED") // ENROLLED, ON_LEAVE, GRADUATED, DROPPED
+
+  // ── Contact (directly editable) ──
+  phone    String?
+  email    String?
+  address  String?
+
+  // ── Profile Photo ──
+  photoPath String?
+
+  // ── Bank Info (admin-approvable) ──
+  iban       String?
+  bankName   String?
+
+  // ── Family Info ──
+  fatherName         String?
+  fatherAge          Int?
+  fatherAlive        Boolean @default(true)
+  fatherMaritalStatus String? // Bekâr/Evli/Boşanmış/Dul
+  fatherOccupation   String?
+  fatherIncome       Float?
+  motherName         String?
+  motherAge          Int?
+  motherAlive        Boolean @default(true)
+  motherMaritalStatus String?
+  motherOccupation   String?
+  motherIncome       Float?
+  familyMemberCount  Int?
+  siblingCount       Int?
+  siblingsInEducation Int?
+  socialSecurity     String? // Sosyal güvence
+  homeOwnership      String? // Kira/Mülk
+  homeAddress        String?
+  familyDescription  String?
+
+  // ── Education Info ──
+  universityName    String?
+  faculty           String?
+  department        String?
+  grade             Int?    // Sınıf: 1,2,3,4,5,6
+  universityType    String? // Devlet/Vakıf
+  highSchoolName    String?
+  highSchoolCity    String?
+  highSchoolGradYear Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  documents         Document[]
+  approvableChanges ApprovableChange[]
+
+  @@map("student_profiles")
+}
+
+// ─────────────────────────────────────────────
+// DOCUMENT PERIODS
+// ─────────────────────────────────────────────
+
+model DocumentPeriod {
+  id          String             @id @default(cuid())
+  type        String             // TRANSCRIPT, STUDENT_CERTIFICATE, VOLUNTEER_REPORT
+  label       String             // e.g. "2025-2026 Güz Dönemi"
+  semester    String?            // GUZ, BAHAR
+  academicYear String?           // e.g. "2025-2026"
+  grade       Int?               // Which grade this applies to (null = all)
+  isOpen      Boolean            @default(false)
+  startDate   DateTime?
+  endDate     DateTime?          // Auto-close date
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  documents Document[]
+
+  @@map("document_periods")
+}
+
+// ─────────────────────────────────────────────
+// DOCUMENTS
+// ─────────────────────────────────────────────
+
+model Document {
+  id               String         @id @default(cuid())
+  studentProfileId String
+  studentProfile   StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  type             String         // APPLICATION_FORM, YKS_RESULT, etc.
+  isStatic         Boolean        @default(false) // True for static docs
+
+  // Periodic doc fields
+  periodId         String?
+  period           DocumentPeriod? @relation(fields: [periodId], references: [id])
+  grade            Int?
+  semester         String?        // GUZ, BAHAR
+  academicYear     String?
+
+  // Transcript specific
+  transcriptNote   String?
+
+  // STK specific
+  volunteerOrg     String?
+  volunteerNote    String?
+
+  // File info
+  filePath         String
+  originalFileName String
+  mimeType         String
+  fileSize         Int
+
+  // Approval
+  status           String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  rejectionNote    String?
+
+  uploadedAt       DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  approvableChange ApprovableChange?
+
+  @@map("documents")
+}
+
+// ─────────────────────────────────────────────
+// APPROVABLE CHANGES (Generic approval table)
+// ─────────────────────────────────────────────
+
+model ApprovableChange {
+  id               String               @id @default(cuid())
+  entityType       String               // PERSONAL_INFO, FAMILY_INFO, EDUCATION_INFO, BANK_INFO, DOCUMENT
+  studentProfileId String
+  studentProfile   StudentProfile       @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  // For field changes (personal/family/education/bank info)
+  fieldName        String?
+  oldValue         String?
+  newValue         String?
+
+  // For document changes
+  documentId       String?  @unique
+  document         Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  // Who made the change
+  changedById      String
+  changedBy        User     @relation("ChangedBy", fields: [changedById], references: [id])
+
+  // Approval
+  status           String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  reviewNote       String?
+  approvedById     String?
+  approvedBy       User?    @relation("ApprovedBy", fields: [approvedById], references: [id])
+  reviewedAt       DateTime?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("approvable_changes")
+}
+
+// ─────────────────────────────────────────────
+// AUDIT LOG (append-only)
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  userId       String
+  user         User        @relation("AuditLogUser", fields: [userId], references: [id])
+  action       String      // CREATE, UPDATE, DELETE, APPROVE, REJECT, LOGIN, LOGOUT, UPLOAD
+  module       String      // e.g. "BankInfo", "Transcript", "Login"
+  entityId     String?
+  entityType   String?
+  oldValue     String?
+  newValue     String?
+  approverId   String?
+  approver     User?       @relation("AuditLogApprover", fields: [approverId], references: [id])
+  ipAddress    String?
+  createdAt    DateTime    @default(now())
+
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────
+// EVENTS & TRAININGS
+// ─────────────────────────────────────────────
+
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  date        DateTime
+  meetingUrl  String?
+  imagePath   String?
+  createdAt   DateTime @default(now())
+
+  @@map("events")
+}
