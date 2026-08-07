@@ -20,12 +20,28 @@ export default function StudentsListPage() {
   const [scholarshipGroup, setScholarshipGroup] = useState('');
   const [page, setPage] = useState(1);
 
-  // States for bulk paste modal
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [pastedTcs, setPastedTcs] = useState('');
   const [modalGroup, setModalGroup] = useState('');
   const [creating, setCreating] = useState(false);
   const [createdResults, setCreatedResults] = useState<any[]>([]);
+
+  // Single Create
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [newStudentForm, setNewStudentForm] = useState({ tcKimlikNo: '', firstName: '', lastName: '' });
+  const [createResult, setCreateResult] = useState<{ tcKimlikNo?: string; password?: string; error?: string } | null>(null);
+
+  // States for Mentor assignment modal
+  const [mentorModalOpen, setMentorModalOpen] = useState(false);
+  const [selectedStudentForMentor, setSelectedStudentForMentor] = useState<StudentProfile | null>(null);
+  const [mentorsList, setMentorsList] = useState<any[]>([]);
+  const [selectedMentorId, setSelectedMentorId] = useState<string>('');
+  const [assigningMentor, setAssigningMentor] = useState(false);
+
+  // Load mentors once
+  useEffect(() => {
+    adminApi.listMentors().then(setMentorsList).catch(console.error);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,6 +104,22 @@ export default function StudentsListPage() {
     }
   }
 
+  async function handleCreateSingle(e: React.FormEvent) {
+    e.preventDefault();
+    setCreating(true);
+    setCreateResult(null);
+    try {
+      const res = await adminApi.createStudent(newStudentForm);
+      setCreateResult({ tcKimlikNo: res.tcKimlikNo, password: res.password });
+      load();
+      toast.success('Bursiyer oluşturuldu.');
+    } catch (err: any) {
+      setCreateResult({ error: err.response?.data?.message || 'Bir hata oluştu.' });
+    } finally {
+      setCreating(false);
+    }
+  }
+
   function downloadCreatedResults() {
     if (!createdResults.length) return;
     const header = 'TC KİMLİK;ŞİFRE';
@@ -104,6 +136,28 @@ export default function StudentsListPage() {
     URL.revokeObjectURL(url);
   }
 
+  function openMentorModal(student: StudentProfile) {
+    setSelectedStudentForMentor(student);
+    setSelectedMentorId((student as any).mentor?.id || '');
+    setMentorModalOpen(true);
+  }
+
+  async function handleAssignMentor(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedStudentForMentor) return;
+    setAssigningMentor(true);
+    try {
+      await adminApi.assignMentor(selectedStudentForMentor.id, selectedMentorId || null);
+      toast.success('Mentör ataması güncellendi.');
+      setMentorModalOpen(false);
+      load();
+    } catch (err) {
+      // handled by interceptor
+    } finally {
+      setAssigningMentor(false);
+    }
+  }
+
   return (
     <div className="animate-fade-in">
       <div className="page-header flex items-start justify-between">
@@ -112,6 +166,10 @@ export default function StudentsListPage() {
           <p className="page-subtitle">{result?.pagination.total ?? 0} bursiyer kayıtlı</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => { setCreateModalOpen(true); setCreateResult(null); setNewStudentForm({ tcKimlikNo: '', firstName: '', lastName: '' }); }} className="btn-primary btn-sm">
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+            Bursiyer Ekle
+          </button>
           <button onClick={downloadTemplate} className="btn-secondary btn-sm">
             <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             Şablon İndir
@@ -141,15 +199,6 @@ export default function StudentsListPage() {
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             />
           </div>
-          <select
-            className="form-select w-48 text-sm"
-            value={scholarshipGroup}
-            onChange={(e) => { setScholarshipGroup(e.target.value); setPage(1); }}
-          >
-            <option value="">Tüm Burs Grupları</option>
-            <option value="Sedefteki İnciler">Sedefteki İnciler</option>
-            <option value="İz Bırakanlar">İz Bırakanlar</option>
-          </select>
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input
               type="checkbox"
@@ -183,6 +232,7 @@ export default function StudentsListPage() {
                   <th>Üniversite / Bölüm</th>
                   <th>Sınıf</th>
                   <th>Kayıt Durumu</th>
+                  <th>Mentör</th>
                   <th>Onay</th>
                   <th></th>
                 </tr>
@@ -192,16 +242,6 @@ export default function StudentsListPage() {
                   <tr key={profile.id}>
                     <td className="font-medium text-gray-900">
                       <div>{profile.firstName} {profile.lastName}</div>
-                      {profile.scholarshipGroup && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-700 bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded mt-1">
-                          {profile.scholarshipGroup === 'Sedefteki İnciler' ? (
-                            <img src="/sedefteki-inciler-logo.png" alt="Logo" className="h-3 object-contain" />
-                          ) : (
-                            <img src="/izbirakanlar-logo.png" alt="Logo" className="h-3 object-contain" />
-                          )}
-                          {profile.scholarshipGroup}
-                        </span>
-                      )}
                     </td>
                     <td className="text-gray-600 font-mono text-sm">
                       {profile.user?.tcKimlikNo || '—'}
@@ -219,6 +259,16 @@ export default function StudentsListPage() {
                       }`}>
                         {statusLabels[profile.studentStatus] || profile.studentStatus}
                       </span>
+                    </td>
+                    <td>
+                      {(profile as any).mentor ? (
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-gray-900">{(profile as any).mentor.firstName} {(profile as any).mentor.lastName}</span>
+                          <button onClick={() => openMentorModal(profile)} className="text-[10px] text-primary-600 hover:underline self-start">Değiştir</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => openMentorModal(profile)} className="btn-ghost btn-sm text-[11px] px-2 py-1">Atama Yap</button>
+                      )}
                     </td>
                     <td>
                       {(profile as any)._count?.approvableChanges > 0 && (
@@ -265,12 +315,12 @@ export default function StudentsListPage() {
         )}
       </div>
 
-      {/* Bulk paste modal */}
+      {/* Bulk Upload Modal */}
       {bulkModalOpen && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="font-semibold text-lg">Toplu TC Kimlik ile Bursiyer Oluştur</h3>
+              <h3 className="font-semibold text-lg">Toplu Bursiyer Ekle (TC ile)</h3>
               <button onClick={() => setBulkModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
@@ -351,6 +401,134 @@ export default function StudentsListPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Single Create Modal */}
+      {createModalOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-md">
+            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="font-semibold text-lg">Yeni Bursiyer Ekle</h3>
+              <button onClick={() => setCreateModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            
+            <div className="p-5">
+              {!createResult?.password ? (
+                <form onSubmit={handleCreateSingle} className="space-y-4">
+                  <div>
+                    <label className="form-label">Ad</label>
+                    <input
+                      type="text"
+                      required
+                      className="form-input"
+                      value={newStudentForm.firstName}
+                      onChange={(e) => setNewStudentForm(prev => ({ ...prev, firstName: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Soyad</label>
+                    <input
+                      type="text"
+                      required
+                      className="form-input"
+                      value={newStudentForm.lastName}
+                      onChange={(e) => setNewStudentForm(prev => ({ ...prev, lastName: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">TC Kimlik No</label>
+                    <input
+                      type="text"
+                      required
+                      pattern="\d{11}"
+                      maxLength={11}
+                      title="11 haneli TC Kimlik Numarası"
+                      className="form-input font-mono"
+                      value={newStudentForm.tcKimlikNo}
+                      onChange={(e) => setNewStudentForm(prev => ({ ...prev, tcKimlikNo: e.target.value }))}
+                    />
+                  </div>
+
+                  {createResult?.error && (
+                    <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg border border-red-100">
+                      {createResult.error}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-2 mt-6">
+                    <button type="button" onClick={() => setCreateModalOpen(false)} className="btn-secondary">İptal</button>
+                    <button type="submit" disabled={creating} className="btn-primary">
+                      {creating ? 'Oluşturuluyor...' : 'Oluştur'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="text-center py-6">
+                  <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+                  </div>
+                  <h4 className="text-lg font-bold text-gray-900 mb-2">Bursiyer Kaydı Oluşturuldu</h4>
+                  <p className="text-gray-500 mb-6">Bursiyerin sisteme giriş bilgileri aşağıdadır.</p>
+                  
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 mb-6">
+                    <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-left">
+                      <div className="text-sm font-medium text-gray-500">TC Kimlik No:</div>
+                      <div className="text-sm font-mono font-bold text-gray-900 select-all">{createResult.tcKimlikNo}</div>
+                      <div className="text-sm font-medium text-gray-500">Geçici Şifre:</div>
+                      <div className="text-sm font-mono font-bold text-primary-600 select-all">{createResult.password}</div>
+                    </div>
+                  </div>
+
+                  <button onClick={() => setCreateModalOpen(false)} className="btn-primary w-full">
+                    Tamam
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Mentor Modal */}
+      {mentorModalOpen && selectedStudentForMentor && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-md">
+            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="font-semibold text-lg">Mentör Ata</h3>
+              <button onClick={() => setMentorModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form onSubmit={handleAssignMentor} className="p-5">
+              <div className="mb-4">
+                <p className="text-sm text-gray-500 mb-4">
+                  <span className="font-medium text-gray-900">{selectedStudentForMentor.firstName} {selectedStudentForMentor.lastName}</span> isimli öğrenci için mentör ataması yapıyorsunuz.
+                </p>
+                <label className="form-label mb-1">Mentör Seçin</label>
+                <select
+                  className="form-select w-full"
+                  value={selectedMentorId}
+                  onChange={(e) => setSelectedMentorId(e.target.value)}
+                >
+                  <option value="">-- Mentör Yok (Kaldır) --</option>
+                  {mentorsList.map((mentor) => (
+                    <option key={mentor.id} value={mentor.id}>
+                      {mentor.firstName} {mentor.lastName} {mentor.title ? `(${mentor.title})` : ''} - {mentor._count?.students || 0} öğrenci atanmış
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 mt-6">
+                <button type="button" onClick={() => setMentorModalOpen(false)} className="btn-secondary">İptal</button>
+                <button type="submit" className="btn-primary" disabled={assigningMentor}>
+                  {assigningMentor ? 'Kaydediliyor...' : 'Kaydet'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -50,7 +50,7 @@ async function saveDocumentWithApproval(
       fileSize: stored.fileSize,
       status: 'PENDING',
       ...docData,
-    },
+    } as any,
   });
 
   // Create approvable change record linked to this document

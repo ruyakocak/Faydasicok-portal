@@ -5,6 +5,7 @@ export interface User {
   tcKimlikNo?: string;
   email?: string;
   username?: string;
+  forcePasswordChange?: boolean;
 }
 
 export interface StudentProfile {

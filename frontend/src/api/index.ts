@@ -115,6 +115,9 @@ export const adminApi = {
   listStudents: (params?: Record<string, string>): Promise<PaginatedResponse<StudentProfile>> =>
     api.get('/admin/students', { params }).then((r) => r.data),
 
+  createStudent: (data: { tcKimlikNo: string; firstName: string; lastName: string }) =>
+    api.post('/admin/students', data).then((r) => r.data),
+
   getCsvTemplate: () =>
     api.get('/admin/students/csv-template', { responseType: 'blob' }).then((r) => r.data),
 
@@ -145,11 +148,17 @@ export const adminApi = {
   listUsers: () =>
     api.get('/admin/users').then((r) => r.data),
 
-  createUser: (data: { email: string; username?: string; password: string; role?: string }) =>
+  createUser: (data: { email: string; username?: string; password: string; role?: string; firstName?: string; lastName?: string; title?: string; expertise?: string }) =>
     api.post('/admin/users', data).then((r) => r.data),
 
   deleteUser: (id: string) =>
     api.delete(`/admin/users/${id}`).then((r) => r.data),
+
+  listMentors: () =>
+    api.get('/admin/mentors').then((r) => r.data),
+
+  assignMentor: (studentId: string, mentorId: string | null) =>
+    api.post('/admin/assign-mentor', { studentId, mentorId }).then((r) => r.data),
 };
 
 // ── Audit Logs ────────────────────────────────────────────────────────
@@ -170,4 +179,16 @@ export const eventApi = {
 
   deleteEvent: (id: string): Promise<void> =>
     api.delete(`/events/${id}`).then((r) => r.data),
+};
+
+// ── Mentorship ────────────────────────────────────────────────────────
+export const mentorshipApi = {
+  getProfile: () =>
+    api.get('/mentorship/profile').then((r) => r.data),
+
+  getNotes: (studentId?: string) =>
+    api.get('/mentorship/notes', { params: { studentId } }).then((r) => r.data),
+
+  createNote: (noteText: string, studentId?: string) =>
+    api.post('/mentorship/notes', { noteText, studentId }).then((r) => r.data),
 };

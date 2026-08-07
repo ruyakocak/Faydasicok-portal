@@ -22,17 +22,20 @@ model User {
   passwordHash String
   role         String    @default("STUDENT") // STUDENT, REVIEWER, ADMIN
   isActive     Boolean   @default(true)
+  forcePasswordChange Boolean @default(false)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   // Relations
   studentProfile    StudentProfile?
+  mentorProfile     MentorProfile?
   refreshTokens     RefreshToken[]
   passwordResets    PasswordReset[]
   approvableChanges ApprovableChange[] @relation("ChangedBy")
   approvedChanges   ApprovableChange[] @relation("ApprovedBy")
   auditLogsBy       AuditLog[]         @relation("AuditLogUser")
   auditLogsApproved AuditLog[]         @relation("AuditLogApprover")
+  notesCreated      Note[]             @relation("NoteCreator")
 
   @@map("users")
 }
@@ -68,6 +71,9 @@ model StudentProfile {
   id     String @id @default(cuid())
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  mentorId String?
+  mentor   MentorProfile? @relation(fields: [mentorId], references: [id], onDelete: SetNull)
 
   // ── Personal Info (admin-approvable fields) ──
   firstName          String  @default("")
@@ -131,6 +137,7 @@ model StudentProfile {
   // Relations
   documents         Document[]
   approvableChanges ApprovableChange[]
+  notes             Note[]
 
   @@map("student_profiles")
 }
@@ -273,4 +280,49 @@ model Event {
   createdAt   DateTime @default(now())
 
   @@map("events")
+}
+
+// ─────────────────────────────────────────────
+// MENTORSHIP
+// ─────────────────────────────────────────────
+
+model MentorProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  firstName String
+  lastName  String
+  title     String?
+  expertise String?
+  company   String?
+  phone     String?
+  linkedin  String?
+  avatarUrl String?
+
+  students  StudentProfile[]
+  notes     Note[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("mentor_profiles")
+}
+
+model Note {
+  id          String   @id @default(cuid())
+  createdById String
+  createdBy   User     @relation("NoteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  mentorId    String
+  mentor      MentorProfile @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  
+  noteText    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("notes")
 }

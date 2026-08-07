@@ -17,12 +17,15 @@ export default function LoginPage() {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       if (user.role === 'STUDENT') {
         navigate('/student/profile');
+      } else if (user.role === 'MENTOR') {
+        navigate('/mentor/dashboard');
       } else {
         navigate('/admin/dashboard');
       }
       toast.success('Hoş geldiniz!');
     } catch (err: any) {
-      // Error toast handled by API interceptor
+      const msg = err.response?.data?.error || 'Kullanıcı adı veya şifre hatalı.';
+      toast.error(msg);
     }
   }
 

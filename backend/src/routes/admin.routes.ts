@@ -3,6 +3,7 @@ import { authenticate, requireAdmin, requireAdminOrReviewer } from '../middlewar
 import {
   getDashboard,
   listStudents,
+  createStudent,
   bulkCreateStudents,
   getCsvTemplate,
   listPeriods,
@@ -12,6 +13,8 @@ import {
   createUser,
   deleteUser,
   resetStudentPassword,
+  listMentors,
+  assignMentor,
 } from '../controllers/admin.controller';
 import { upload } from '../middleware/upload.middleware';
 import multer from 'multer';
@@ -22,8 +25,9 @@ adminRouter.use(authenticate);
 // Dashboard — admin + reviewer
 adminRouter.get('/dashboard', requireAdminOrReviewer, getDashboard);
 
-// Students — admin + reviewer can list; only admin can bulk create
+// Students — admin + reviewer can list; only admin can create
 adminRouter.get('/students', requireAdminOrReviewer, listStudents);
+adminRouter.post('/students', requireAdmin, createStudent);
 adminRouter.post('/students/:id/reset-password', requireAdminOrReviewer, resetStudentPassword);
 adminRouter.post('/students/bulk-create', requireAdmin, multer({ storage: multer.memoryStorage() }).single('file'), bulkCreateStudents);
 adminRouter.get('/students/csv-template', requireAdmin, getCsvTemplate);
@@ -37,3 +41,7 @@ adminRouter.patch('/periods/:id', requireAdmin, updatePeriod);
 adminRouter.get('/users', requireAdmin, listUsers);
 adminRouter.post('/users', requireAdmin, createUser);
 adminRouter.delete('/users/:id', requireAdmin, deleteUser);
+
+// Mentors
+adminRouter.get('/mentors', requireAdmin, listMentors);
+adminRouter.post('/assign-mentor', requireAdmin, assignMentor);

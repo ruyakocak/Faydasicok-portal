@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import ChangePasswordModal from '../components/ChangePasswordModal';
 
 interface NavItem {
   to: string;
@@ -29,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
 export default function AdminLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
   async function handleLogout() {
     await logout();
@@ -68,7 +71,7 @@ export default function AdminLayout() {
         </nav>
 
         {/* Bottom user area */}
-        <div className="border-t border-gray-200 p-3">
+        <div className="border-t border-gray-200 p-3 space-y-1">
           <div className="flex items-center gap-2.5 mb-2">
             <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm flex-shrink-0">
               {(user?.username || user?.email || 'A')[0].toUpperCase()}
@@ -83,8 +86,17 @@ export default function AdminLayout() {
             </div>
           </div>
           <button
+            onClick={() => setIsPasswordModalOpen(true)}
+            className="btn-ghost btn-sm w-full justify-start text-gray-600 text-xs"
+          >
+            <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 0121 9z" />
+            </svg>
+            Şifre Değiştir
+          </button>
+          <button
             onClick={handleLogout}
-            className="btn-ghost btn-sm w-full justify-start text-gray-600"
+            className="btn-ghost btn-sm w-full justify-start text-gray-600 text-xs"
           >
             <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
@@ -100,6 +112,12 @@ export default function AdminLayout() {
           <Outlet />
         </div>
       </main>
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+      />
     </div>
   );
 }

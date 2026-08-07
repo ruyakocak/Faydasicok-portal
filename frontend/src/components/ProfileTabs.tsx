@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import type { StudentProfile, Document as DocFile, DocumentPeriod, AuditLog } from '../types';
 import { studentApi, documentApi, auditApi } from '../api';
 import toast from 'react-hot-toast';
@@ -84,6 +85,8 @@ export function PersonalTab({ profile, onSave, readOnly }: {
   onSave?: (data: Partial<StudentProfile>) => Promise<void>;
   readOnly?: boolean;
 }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'REVIEWER';
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<StudentProfile>>({});
   const [saving, setSaving] = useState(false);
@@ -143,9 +146,12 @@ export function PersonalTab({ profile, onSave, readOnly }: {
         <FieldRow label="Nüfusa Kayıtlı Şehir" value={profile.registeredCity} editing={editing} name="registeredCity" onChange={handleChange} />
         <FieldRow label="Burs Talep Tarihi" value={profile.scholarshipDate ? format(new Date(profile.scholarshipDate), 'dd.MM.yyyy') : null}
           editing={editing} name="scholarshipDate" type="date" onChange={handleChange} />
-        <FieldRow label="Burs Grubu" value={profile.scholarshipGroup} editing={editing} name="scholarshipGroup" onChange={handleChange}
-          options={[{ value: '', label: 'Seçiniz' }, { value: 'Sedefteki İnciler', label: 'Sedefteki İnciler' }, { value: 'İz Bırakanlar', label: 'İz Bırakanlar' }]} />
-        <FieldRow label="Kayıt Durumu" value={studentStatusLabels[profile.studentStatus] || profile.studentStatus} />
+        {isAdmin ? (
+          <FieldRow label="Kayıt Durumu" value={profile.studentStatus} editing={editing} name="studentStatus" onChange={handleChange}
+            options={[{ value: 'INCOMPLETE', label: 'Tamamlanmadı' }, { value: 'ACTIVE', label: 'Aktif' }, { value: 'PASSIVE', label: 'Pasif' }, { value: 'GRADUATED', label: 'Mezun' }]} />
+        ) : (
+          <FieldRow label="Kayıt Durumu" value={studentStatusLabels[profile.studentStatus] || profile.studentStatus} />
+        )}
         <FieldRow label="Öğrenci Durumu" value={enrollmentStatusLabels[profile.enrollmentStatus] || profile.enrollmentStatus} />
       </dl>
 
@@ -356,13 +362,6 @@ export function EducationTab({ profile, onSave, readOnly }: {
         <FieldRow label="Üniversite Türü" value={profile.universityType} editing={editing} name="universityType" onChange={handleChange}
           options={[{ value: '', label: 'Seçiniz' }, { value: 'Devlet', label: 'Devlet' }, { value: 'Vakıf', label: 'Vakıf' }]} />
       </dl>
-
-      <h4 className="text-sm font-semibold text-gray-700 mb-3 pb-2 border-b border-gray-200 mt-6">Lise</h4>
-      <dl>
-        <FieldRow label="Lise Adı" value={profile.highSchoolName} editing={editing} name="highSchoolName" onChange={handleChange} />
-        <FieldRow label="Şehir" value={profile.highSchoolCity} editing={editing} name="highSchoolCity" onChange={handleChange} />
-        <FieldRow label="Mezuniyet Yılı" value={profile.highSchoolGradYear} editing={editing} name="highSchoolGradYear" type="number" onChange={handleChange} />
-      </dl>
     </div>
   );
 }
@@ -398,37 +397,6 @@ export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }
 
   return (
     <div className="space-y-8">
-      {/* Static Documents */}
-      <section>
-        <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
-          <svg viewBox="0 0 24 24" className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          Sabit Dokümanlar
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {STATIC_DOC_TYPES.map(({ type, label }) => {
-            const doc = staticDocs.find(d => d.type === type);
-            return (
-              <div key={type} className="border border-gray-200 rounded-lg p-3 flex items-center justify-between gap-3">
-                <div className="overflow-hidden">
-                  <div className="text-sm font-medium text-gray-900">{label}</div>
-                  {doc && (
-                    <div className="flex items-center gap-2 mt-1">
-                      <StatusBadge status={doc.status} note={doc.rejectionNote} />
-                      <a href={`/${doc.filePath}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-500 hover:underline truncate max-w-32">
-                        {doc.originalFileName}
-                      </a>
-                    </div>
-                  )}
-                </div>
-                {!readOnly && (
-                  <StaticUploadButton profileId={profile.id} type={type} onUploaded={onUpload} />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
       {/* Transcripts */}
       <section>
         <div className="flex items-center justify-between mb-3">

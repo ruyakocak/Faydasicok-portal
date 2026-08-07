@@ -5,7 +5,7 @@ import { prisma } from '../lib/prisma';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jwt';
 import { AppError } from '../middleware/errorHandler';
 import { sendEmail, buildPasswordResetEmail } from '../lib/email';
-import { AuditAction } from '../types/enums';
+import { AuditAction, Role } from '../types/enums';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -41,7 +41,7 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
 
     const payload = {
       userId: user.id,
-      role: user.role,
+      role: user.role as Role,
       profileId: user.studentProfile?.id,
     };
 
@@ -77,6 +77,7 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
         tcKimlikNo: user.tcKimlikNo,
         email: user.email,
         username: user.username,
+        forcePasswordChange: user.forcePasswordChange,
       },
     });
   } catch (err) {
@@ -107,7 +108,7 @@ export async function refreshToken(req: Request, res: Response, next: NextFuncti
 
     const payload = {
       userId: storedToken.user.id,
-      role: storedToken.user.role,
+      role: storedToken.user.role as Role,
       profileId: storedToken.user.studentProfile?.id,
     };
 
@@ -222,6 +223,7 @@ export async function changePassword(req: Request, res: Response, next: NextFunc
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) throw new AppError(400, 'Mevcut ve yeni şifre zorunludur.');
     if (newPassword.length < 6) throw new AppError(400, 'Yeni şifre en az 6 karakter olmalıdır.');
+    if (currentPassword === newPassword) throw new AppError(400, 'Yeni şifreniz mevcut şifrenizle aynı olamaz.');
 
     const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
     if (!user) throw new AppError(404, 'Kullanıcı bulunamadı.');
@@ -230,10 +232,29 @@ export async function changePassword(req: Request, res: Response, next: NextFunc
     if (!match) throw new AppError(401, 'Mevcut şifre hatalı.');
 
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-    await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash, forcePasswordChange: false } });
+
+    // If the user is a student and their status is INCOMPLETE, automatically make them ACTIVE
+    if (user.role === 'STUDENT') {
+      await prisma.studentProfile.updateMany({
+        where: { userId: user.id, studentStatus: 'INCOMPLETE' },
+        data: { studentStatus: 'ACTIVE' },
+      });
+    }
 
     // Invalidate all refresh tokens
     await prisma.refreshToken.deleteMany({ where: { userId: user.id } });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        action: AuditAction.UPDATE,
+        module: 'Auth',
+        newValue: 'Şifre değiştirildi',
+        ipAddress: req.ip,
+      },
+    });
 
     res.json({ message: 'Şifreniz başarıyla güncellendi.' });
   } catch (err) {

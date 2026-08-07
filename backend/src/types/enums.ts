@@ -1,8 +1,9 @@
-export type Role = 'STUDENT' | 'REVIEWER' | 'ADMIN';
+export type Role = 'STUDENT' | 'REVIEWER' | 'ADMIN' | 'MENTOR';
 export const Role = {
   STUDENT: 'STUDENT' as const,
   REVIEWER: 'REVIEWER' as const,
   ADMIN: 'ADMIN' as const,
+  MENTOR: 'MENTOR' as const,
 };
 
 export type StudentStatus = 'INCOMPLETE' | 'ACTIVE' | 'PASSIVE' | 'GRADUATED';

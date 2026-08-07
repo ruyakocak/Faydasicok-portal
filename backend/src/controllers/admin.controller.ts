@@ -93,6 +93,7 @@ export async function listStudents(req: Request, res: Response, next: NextFuncti
         where,
         include: {
           user: { select: { id: true, tcKimlikNo: true, isActive: true } },
+          mentor: true,
           _count: { select: { approvableChanges: { where: { status: 'PENDING' } } } },
         },
         orderBy: { createdAt: 'desc' },
@@ -111,6 +112,56 @@ export async function listStudents(req: Request, res: Response, next: NextFuncti
         totalPages: Math.ceil(total / Number(limit)),
       },
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Create Single Student ──────────────────────────────────────────────
+export async function createStudent(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { tcKimlikNo, firstName, lastName } = req.body;
+    if (!tcKimlikNo || !/^\d{11}$/.test(tcKimlikNo)) {
+      throw new AppError(400, 'Geçersiz TC formatı (11 hane olmalı)');
+    }
+    
+    const existing = await prisma.user.findUnique({ where: { tcKimlikNo } });
+    if (existing) {
+      throw new AppError(400, 'Bu TC Kimlik No ile kayıtlı bir kullanıcı zaten var.');
+    }
+
+    const password = Math.floor(100000 + Math.random() * 900000).toString();
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = await prisma.user.create({
+      data: {
+        tcKimlikNo,
+        passwordHash,
+        role: Role.STUDENT,
+        isActive: true,
+        forcePasswordChange: true,
+        studentProfile: {
+          create: {
+            firstName: firstName || '',
+            lastName: lastName || '',
+            studentStatus: 'INCOMPLETE',
+          },
+        },
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.CREATE,
+        module: 'Student',
+        entityId: user.id,
+        entityType: 'User',
+        newValue: tcKimlikNo,
+      },
+    });
+
+    res.status(201).json({ tcKimlikNo, password });
   } catch (err) {
     next(err);
   }
@@ -176,6 +227,7 @@ export async function bulkCreateStudents(req: Request, res: Response, next: Next
             passwordHash,
             role: Role.STUDENT,
             isActive: true,
+            forcePasswordChange: true,
             studentProfile: {
               create: {
                 firstName: '',
@@ -311,12 +363,12 @@ export async function updatePeriod(req: Request, res: Response, next: NextFuncti
   }
 }
 
-// ── List Users (reviewers) ────────────────────────────────────────────
+// ── List Users (reviewers, admins, mentors) ─────────────────────────
 export async function listUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const users = await prisma.user.findMany({
-      where: { role: { in: [Role.REVIEWER, Role.ADMIN] } },
-      select: { id: true, email: true, username: true, role: true, isActive: true, createdAt: true },
+      where: { role: { in: [Role.REVIEWER, Role.ADMIN, Role.MENTOR] } },
+      select: { id: true, email: true, username: true, role: true, isActive: true, createdAt: true, mentorProfile: true },
       orderBy: { createdAt: 'desc' },
     });
     res.json(users);
@@ -325,14 +377,28 @@ export async function listUsers(req: Request, res: Response, next: NextFunction)
   }
 }
 
-// ── Create User (reviewer) ────────────────────────────────────────────
+// ── Create User (reviewer, admin, mentor) ───────────────────────────
 export async function createUser(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { email, username, password, role } = req.body;
+    const { email, username, password, role, firstName, lastName, title, expertise } = req.body;
     if (!email || !password) throw new AppError(400, 'E-posta ve şifre zorunludur.');
     if (role === Role.STUDENT) throw new AppError(400, 'Bu endpoint ile öğrenci oluşturulamaz.');
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    
+    let mentorProfileData = undefined;
+    if (role === Role.MENTOR) {
+      if (!firstName || !lastName) throw new AppError(400, 'Mentör için ad ve soyad zorunludur.');
+      mentorProfileData = {
+        create: {
+          firstName,
+          lastName,
+          title,
+          expertise,
+        }
+      };
+    }
+
     const user = await prisma.user.create({
       data: {
         email,
@@ -340,6 +406,7 @@ export async function createUser(req: Request, res: Response, next: NextFunction
         passwordHash,
         role: role || Role.REVIEWER,
         isActive: true,
+        mentorProfile: mentorProfileData,
       },
     });
 
@@ -400,6 +467,61 @@ export async function resetStudentPassword(req: Request, res: Response, next: Ne
     });
 
     res.json({ message: 'Şifre başarıyla sıfırlandı.', password: newPassword });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── List Mentors ─────────────────────────────────────────────────────
+export async function listMentors(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const mentors = await prisma.mentorProfile.findMany({
+      include: {
+        user: { select: { id: true, email: true, isActive: true } },
+        _count: { select: { students: true } }
+      },
+      orderBy: { firstName: 'asc' },
+    });
+    res.json(mentors);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Assign Mentor ────────────────────────────────────────────────────
+export async function assignMentor(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { studentId, mentorId } = req.body;
+    
+    if (!studentId) throw new AppError(400, 'Öğrenci profil ID gerekli.');
+    
+    // Check if student exists
+    const student = await prisma.studentProfile.findUnique({ where: { id: studentId } });
+    if (!student) throw new AppError(404, 'Öğrenci bulunamadı.');
+
+    if (mentorId) {
+      // Assigning a mentor
+      const mentor = await prisma.mentorProfile.findUnique({ where: { id: mentorId } });
+      if (!mentor) throw new AppError(404, 'Mentör bulunamadı.');
+    }
+
+    const updatedStudent = await prisma.studentProfile.update({
+      where: { id: studentId },
+      data: { mentorId: mentorId || null },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.UPDATE,
+        module: 'Student',
+        entityId: studentId,
+        entityType: 'StudentProfile',
+        newValue: `Mentor assigned: ${mentorId || 'None'}`,
+      },
+    });
+
+    res.json(updatedStudent);
   } catch (err) {
     next(err);
   }

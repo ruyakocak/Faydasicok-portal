@@ -13,6 +13,7 @@ import { approvalRouter } from './routes/approval.routes';
 import { adminRouter } from './routes/admin.routes';
 import { auditRouter } from './routes/audit.routes';
 import { eventRouter } from './routes/event.routes';
+import { mentorshipRouter } from './routes/mentorship.routes';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -39,8 +40,14 @@ app.use('/api/approvals', approvalRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/audit-logs', auditRouter);
 app.use('/api/events', eventRouter);
+app.use('/api/mentorship', mentorshipRouter);
 
-// ── Health check ─────────────────────────────────────────────────────
+// ── Root redirect & Health check ─────────────────────────────────────
+app.get('/', (_req, res) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  res.redirect(frontendUrl);
+});
+
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });

@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
-const TABS = ['Kişisel Bilgiler', 'Aile Bilgileri', 'Eğitim Bilgileri', 'Dokümanlar'];
+const TABS = ['Kişisel Bilgiler', 'Eğitim Bilgileri', 'Dokümanlar'];
 
 export default function StudentProfilePage() {
   const { user } = useAuth();
@@ -63,47 +63,7 @@ export default function StudentProfilePage() {
 
   return (
     <div className="animate-fade-in">
-      {/* Onboarding Banner for New Students */}
-      {profile.studentStatus === 'INCOMPLETE' && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-5 mb-6 flex items-start gap-4 shadow-sm animate-fade-in">
-          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 flex-shrink-0">
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-red-900 text-base">Faydasıçok Vakfı Bursiyer Portalına Hoş Geldiniz!</h3>
-            <p className="text-sm text-red-700 mt-1">
-              Burs işlemlerinizin başlatılabilmesi ve başvurunuzun onaylanması için aşağıdaki adımları sırasıyla tamamlamanız gerekmektedir.
-            </p>
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="bg-white/80 p-3 rounded-lg border border-red-100 flex flex-col justify-between">
-                <div>
-                  <span className="font-semibold text-red-950 text-xs block mb-1">1. Kişisel Bilgiler</span>
-                  <p className="text-[11px] text-red-700 leading-normal">Ad, soyad, doğum detayları ve Burs Grubu seçiminizi doldurun.</p>
-                </div>
-              </div>
-              <div className="bg-white/80 p-3 rounded-lg border border-red-100 flex flex-col justify-between">
-                <div>
-                  <span className="font-semibold text-red-950 text-xs block mb-1">2. Aile Bilgileri</span>
-                  <p className="text-[11px] text-red-700 leading-normal">Anne, baba bilgileri, çalışma durumları ve hane gelirinizi girin.</p>
-                </div>
-              </div>
-              <div className="bg-white/80 p-3 rounded-lg border border-red-100 flex flex-col justify-between">
-                <div>
-                  <span className="font-semibold text-red-950 text-xs block mb-1">3. Eğitim Bilgileri</span>
-                  <p className="text-[11px] text-red-700 leading-normal">Kayıtlı olduğunuz üniversite, fakülte, bölüm ve sınıf bilgilerinizi girin.</p>
-                </div>
-              </div>
-              <div className="bg-white/80 p-3 rounded-lg border border-red-100 flex flex-col justify-between">
-                <div>
-                  <span className="font-semibold text-red-950 text-xs block mb-1">4. Belge Yükleme</span>
-                  <p className="text-[11px] text-red-700 leading-normal">Dönemlik Öğrenci Belgesi ve gerekli evrakları dokümanlar sekmesinden yükleyin.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* Top Banner (removed for current scholars) */}
       {/* Events & Calendar Widget */}
       {(() => {
         if (events.length === 0) return null;
@@ -383,12 +343,9 @@ export default function StudentProfilePage() {
                 )}
               </div>
 
-              {/* Contact edit + change password */}
-              <div className="flex items-center gap-3 mt-3">
+              {/* Contact edit */}
+              <div className="mt-3">
                 <ContactEditButton profile={profile} onSaved={loadAll} />
-                <a href="#" onClick={(e) => { e.preventDefault(); toast('Şifre değiştirme yakında eklenecek.'); }} className="text-xs text-gray-500 hover:text-gray-700">
-                  Şifremi Değiştir
-                </a>
               </div>
             </div>
           </div>
@@ -418,20 +375,13 @@ export default function StudentProfilePage() {
             />
           )}
           {activeTab === 1 && (
-            <FamilyTab
-              profile={profile}
-              onSave={(data) => studentApi.updateFamily(profileId!, data)}
-              readOnly={false}
-            />
-          )}
-          {activeTab === 2 && (
             <EducationTab
               profile={profile}
               onSave={(data) => studentApi.updateEducation(profileId!, data)}
               readOnly={false}
             />
           )}
-          {activeTab === 3 && (
+          {activeTab === 2 && (
             <DocumentsTab
               profile={profile}
               documents={documents}

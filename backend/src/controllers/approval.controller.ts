@@ -201,7 +201,7 @@ export async function bulkApprove(req: Request, res: Response, next: NextFunctio
 
     for (const id of ids) {
       try {
-        const fakeReq = { ...req, params: { id } } as Request;
+        const fakeReq = { ...req, params: { id } } as unknown as Request;
         const fakeRes = { json: () => {} } as any;
         // Reuse approveChange logic
         await approveChange(fakeReq, fakeRes, () => {});

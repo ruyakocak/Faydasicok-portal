@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import ForcePasswordChangeModal from './components/ForcePasswordChangeModal';
 
 // Auth pages
 import LoginPage from './pages/auth/LoginPage';
@@ -9,6 +10,12 @@ import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 // Student pages
 import StudentLayout from './layouts/StudentLayout';
 import StudentProfilePage from './pages/student/StudentProfilePage';
+import MentorshipPage from './pages/student/MentorshipPage';
+
+// Mentor pages
+import MentorLayout from './layouts/MentorLayout';
+import MentorDashboardPage from './pages/mentor/MentorDashboardPage';
+import MentorStudentDetailPage from './pages/mentor/MentorStudentDetailPage';
 
 // Admin pages
 import AdminLayout from './layouts/AdminLayout';
@@ -25,13 +32,19 @@ function PrivateRoute({ children, roles }: { children: React.ReactNode; roles?: 
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(user.role)) return <Navigate to="/login" replace />;
-  return <>{children}</>;
+  return (
+    <>
+      <ForcePasswordChangeModal />
+      {children}
+    </>
+  );
 }
 
 function RootRedirect() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'STUDENT') return <Navigate to={`/student/profile`} replace />;
+  if (user.role === 'MENTOR') return <Navigate to={`/mentor/dashboard`} replace />;
   return <Navigate to="/admin/dashboard" replace />;
 }
 
@@ -54,7 +67,22 @@ export default function App() {
           }
         >
           <Route path="profile" element={<StudentProfilePage />} />
+          <Route path="mentorship" element={<MentorshipPage />} />
           <Route index element={<Navigate to="profile" replace />} />
+        </Route>
+
+        {/* Mentor */}
+        <Route
+          path="/mentor"
+          element={
+            <PrivateRoute roles={['MENTOR']}>
+              <MentorLayout />
+            </PrivateRoute>
+          }
+        >
+          <Route path="dashboard" element={<MentorDashboardPage />} />
+          <Route path="students/:id" element={<MentorStudentDetailPage />} />
+          <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 
         {/* Admin / Reviewer */}
