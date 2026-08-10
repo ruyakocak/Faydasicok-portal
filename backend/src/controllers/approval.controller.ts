@@ -6,13 +6,19 @@ import { ApprovableEntityType, AuditAction } from '../types/enums';
 // ── Get Approval Queue ────────────────────────────────────────────────
 export async function getApprovalQueue(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { status = 'PENDING', entityType, page = '1', limit = '20', studentId } = req.query;
+    const { status = 'PENDING', entityType, documentType, periodLabel, page = '1', limit = '20', studentId } = req.query;
 
     const where: any = {
       status: status as string,
     };
 
     if (entityType) where.entityType = entityType;
+    if (documentType || periodLabel) {
+      where.entityType = 'DOCUMENT';
+      where.document = {};
+      if (documentType) where.document.type = documentType;
+      if (periodLabel) where.document.period = { label: periodLabel as string };
+    }
     if (studentId) where.studentProfileId = studentId as string;
 
     const skip = (Number(page) - 1) * Number(limit);

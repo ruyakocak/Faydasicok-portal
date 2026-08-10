@@ -15,6 +15,7 @@ import {
   resetStudentPassword,
   listMentors,
   assignMentor,
+  exportStudentsReport,
 } from '../controllers/admin.controller';
 import { upload } from '../middleware/upload.middleware';
 import multer from 'multer';
@@ -31,6 +32,7 @@ adminRouter.post('/students', requireAdmin, createStudent);
 adminRouter.post('/students/:id/reset-password', requireAdminOrReviewer, resetStudentPassword);
 adminRouter.post('/students/bulk-create', requireAdmin, multer({ storage: multer.memoryStorage() }).single('file'), bulkCreateStudents);
 adminRouter.get('/students/csv-template', requireAdmin, getCsvTemplate);
+adminRouter.get('/reports/students-export', requireAdminOrReviewer, exportStudentsReport);
 
 // Periods — admin only
 adminRouter.get('/periods', requireAdminOrReviewer, listPeriods);

@@ -3,6 +3,7 @@ import { parse } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
+import ExcelJS from 'exceljs';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuditAction, Role, StudentStatus } from '../types/enums';
@@ -331,13 +332,25 @@ export async function updatePeriod(req: Request, res: Response, next: NextFuncti
     const { id } = req.params;
     const { isOpen, label, startDate, endDate, grade, semester, academicYear } = req.body;
 
+    let closedCount = 0;
     if (isOpen === true) {
       const existing = await prisma.documentPeriod.findUnique({ where: { id } });
       if (existing) {
-        await prisma.documentPeriod.updateMany({
-          where: { type: existing.type, id: { not: id }, isOpen: true },
+        // Tüm sistemde aynı anda sadece TEK BİR dönemin (label) aktif olabilmesi için,
+        // başka bir döneme ait (farklı label'a sahip) açık olan tüm evrak yüklemelerini kapat.
+        const r1 = await prisma.documentPeriod.updateMany({
+          where: { label: { not: existing.label }, isOpen: true },
           data: { isOpen: false },
         });
+        closedCount += r1.count;
+        
+        // Aynı dönem içinde aynı evrak türünden birden fazla varsa (olmamalı ama önlem olarak),
+        // sadece mevcut olanı açık bırak.
+        const r2 = await prisma.documentPeriod.updateMany({
+          where: { label: existing.label, type: existing.type, id: { not: id }, isOpen: true },
+          data: { isOpen: false },
+        });
+        closedCount += r2.count;
       }
     }
 
@@ -357,7 +370,7 @@ export async function updatePeriod(req: Request, res: Response, next: NextFuncti
       },
     });
 
-    res.json(period);
+    res.json({ ...period, autoClosedOtherSemesters: closedCount > 0 });
   } catch (err) {
     next(err);
   }
@@ -522,6 +535,130 @@ export async function assignMentor(req: Request, res: Response, next: NextFuncti
     });
 
     res.json(updatedStudent);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Export Students Report ───────────────────────────────────────────
+export async function exportStudentsReport(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const students = await prisma.studentProfile.findMany({
+      include: {
+        user: { select: { tcKimlikNo: true, email: true, isActive: true } },
+        documents: true,
+      },
+      orderBy: { firstName: 'asc' },
+    });
+
+    const activePeriods = await prisma.documentPeriod.findMany({ where: { isOpen: true } });
+    
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Faydasıçok Vakfı';
+    workbook.created = new Date();
+
+    // 1. Tüm Bursiyerler
+    const allStudentsSheet = workbook.addWorksheet('Tüm Bursiyerler');
+    allStudentsSheet.columns = [
+      { header: 'TC Kimlik No', key: 'tc', width: 15 },
+      { header: 'Ad', key: 'firstName', width: 20 },
+      { header: 'Soyad', key: 'lastName', width: 20 },
+      { header: 'Üniversite', key: 'uni', width: 30 },
+      { header: 'Bölüm', key: 'dept', width: 30 },
+      { header: 'Sınıf', key: 'grade', width: 10 },
+      { header: 'E-posta', key: 'email', width: 30 },
+      { header: 'Telefon', key: 'phone', width: 15 },
+      { header: 'Burs Durumu', key: 'status', width: 15 },
+    ];
+    
+    allStudentsSheet.getRow(1).font = { bold: true };
+    
+    students.forEach(s => {
+      allStudentsSheet.addRow({
+        tc: s.user?.tcKimlikNo || '',
+        firstName: s.firstName,
+        lastName: s.lastName,
+        uni: s.universityName || '',
+        dept: s.department || '',
+        grade: s.grade || '',
+        email: s.user?.email || s.email || '',
+        phone: s.phone || '',
+        status: s.studentStatus,
+      });
+    });
+
+    // 2. Eksik Belgeli Öğrenciler
+    const missingDocsSheet = workbook.addWorksheet('Eksik Belgeli Öğrenciler');
+    missingDocsSheet.columns = [
+      { header: 'TC Kimlik No', key: 'tc', width: 15 },
+      { header: 'Ad', key: 'firstName', width: 20 },
+      { header: 'Soyad', key: 'lastName', width: 20 },
+      { header: 'Eksik Belge', key: 'missingDoc', width: 30 },
+      { header: 'E-posta', key: 'email', width: 30 },
+      { header: 'Telefon', key: 'phone', width: 15 },
+    ];
+    missingDocsSheet.getRow(1).font = { bold: true };
+
+    if (activePeriods.length > 0) {
+      students.forEach(s => {
+        activePeriods.forEach(period => {
+          const hasDoc = s.documents.some(d => d.periodId === period.id && (d.status === 'APPROVED' || d.status === 'PENDING'));
+          if (!hasDoc && s.studentStatus !== 'GRADUATED' && s.studentStatus !== 'PASSIVE') {
+            missingDocsSheet.addRow({
+              tc: s.user?.tcKimlikNo || '',
+              firstName: s.firstName,
+              lastName: s.lastName,
+              missingDoc: period.label,
+              email: s.user?.email || s.email || '',
+              phone: s.phone || '',
+            });
+          }
+        });
+      });
+    } else {
+      missingDocsSheet.addRow({ tc: 'Aktif belge dönemi bulunmuyor.' });
+    }
+
+    // 3. İstatistikler
+    const statsSheet = workbook.addWorksheet('İstatistikler');
+    statsSheet.columns = [
+      { header: 'Kategori', key: 'category', width: 25 },
+      { header: 'Değer', key: 'value', width: 40 },
+      { header: 'Kişi Sayısı', key: 'count', width: 15 },
+    ];
+    statsSheet.getRow(1).font = { bold: true };
+
+    const uniStats: Record<string, number> = {};
+    const deptStats: Record<string, number> = {};
+    const statusStats: Record<string, number> = {};
+
+    students.forEach(s => {
+      const uni = s.universityName || 'Belirtilmemiş';
+      const dept = s.department || 'Belirtilmemiş';
+      const status = s.studentStatus || 'Bilinmiyor';
+
+      uniStats[uni] = (uniStats[uni] || 0) + 1;
+      deptStats[dept] = (deptStats[dept] || 0) + 1;
+      statusStats[status] = (statusStats[status] || 0) + 1;
+    });
+
+    Object.entries(statusStats).sort((a,b) => b[1]-a[1]).forEach(([val, count]) => {
+      statsSheet.addRow({ category: 'Bursiyer Durumu', value: val, count });
+    });
+    statsSheet.addRow({}); // boş satır
+    Object.entries(uniStats).sort((a,b) => b[1]-a[1]).forEach(([val, count]) => {
+      statsSheet.addRow({ category: 'Üniversite', value: val, count });
+    });
+    statsSheet.addRow({}); // boş satır
+    Object.entries(deptStats).sort((a,b) => b[1]-a[1]).forEach(([val, count]) => {
+      statsSheet.addRow({ category: 'Bölüm', value: val, count });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="bursiyer-raporu.xlsx"');
+    
+    await workbook.xlsx.write(res);
+    res.end();
   } catch (err) {
     next(err);
   }

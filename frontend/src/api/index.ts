@@ -136,6 +136,9 @@ export const adminApi = {
   resetPassword: (id: string): Promise<{ password: string }> =>
     api.post(`/admin/students/${id}/reset-password`).then((r) => r.data),
 
+  exportStudentsReport: () =>
+    api.get('/admin/reports/students-export', { responseType: 'blob' }).then((r) => r.data),
+
   listPeriods: (): Promise<DocumentPeriod[]> =>
     api.get('/admin/periods').then((r) => r.data),
 

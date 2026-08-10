@@ -19,6 +19,7 @@ export default function PeriodsPage() {
   const [periods, setPeriods] = useState<DocumentPeriod[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showWarningModal, setShowWarningModal] = useState(false);
   const [newLabel, setNewLabel] = useState('');
   const [creating, setCreating] = useState(false);
   const [selectedSemester, setSelectedSemester] = useState('');
@@ -44,7 +45,12 @@ export default function PeriodsPage() {
   useEffect(() => { load(); }, []);
 
   async function handleToggle(period: DocumentPeriod) {
-    await adminApi.updatePeriod(period.id, { isOpen: !period.isOpen });
+    const res = await adminApi.updatePeriod(period.id, { isOpen: !period.isOpen }) as any;
+    
+    if (res.autoClosedOtherSemesters) {
+      setShowWarningModal(true);
+    }
+    
     toast.success(`${periodTypeLabels[period.type]} yükleme izni ${period.isOpen ? 'kapatıldı' : 'açıldı'}.`);
     // Reload periods
     const data = await adminApi.listPeriods();
@@ -208,6 +214,45 @@ export default function PeriodsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Warning Modal */}
+      {showWarningModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden border border-amber-100 animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-amber-100 flex items-center justify-between bg-amber-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-amber-900">Otomatik Kapatma Bildirimi</h3>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-6">
+              <p className="text-sm text-gray-700 mb-4">
+                Sistemde aynı anda sadece <strong>TEK BİR dönemin</strong> aktif olmasına izin verilmektedir.
+              </p>
+              <p className="text-sm text-gray-700">
+                Siz bu dönemi açtığınız için, çakışmayı önlemek adına <strong className="text-amber-700">DİĞER TÜM DÖNEMLERDEKİ</strong> (eski dönemler vb.) açık evrak yüklemeleri otomatik olarak KAPATILMIŞTIR!
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end bg-gray-50/50">
+              <button
+                onClick={() => setShowWarningModal(false)}
+                className="px-5 py-2 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors shadow-sm"
+              >
+                Anladım
+              </button>
+            </div>
           </div>
         </div>
       )}

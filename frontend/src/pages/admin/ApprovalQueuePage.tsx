@@ -1,10 +1,22 @@
 import { useEffect, useState, useCallback } from 'react';
-import { approvalApi } from '../../api';
-import type { ApprovableChange, PaginatedResponse } from '../../types';
+import { approvalApi, adminApi } from '../../api';
+import type { ApprovableChange, PaginatedResponse, DocumentPeriod } from '../../types';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
+
+const filterOptions: Record<string, { label: string; type: 'entity' | 'document' }> = {
+  TRANSCRIPT: { label: 'Transkript', type: 'document' },
+  VOLUNTEER_REPORT: { label: 'STK Raporu', type: 'document' },
+  STUDENT_CERTIFICATE: { label: 'Öğrenci Belgesi', type: 'document' },
+};
+
+const documentTypeLabels: Record<string, string> = {
+  TRANSCRIPT: 'Transkript',
+  VOLUNTEER_REPORT: 'STK Raporu',
+  STUDENT_CERTIFICATE: 'Öğrenci Belgesi',
+};
 
 const entityTypeLabels: Record<string, string> = {
   DOCUMENT: 'Belge',
@@ -20,6 +32,12 @@ export default function ApprovalQueuePage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState('PENDING');
   const [entityFilter, setEntityFilter] = useState('');
+  const [periodFilter, setPeriodFilter] = useState('');
+  const [periods, setPeriods] = useState<DocumentPeriod[]>([]);
+
+  useEffect(() => {
+    adminApi.listPeriods().then(setPeriods).catch(console.error);
+  }, []);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState('');
   const [page, setPage] = useState(1);
@@ -27,14 +45,22 @@ export default function ApprovalQueuePage() {
   const load = useCallback(async () => {
     setLoading(true);
     const params: Record<string, string> = { status: statusFilter, page: String(page), limit: '20' };
-    if (entityFilter) params.entityType = entityFilter;
+    if (periodFilter) params.periodLabel = periodFilter;
+    const filter = filterOptions[entityFilter];
+    if (filter) {
+      if (filter.type === 'document') {
+        params.documentType = entityFilter;
+      } else {
+        params.entityType = entityFilter;
+      }
+    }
     try {
       const data = await approvalApi.getQueue(params);
       setResult(data);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, entityFilter, page]);
+  }, [statusFilter, entityFilter, periodFilter, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -98,13 +124,23 @@ export default function ApprovalQueuePage() {
             <option value="REJECTED">Reddedilenler</option>
           </select>
           <select
+            className="form-select text-sm w-48"
+            value={periodFilter}
+            onChange={e => { setPeriodFilter(e.target.value); setPage(1); }}
+          >
+            <option value="">Tüm Dönemler</option>
+            {Array.from(new Set(periods.map(p => p.label))).map(label => (
+              <option key={label} value={label}>{label}</option>
+            ))}
+          </select>
+          <select
             className="form-select text-sm w-44"
             value={entityFilter}
             onChange={e => { setEntityFilter(e.target.value); setPage(1); }}
           >
             <option value="">Tüm Türler</option>
-            {Object.entries(entityTypeLabels).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
+            {Object.entries(filterOptions).map(([k, v]) => (
+              <option key={k} value={k}>{v.label}</option>
             ))}
           </select>
           {selected.size > 0 && statusFilter === 'PENDING' && (
@@ -170,10 +206,16 @@ export default function ApprovalQueuePage() {
                       <div className="text-xs text-gray-400">{change.studentProfile?.department}</div>
                     </td>
                     <td>
-                      <span className="badge-gray text-xs">{entityTypeLabels[change.entityType] || change.entityType}</span>
+                      <span className="badge-gray text-xs">
+                        {change.entityType === 'DOCUMENT' && change.document?.type
+                          ? documentTypeLabels[change.document.type] || change.document.type
+                          : entityTypeLabels[change.entityType] || change.entityType}
+                      </span>
                     </td>
                     <td className="text-sm text-gray-700">
-                      {change.entityType === 'DOCUMENT' ? change.document?.type : change.fieldName || '—'}
+                      {change.entityType === 'DOCUMENT' 
+                        ? (documentTypeLabels[change.document?.type || ''] || change.document?.type || '—') 
+                        : change.fieldName || '—'}
                     </td>
                     <td className="text-sm text-gray-500 max-w-32 truncate">
                       {change.oldValue || '—'}
