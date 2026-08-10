@@ -199,6 +199,15 @@ export default function StudentsListPage() {
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             />
           </div>
+          <select
+            className="form-select max-w-[200px]"
+            value={scholarshipGroup}
+            onChange={(e) => { setScholarshipGroup(e.target.value); setPage(1); }}
+          >
+            <option value="">Tüm Burs Grupları</option>
+            <option value="Sedefteki İnciler">Sedefteki İnciler</option>
+            <option value="İz Bırakanlar">İz Bırakanlar</option>
+          </select>
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input
               type="checkbox"

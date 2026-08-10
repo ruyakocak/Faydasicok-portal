@@ -60,6 +60,24 @@ export interface StudentProfile {
   // Relations
   user?: Partial<User>;
   approvableChanges?: ApprovableChange[];
+  mentorId?: string;
+  mentor?: MentorProfile;
+}
+
+export interface MentorProfile {
+  id: string;
+  firstName: string;
+  lastName: string;
+  title?: string;
+  company?: string;
+  phone?: string;
+  email?: string;
+  photoPath?: string;
+  createdAt: string;
+  updatedAt: string;
+  _count?: {
+    students: number;
+  };
 }
 
 export interface Document {

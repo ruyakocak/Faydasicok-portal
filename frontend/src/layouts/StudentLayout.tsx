@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Outlet, useNavigate, Link } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 
@@ -24,14 +24,7 @@ export default function StudentLayout() {
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
-            <Link to="/student/profile" className="text-sm font-medium text-gray-600 hover:text-gray-900">
-              Profilim
-            </Link>
-            <Link to="/student/mentorship" className="text-sm font-medium text-gray-600 hover:text-gray-900">
-              Mentörlük
-            </Link>
-          </div>
+
 
           <div className="flex items-center gap-4">
             <button

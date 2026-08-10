@@ -157,6 +157,12 @@ export const adminApi = {
   listMentors: () =>
     api.get('/admin/mentors').then((r) => r.data),
 
+  createMentor: (formData: FormData) =>
+    api.post('/admin/mentors', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+
+  deleteMentor: (id: string) =>
+    api.delete(`/admin/mentors/${id}`).then((r) => r.data),
+
   assignMentor: (studentId: string, mentorId: string | null) =>
     api.post('/admin/assign-mentor', { studentId, mentorId }).then((r) => r.data),
 };

@@ -29,10 +29,7 @@ export default function UsersPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     
-    if (form.role === 'MENTOR' && (!form.firstName.trim() || !form.lastName.trim())) {
-      toast.error('Mentör eklerken Ad ve Soyad alanları zorunludur.');
-      return;
-    }
+
 
     setCreating(true);
     try {
@@ -89,8 +86,8 @@ export default function UsersPage() {
                   <td className="font-medium">{user.username || '—'}</td>
                   <td className="text-gray-600">{user.email}</td>
                   <td>
-                    <span className={`badge ${user.role === 'ADMIN' ? 'badge-primary' : user.role === 'MENTOR' ? 'badge-approved' : 'badge-gray'}`}>
-                      {user.role === 'ADMIN' ? 'Yönetici' : user.role === 'MENTOR' ? 'Mentör' : 'Değerlendirici'}
+                    <span className={`badge ${user.role === 'ADMIN' ? 'badge-primary' : 'badge-gray'}`}>
+                      {user.role === 'ADMIN' ? 'Yönetici' : 'Değerlendirici'}
                     </span>
                   </td>
                   <td>
@@ -131,30 +128,8 @@ export default function UsersPage() {
                 <select className="form-select" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
                   <option value="REVIEWER">Değerlendirici</option>
                   <option value="ADMIN">Yönetici</option>
-                  <option value="MENTOR">Mentör</option>
                 </select>
               </div>
-
-              {form.role === 'MENTOR' && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="form-label">Ad <span className="text-red-500">*</span></label>
-                    <input className="form-input" value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} required={form.role === 'MENTOR'} />
-                  </div>
-                  <div>
-                    <label className="form-label">Soyad <span className="text-red-500">*</span></label>
-                    <input className="form-input" value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} required={form.role === 'MENTOR'} />
-                  </div>
-                  <div>
-                    <label className="form-label">Unvan</label>
-                    <input className="form-input" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Örn: Kıdemli Yazılım Mühendisi" />
-                  </div>
-                  <div>
-                    <label className="form-label">Uzmanlık Alanları</label>
-                    <input className="form-input" value={form.expertise} onChange={e => setForm(f => ({ ...f, expertise: e.target.value }))} placeholder="Örn: Frontend, Kariyer Planlama" />
-                  </div>
-                </div>
-              )}
 
               <div>
                 <label className="form-label">E-posta <span className="text-red-500">*</span></label>

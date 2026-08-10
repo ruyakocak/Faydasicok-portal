@@ -366,18 +366,6 @@ export function EducationTab({ profile, onSave, readOnly }: {
   );
 }
 
-// ── Static Document Types ─────────────────────────────────────────────
-const STATIC_DOC_TYPES = [
-  { type: 'APPLICATION_FORM', label: 'Başvuru Formu' },
-  { type: 'YKS_RESULT', label: 'YKS Sonuç Belgesi' },
-  { type: 'UNIVERSITY_PLACEMENT', label: 'Üniversite Yerleşme Belgesi' },
-  { type: 'MOTHER_INCOME', label: 'Anne Gelir Belgesi' },
-  { type: 'FATHER_INCOME', label: 'Baba Gelir Belgesi' },
-  { type: 'ID_PHOTOCOPY', label: 'Kimlik Fotokopisi' },
-  { type: 'CRIMINAL_RECORD', label: 'Adli Sicil Kaydı' },
-  { type: 'GRADUATION_CERTIFICATE', label: 'Üniversite Mezuniyet Belgesi' },
-];
-
 // ── Documents Tab ─────────────────────────────────────────────────────
 export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }: {
   profile: StudentProfile;
@@ -386,7 +374,6 @@ export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }
   onUpload?: () => void;
   readOnly?: boolean;
 }) {
-  const staticDocs = documents.filter(d => d.isStatic);
   const transcripts = documents.filter(d => d.type === 'TRANSCRIPT');
   const certificates = documents.filter(d => d.type === 'STUDENT_CERTIFICATE');
   const volunteerReports = documents.filter(d => d.type === 'VOLUNTEER_REPORT');
@@ -509,32 +496,7 @@ function DocumentTable({ docs, showVolunteer }: { docs: DocFile[]; showVolunteer
   );
 }
 
-function StaticUploadButton({ profileId, type, onUploaded }: { profileId: string; type: string; onUploaded?: () => void }) {
-  const [loading, setLoading] = useState(false);
 
-  async function handle(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setLoading(true);
-    try {
-      await documentApi.uploadStatic(profileId, type, file);
-      toast.success('Belge yüklendi, onay bekleniyor.');
-      onUploaded?.();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <label className={`btn-secondary btn-sm cursor-pointer flex-shrink-0 ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
-      {loading ? <span className="spinner border-gray-300 border-t-gray-700 w-3 h-3" /> : (
-        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-      )}
-      Yükle
-      <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="sr-only" onChange={handle} />
-    </label>
-  );
-}
 
 function PeriodUploadButton({ period, profileId, docType, onUploaded }: {
   period?: DocumentPeriod;
