@@ -10,18 +10,13 @@ import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 // Student pages
 import StudentLayout from './layouts/StudentLayout';
 import StudentProfilePage from './pages/student/StudentProfilePage';
-import MentorshipPage from './pages/student/MentorshipPage';
-
-// Mentor pages
-import MentorLayout from './layouts/MentorLayout';
-import MentorDashboardPage from './pages/mentor/MentorDashboardPage';
-import MentorStudentDetailPage from './pages/mentor/MentorStudentDetailPage';
 
 // Admin pages
 import AdminLayout from './layouts/AdminLayout';
 import DashboardPage from './pages/admin/DashboardPage';
 import StudentsListPage from './pages/admin/StudentsListPage';
 import StudentDetailPage from './pages/admin/StudentDetailPage';
+import MentorsPage from './pages/admin/MentorsPage';
 import ApprovalQueuePage from './pages/admin/ApprovalQueuePage';
 import PeriodsPage from './pages/admin/PeriodsPage';
 import AuditLogPage from './pages/admin/AuditLogPage';
@@ -44,7 +39,6 @@ function RootRedirect() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'STUDENT') return <Navigate to={`/student/profile`} replace />;
-  if (user.role === 'MENTOR') return <Navigate to={`/mentor/dashboard`} replace />;
   return <Navigate to="/admin/dashboard" replace />;
 }
 
@@ -67,22 +61,7 @@ export default function App() {
           }
         >
           <Route path="profile" element={<StudentProfilePage />} />
-          <Route path="mentorship" element={<MentorshipPage />} />
           <Route index element={<Navigate to="profile" replace />} />
-        </Route>
-
-        {/* Mentor */}
-        <Route
-          path="/mentor"
-          element={
-            <PrivateRoute roles={['MENTOR']}>
-              <MentorLayout />
-            </PrivateRoute>
-          }
-        >
-          <Route path="dashboard" element={<MentorDashboardPage />} />
-          <Route path="students/:id" element={<MentorStudentDetailPage />} />
-          <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 
         {/* Admin / Reviewer */}
@@ -100,6 +79,7 @@ export default function App() {
           <Route path="approvals" element={<ApprovalQueuePage />} />
           <Route path="periods" element={<PeriodsPage />} />
           <Route path="events" element={<EventsPage />} />
+          <Route path="mentors" element={<MentorsPage />} />
           <Route path="audit-logs" element={<AuditLogPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route index element={<Navigate to="dashboard" replace />} />

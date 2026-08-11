@@ -28,7 +28,6 @@ model User {
 
   // Relations
   studentProfile    StudentProfile?
-  mentorProfile     MentorProfile?
   refreshTokens     RefreshToken[]
   passwordResets    PasswordReset[]
   approvableChanges ApprovableChange[] @relation("ChangedBy")
@@ -308,17 +307,13 @@ model Event {
 
 model MentorProfile {
   id        String   @id @default(cuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
   firstName String
   lastName  String
   title     String?
-  expertise String?
   company   String?
   phone     String?
-  linkedin  String?
-  avatarUrl String?
+  email     String?
+  photoPath String?
 
   students  StudentProfile[]
   notes     Note[]

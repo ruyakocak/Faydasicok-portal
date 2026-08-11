@@ -7,6 +7,7 @@ import ExcelJS from 'exceljs';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuditAction, Role, StudentStatus } from '../types/enums';
+import { storageService } from '../lib/storage';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -376,12 +377,12 @@ export async function updatePeriod(req: Request, res: Response, next: NextFuncti
   }
 }
 
-// ── List Users (reviewers, admins, mentors) ─────────────────────────
+// ── List Users (reviewers, admins) ──────────────────────────────────
 export async function listUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const users = await prisma.user.findMany({
-      where: { role: { in: [Role.REVIEWER, Role.ADMIN, Role.MENTOR] } },
-      select: { id: true, email: true, username: true, role: true, isActive: true, createdAt: true, mentorProfile: true },
+      where: { role: { in: [Role.REVIEWER, Role.ADMIN] } },
+      select: { id: true, email: true, username: true, role: true, isActive: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     });
     res.json(users);
@@ -390,27 +391,16 @@ export async function listUsers(req: Request, res: Response, next: NextFunction)
   }
 }
 
-// ── Create User (reviewer, admin, mentor) ───────────────────────────
+// ── Create User (reviewer, admin) ───────────────────────────────────
 export async function createUser(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { email, username, password, role, firstName, lastName, title, expertise } = req.body;
+    const { email, username, password, role } = req.body;
     if (!email || !password) throw new AppError(400, 'E-posta ve şifre zorunludur.');
-    if (role === Role.STUDENT) throw new AppError(400, 'Bu endpoint ile öğrenci oluşturulamaz.');
+    if (role === Role.STUDENT || role === Role.MENTOR) {
+      throw new AppError(400, 'Bu yetki rolüyle kullanıcı oluşturulamaz.');
+    }
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    
-    let mentorProfileData = undefined;
-    if (role === Role.MENTOR) {
-      if (!firstName || !lastName) throw new AppError(400, 'Mentör için ad ve soyad zorunludur.');
-      mentorProfileData = {
-        create: {
-          firstName,
-          lastName,
-          title,
-          expertise,
-        }
-      };
-    }
 
     const user = await prisma.user.create({
       data: {
@@ -419,7 +409,6 @@ export async function createUser(req: Request, res: Response, next: NextFunction
         passwordHash,
         role: role || Role.REVIEWER,
         isActive: true,
-        mentorProfile: mentorProfileData,
       },
     });
 
@@ -490,12 +479,73 @@ export async function listMentors(req: Request, res: Response, next: NextFunctio
   try {
     const mentors = await prisma.mentorProfile.findMany({
       include: {
-        user: { select: { id: true, email: true, isActive: true } },
         _count: { select: { students: true } }
       },
       orderBy: { firstName: 'asc' },
     });
     res.json(mentors);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Create Mentor ────────────────────────────────────────────────────
+export async function createMentor(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (req.user!.role !== Role.ADMIN) {
+      throw new AppError(403, 'Bu işlem için yetkiniz yok.');
+    }
+    const { firstName, lastName, title, company, phone, email } = req.body;
+    if (!firstName || !lastName) {
+      throw new AppError(400, 'Ad ve soyad zorunludur.');
+    }
+
+    let photoPath: string | undefined;
+    if (req.file) {
+      const stored = await storageService.save(req.file.buffer, req.file.originalname, req.file.mimetype);
+      photoPath = stored.filePath;
+    }
+
+    const mentor = await prisma.mentorProfile.create({
+      data: {
+        firstName,
+        lastName,
+        title: title || null,
+        company: company || null,
+        phone: phone || null,
+        email: email || null,
+        photoPath: photoPath || null,
+      },
+    });
+
+    res.status(201).json(mentor);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Delete Mentor ────────────────────────────────────────────────────
+export async function deleteMentor(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (req.user!.role !== Role.ADMIN) {
+      throw new AppError(403, 'Bu işlem için yetkiniz yok.');
+    }
+    const { id } = req.params;
+    const mentor = await prisma.mentorProfile.findUnique({ where: { id } });
+    if (!mentor) {
+      throw new AppError(404, 'Mentör bulunamadı.');
+    }
+
+    if (mentor.photoPath) {
+      try {
+        await storageService.delete(mentor.photoPath);
+      } catch (e) {
+        console.error('Error deleting mentor photo:', e);
+      }
+    }
+
+    await prisma.mentorProfile.delete({ where: { id } });
+    res.json({ message: 'Mentör silindi.' });
   } catch (err) {
     next(err);
   }
@@ -521,6 +571,7 @@ export async function assignMentor(req: Request, res: Response, next: NextFuncti
     const updatedStudent = await prisma.studentProfile.update({
       where: { id: studentId },
       data: { mentorId: mentorId || null },
+      include: { mentor: true }
     });
 
     await prisma.auditLog.create({

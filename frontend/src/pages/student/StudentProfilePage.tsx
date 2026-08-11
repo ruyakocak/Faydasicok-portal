@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { studentApi, documentApi, eventApi } from '../../api';
 import type { StudentProfile, Document as DocFile, DocumentPeriod, Event } from '../../types';
-import { PersonalTab, FamilyTab, EducationTab, DocumentsTab } from '../../components/ProfileTabs';
+import { PersonalTab, EducationTab, DocumentsTab } from '../../components/ProfileTabs';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -352,44 +352,182 @@ export default function StudentProfilePage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="card overflow-hidden">
-        <div className="tabs border-b border-gray-200">
-          {TABS.map((tab, i) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(i)}
-              className={`tab ${activeTab === i ? 'tab-active' : ''}`}
-            >
-              {tab}
-            </button>
-          ))}
+      {/* Deadlines Section */}
+      {(() => {
+        const activeDeadlines = periods.filter(p => {
+          if (!p.isOpen) return false;
+          // Check if already uploaded and not rejected
+          const isUploaded = documents.some(d => d.periodId === p.id && d.status !== 'REJECTED');
+          return !isUploaded;
+        });
+
+        if (activeDeadlines.length === 0) return null;
+
+        return (
+          <div className="space-y-3 mb-6">
+            {activeDeadlines.map(period => {
+              let diffDays: number | null = null;
+              if (period.endDate) {
+                const diffTime = new Date(period.endDate).getTime() - new Date().getTime();
+                diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              }
+
+              // Determine icon and color scheme based on urgency
+              const isUrgent = diffDays !== null && diffDays <= 5;
+              const cardBg = isUrgent ? 'bg-red-50/80 border-red-200 text-red-800' : 'bg-amber-50/80 border-amber-200 text-amber-800';
+              const iconColor = isUrgent ? 'text-red-500' : 'text-amber-500';
+
+              let labelText = '';
+              if (period.type === 'TRANSCRIPT') labelText = 'Transkripti';
+              else if (period.type === 'STUDENT_CERTIFICATE') labelText = 'Öğrenci Belgesi';
+              else if (period.type === 'VOLUNTEER_REPORT') labelText = 'STK Gönüllülük Raporu';
+
+              return (
+                <div key={period.id} className={`flex items-center justify-between p-4 rounded-xl border ${cardBg} shadow-sm animate-fade-in`}>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-shrink-0">
+                      {isUrgent ? (
+                        <svg className={`w-5 h-5 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      ) : (
+                        <svg className={`w-5 h-5 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      )}
+                    </div>
+                    <div>
+                      <span className="font-semibold text-sm">
+                        {period.label} {labelText}
+                      </span>
+                      <span className="text-xs ml-2 opacity-90 font-medium bg-white/50 px-2 py-0.5 rounded-full">
+                        {diffDays !== null 
+                          ? (diffDays > 0 ? `son ${diffDays} gün!` : 'son gün!') 
+                          : 'Yükleme Açık'}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab(2)}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${
+                      isUrgent 
+                        ? 'bg-red-600 border-red-600 text-white hover:bg-red-700' 
+                        : 'bg-amber-600 border-amber-600 text-white hover:bg-amber-700'
+                    }`}
+                  >
+                    Hemen Yükle
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {/* 2-Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {/* Left Side: Profile Tabs (2/3 width) */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="card overflow-hidden">
+            <div className="tabs border-b border-gray-200">
+              {TABS.map((tab, i) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(i)}
+                  className={`tab ${activeTab === i ? 'tab-active' : ''}`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            <div className="card-body">
+              {activeTab === 0 && (
+                <PersonalTab
+                  profile={profile}
+                  onSave={(data) => studentApi.updatePersonal(profile.id, data)}
+                  readOnly={false}
+                />
+              )}
+              {activeTab === 1 && (
+                <EducationTab
+                  profile={profile}
+                  onSave={(data) => studentApi.updateEducation(profile.id, data)}
+                  readOnly={false}
+                />
+              )}
+              {activeTab === 2 && (
+                <DocumentsTab
+                  profile={profile}
+                  documents={documents}
+                  periods={periods}
+                  onUpload={loadAll}
+                  readOnly={false}
+                />
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="card-body">
-          {activeTab === 0 && (
-            <PersonalTab
-              profile={profile}
-              onSave={(data) => studentApi.updatePersonal(profileId!, data)}
-              readOnly={false}
-            />
-          )}
-          {activeTab === 1 && (
-            <EducationTab
-              profile={profile}
-              onSave={(data) => studentApi.updateEducation(profileId!, data)}
-              readOnly={false}
-            />
-          )}
-          {activeTab === 2 && (
-            <DocumentsTab
-              profile={profile}
-              documents={documents}
-              periods={periods}
-              onUpload={loadAll}
-              readOnly={false}
-            />
-          )}
+        {/* Right Side: Mentor Card (1/3 width) */}
+        <div className="lg:col-span-1">
+          <div className="card shadow-sm border border-gray-150 overflow-hidden">
+            <div className="card-header bg-gray-50/50 py-3.5 px-4 border-b border-gray-150 flex items-center gap-2">
+              <svg className="w-5 h-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+              <h2 className="text-sm font-semibold text-gray-800">Mentörünüz</h2>
+            </div>
+            <div className="card-body p-5">
+              {profile.mentor ? (
+                <div className="text-center">
+                  <div className="w-24 h-24 rounded-full overflow-hidden mx-auto bg-gray-100 border-2 border-primary-200 shadow-sm mb-4">
+                    {profile.mentor.photoPath ? (
+                      <img src={`/${profile.mentor.photoPath}`} alt={`${profile.mentor.firstName} ${profile.mentor.lastName}`} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-primary-50 text-primary-600 font-bold text-2xl uppercase">
+                        {profile.mentor.firstName[0]}{profile.mentor.lastName[0]}
+                      </div>
+                    )}
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-lg mb-1">
+                    {profile.mentor.firstName} {profile.mentor.lastName}
+                  </h3>
+                  <p className="text-sm text-gray-500 font-medium mb-4">
+                    {profile.mentor.title || 'Mentör'}
+                    {profile.mentor.company ? ` @ ${profile.mentor.company}` : ''}
+                  </p>
+                  
+                  <div className="space-y-2.5 text-sm text-gray-600 text-left border-t border-gray-100 pt-4">
+                    {profile.mentor.email && (
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                        <span className="truncate">{profile.mentor.email}</span>
+                      </div>
+                    )}
+                    {profile.mentor.phone && (
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                        <span>{profile.mentor.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <div className="w-20 h-20 mx-auto mb-4 bg-gray-50 rounded-full flex items-center justify-center border border-dashed border-gray-200">
+                    <svg className="w-10 h-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21m0 0l-.813-5.096L9 21zm0 0h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="font-semibold text-gray-800 text-sm mb-1">Mentörünüz henüz atanmadı</h3>
+                  <p className="text-xs text-gray-500 max-w-[200px] mx-auto leading-relaxed">
+                    Eşleştirme işlemleri tamamlandığında mentör bilgilerinizi burada görebilirsiniz.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

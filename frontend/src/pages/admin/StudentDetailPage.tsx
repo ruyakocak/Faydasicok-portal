@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { studentApi, documentApi, approvalApi, adminApi } from '../../api';
 import type { StudentProfile, Document as DocFile, DocumentPeriod, ApprovableChange } from '../../types';
-import { PersonalTab, FamilyTab, EducationTab, DocumentsTab, ActivityTab } from '../../components/ProfileTabs';
+import { PersonalTab, EducationTab, DocumentsTab, ActivityTab } from '../../components/ProfileTabs';
 import toast from 'react-hot-toast';
 
 const TABS = ['Kişisel Bilgiler', 'Eğitim Bilgileri', 'Dokümanlar', 'Aktivite Geçmişi', 'Mentör'];
@@ -214,8 +214,12 @@ export default function StudentDetailPage() {
 
               {(profile as any).mentor ? (
                 <div className="bg-white border border-gray-200 rounded-xl p-6 flex flex-col md:flex-row gap-6 items-start md:items-center shadow-sm">
-                  <div className="w-20 h-20 bg-primary-50 rounded-full flex items-center justify-center text-primary-600 text-3xl font-bold flex-shrink-0">
-                    {((profile as any).mentor.firstName?.[0] || '') + ((profile as any).mentor.lastName?.[0] || '')}
+                  <div className="w-20 h-20 bg-primary-50 rounded-full overflow-hidden flex items-center justify-center text-primary-600 text-3xl font-bold flex-shrink-0">
+                    {(profile as any).mentor.photoPath ? (
+                      <img src={`/${(profile as any).mentor.photoPath}`} alt="Mentör" className="w-full h-full object-cover" />
+                    ) : (
+                      ((profile as any).mentor.firstName?.[0] || '') + ((profile as any).mentor.lastName?.[0] || '')
+                    )}
                   </div>
                   <div className="flex-1">
                     <h4 className="text-xl font-bold text-gray-900 mb-1">
@@ -223,16 +227,15 @@ export default function StudentDetailPage() {
                     </h4>
                     <p className="text-primary-600 font-medium mb-3">
                       {(profile as any).mentor.title || 'Mentör'}
-                      {(profile as any).mentor.expertise && ` • ${(profile as any).mentor.expertise}`}
+                      {(profile as any).mentor.company && ` @ ${(profile as any).mentor.company}`}
                     </p>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                      {/* E-posta is fetched via User relation */}
-                      {(profile as any).mentor.user?.email && (
+                      {(profile as any).mentor.email && (
                         <div className="flex items-center gap-2 text-gray-600">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                          <a href={`mailto:${(profile as any).mentor.user.email}`} className="hover:text-primary-600 hover:underline">
-                            {(profile as any).mentor.user.email}
+                          <a href={`mailto:${(profile as any).mentor.email}`} className="hover:text-primary-600 hover:underline">
+                            {(profile as any).mentor.email}
                           </a>
                         </div>
                       )}
@@ -242,20 +245,6 @@ export default function StudentDetailPage() {
                           <a href={`tel:${(profile as any).mentor.phone}`} className="hover:text-primary-600 hover:underline">
                             {(profile as any).mentor.phone}
                           </a>
-                        </div>
-                      )}
-                      {(profile as any).mentor.linkedin && (
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z"></path><circle cx="4" cy="4" r="2" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></circle></svg>
-                          <a href={(profile as any).mentor.linkedin} target="_blank" rel="noopener noreferrer" className="hover:text-primary-600 hover:underline truncate">
-                            {(profile as any).mentor.linkedin.replace(/^https?:\/\/(www\.)?linkedin\.com\/in\//, '')}
-                          </a>
-                        </div>
-                      )}
-                      {(profile as any).mentor.company && (
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
-                          <span>{(profile as any).mentor.company}</span>
                         </div>
                       )}
                     </div>

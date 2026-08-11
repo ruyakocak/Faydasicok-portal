@@ -14,6 +14,8 @@ import {
   deleteUser,
   resetStudentPassword,
   listMentors,
+  createMentor,
+  deleteMentor,
   assignMentor,
   exportStudentsReport,
   listDocumentTypes,
@@ -55,5 +57,7 @@ adminRouter.post('/users', requireAdmin, createUser);
 adminRouter.delete('/users/:id', requireAdmin, deleteUser);
 
 // Mentors
-adminRouter.get('/mentors', requireAdmin, listMentors);
-adminRouter.post('/assign-mentor', requireAdmin, assignMentor);
+adminRouter.get('/mentors', requireAdminOrReviewer, listMentors);
+adminRouter.post('/mentors', requireAdmin, upload.single('file'), createMentor);
+adminRouter.delete('/mentors/:id', requireAdmin, deleteMentor);
+adminRouter.post('/assign-mentor', requireAdminOrReviewer, assignMentor);
