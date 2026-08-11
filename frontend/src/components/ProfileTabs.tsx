@@ -4,7 +4,6 @@ import type { StudentProfile, Document as DocFile, DocumentPeriod, AuditLog } fr
 import { studentApi, documentApi, auditApi } from '../api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { tr } from 'date-fns/locale';
 import { UNIVERSITIES } from '../constants/universities';
 
 // ── Status Badge ──────────────────────────────────────────────────────
@@ -113,7 +112,7 @@ export function PersonalTab({ profile, onSave, readOnly }: {
         <h3 className="font-medium text-gray-900">Kişisel Bilgiler</h3>
         {!readOnly && !editing && (
           <button onClick={() => setEditing(true)} className="btn-secondary btn-sm">
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
             Düzenle
           </button>
         )}
@@ -129,7 +128,7 @@ export function PersonalTab({ profile, onSave, readOnly }: {
 
       {editing && (
         <div className="mb-4 bg-blue-50 text-blue-700 rounded p-3 text-sm flex items-center gap-2">
-          <svg viewBox="0 0 24 24" className="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <svg viewBox="0 0 24 24" className="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
           <span>Değişiklikler doğrudan kaydedilir ve değişiklik geçmişinde loglanır.</span>
         </div>
       )}
@@ -159,7 +158,7 @@ export function PersonalTab({ profile, onSave, readOnly }: {
       <div className="mt-6 border border-gray-200 rounded-lg p-4">
         <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
           <svg viewBox="0 0 24 24" className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+            <rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
           </svg>
           Banka Bilgisi
         </h4>
@@ -358,7 +357,7 @@ export function EducationTab({ profile, onSave, readOnly }: {
         <FieldRow label="Fakülte" value={profile.faculty} editing={editing} name="faculty" onChange={handleChange} />
         <FieldRow label="Bölüm" value={profile.department} editing={editing} name="department" onChange={handleChange} />
         <FieldRow label="Sınıf" value={profile.grade ? `${profile.grade}. Sınıf` : null} editing={editing} name="grade" onChange={handleChange}
-          options={[1,2,3,4,5,6].map(n => ({ value: String(n), label: `${n}. Sınıf` }))} />
+          options={[1, 2, 3, 4, 5, 6].map(n => ({ value: String(n), label: `${n}. Sınıf` }))} />
         <FieldRow label="Üniversite Türü" value={profile.universityType} editing={editing} name="universityType" onChange={handleChange}
           options={[{ value: '', label: 'Seçiniz' }, { value: 'Devlet', label: 'Devlet' }, { value: 'Vakıf', label: 'Vakıf' }]} />
       </dl>
@@ -374,159 +373,130 @@ export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }
   onUpload?: () => void;
   readOnly?: boolean;
 }) {
-  const transcripts = documents.filter(d => d.type === 'TRANSCRIPT');
-  const certificates = documents.filter(d => d.type === 'STUDENT_CERTIFICATE');
-  const volunteerReports = documents.filter(d => d.type === 'VOLUNTEER_REPORT');
+  const [docTypes, setDocTypes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const transcriptPeriod = periods.find(p => p.type === 'TRANSCRIPT');
-  const certPeriod = periods.find(p => p.type === 'STUDENT_CERTIFICATE');
-  const volunteerPeriod = periods.find(p => p.type === 'VOLUNTEER_REPORT');
+  useEffect(() => {
+    // Fetch from public authenticated endpoint
+    documentApi.getActiveTypes().then(types => {
+      setDocTypes(types);
+    }).catch(() => {
+      // Ignore errors or show toast
+    }).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return <div className="py-10 text-center"><span className="spinner w-8 h-8" /></div>;
+  }
 
   return (
     <div className="space-y-8">
-      {/* Transcripts */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-medium text-gray-900">Transkriptler</h3>
-          {!readOnly && (
-            <PeriodUploadButton
-              period={transcriptPeriod}
-              profileId={profile.id}
-              docType="transcript"
-              onUploaded={onUpload}
-            />
-          )}
-        </div>
-        {transcriptPeriod && !transcriptPeriod.isOpen && (
-          <PeriodClosedNotice period={transcriptPeriod} />
-        )}
-        <DocumentTable docs={transcripts} />
-      </section>
+      {docTypes.map(docType => {
+        const typeDocs = documents.filter(d => d.type === docType.code);
+        const typePeriods = periods.filter(p => p.type === docType.code);
 
-      {/* Student Certificates */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-medium text-gray-900">Öğrenci Belgeleri</h3>
-          {!readOnly && (
-            <PeriodUploadButton
-              period={certPeriod}
-              profileId={profile.id}
-              docType="student-certificate"
-              onUploaded={onUpload}
-            />
-          )}
-        </div>
-        {certPeriod && !certPeriod.isOpen && (
-          <PeriodClosedNotice period={certPeriod} />
-        )}
-        <DocumentTable docs={certificates} />
-      </section>
-
-      {/* Volunteer Reports */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-medium text-gray-900">STK Gönüllülük Raporları</h3>
-          {!readOnly && (
-            <PeriodUploadButton
-              period={volunteerPeriod}
-              profileId={profile.id}
-              docType="volunteer-report"
-              onUploaded={onUpload}
-            />
-          )}
-        </div>
-        {volunteerPeriod && !volunteerPeriod.isOpen && (
-          <PeriodClosedNotice period={volunteerPeriod} />
-        )}
-        <DocumentTable docs={volunteerReports} showVolunteer />
-      </section>
+        return (
+          <section key={docType.code}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium text-gray-900">{docType.name}</h3>
+              {!readOnly && (
+                <PeriodUploadButton
+                  periods={typePeriods}
+                  profileId={profile.id}
+                  docType={docType}
+                  onUploaded={onUpload}
+                />
+              )}
+            </div>
+            <DocumentTable docs={typeDocs} docType={docType} />
+          </section>
+        );
+      })}
     </div>
   );
 }
 
-function PeriodClosedNotice({ period }: { period: DocumentPeriod }) {
-  return (
-    <div className="mb-3 bg-gray-100 border border-gray-200 rounded p-3 text-sm text-gray-600 flex items-center gap-2">
-      <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-      <span>
-        <strong>{period.label}</strong> için yükleme şu anda kapalı.
-        {period.endDate && ` Son tarih: ${format(new Date(period.endDate), 'dd MMMM yyyy', { locale: tr })}`}
-      </span>
-    </div>
-  );
-}
 
-function DocumentTable({ docs, showVolunteer }: { docs: DocFile[]; showVolunteer?: boolean }) {
+
+function DocumentTable({ docs, docType }: { docs: DocFile[]; docType: any }) {
   if (!docs.length) {
     return <p className="text-sm text-gray-400 text-center py-4">Henüz belge yüklenmedi.</p>;
   }
+  
+  let customFields: any[] = [];
+  try {
+    customFields = docType.customFields ? JSON.parse(docType.customFields) : [];
+  } catch (e) {}
+
   return (
     <div className="overflow-x-auto">
-      <table className="data-table">
+      <table className="data-table table-fixed w-full min-w-[850px]">
         <thead>
           <tr>
-            <th>Dönem</th>
-            <th>Sınıf</th>
-            <th>Yüklenme Tarihi</th>
-            {showVolunteer && <th>Kurum</th>}
-            <th>Durum</th>
-            <th>Dosya</th>
+            <th className="w-56">Dönem</th>
+            <th className="w-36">Yüklenme Tarihi</th>
+            {customFields.map(f => (
+              <th key={f.id} className="w-56 whitespace-normal break-words">{f.label}</th>
+            ))}
+            <th className="w-40">Durum</th>
+            <th className="w-auto">Dosya</th>
           </tr>
         </thead>
         <tbody>
-          {docs.map(doc => (
-            <tr key={doc.id}>
-              <td>{doc.academicYear || '—'} {doc.semester === 'GUZ' ? 'Güz' : doc.semester === 'BAHAR' ? 'Bahar' : ''}</td>
-              <td>{doc.grade ? `${doc.grade}. Sınıf` : '—'}</td>
-              <td className="text-gray-500 text-xs">{format(new Date(doc.uploadedAt), 'dd.MM.yyyy HH:mm')}</td>
-              {showVolunteer && <td>{doc.volunteerOrg || '—'}</td>}
-              <td><StatusBadge status={doc.status} note={doc.rejectionNote} /></td>
-              <td>
-                <a href={`/${doc.filePath}`} target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline text-xs truncate max-w-32 inline-block">
-                  {doc.originalFileName}
-                </a>
-              </td>
-            </tr>
-          ))}
+          {docs.map(doc => {
+            let answers: any = {};
+            try { answers = doc.dynamicFields ? JSON.parse(doc.dynamicFields) : {}; } catch (e) {}
+            // Backwards compatibility for legacy fields
+            if (docType.code === 'TRANSCRIPT' && doc.grade) answers['Sınıf'] = doc.grade;
+            if (docType.code === 'VOLUNTEER_REPORT' && doc.volunteerOrg) answers['Kurum'] = doc.volunteerOrg;
+            
+            return (
+              <tr key={doc.id}>
+                <td>{doc.period?.label || (doc.academicYear ? `${doc.academicYear} ${doc.semester === 'GUZ' ? 'Güz' : doc.semester === 'BAHAR' ? 'Bahar' : ''}` : '—')}</td>
+                <td className="text-gray-500 text-xs">{format(new Date(doc.uploadedAt), 'dd.MM.yyyy HH:mm')}</td>
+                {customFields.map(f => (
+                  <td key={f.id} className="truncate" title={answers[f.id]}>{answers[f.id] || '—'}</td>
+                ))}
+                <td><StatusBadge status={doc.status} note={doc.rejectionNote} /></td>
+                <td>
+                  <a href={`/${doc.filePath}`} target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline text-xs truncate max-w-32 inline-block">
+                    {doc.originalFileName}
+                  </a>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
 
+// Removed StaticUploadButton as it is unused
 
-
-function PeriodUploadButton({ period, profileId, docType, onUploaded }: {
-  period?: DocumentPeriod;
+function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
+  periods?: DocumentPeriod[];
   profileId: string;
-  docType: string;
+  docType: any;
   onUploaded?: () => void;
 }) {
+  const openPeriods = periods.filter(p => p.isOpen);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ grade: '', semester: '', academicYear: '', volunteerOrg: '', note: '' });
+  const [selectedPeriodId, setSelectedPeriodId] = useState(openPeriods[0]?.id || '');
+  const [dynamicAnswers, setDynamicAnswers] = useState<Record<string, any>>({});
   const [file, setFile] = useState<File | null>(null);
 
-  const isOpen = !period || period.isOpen;
+  let customFields: any[] = [];
+  try { customFields = docType.customFields ? JSON.parse(docType.customFields) : []; } catch(e) {}
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file) { toast.error('Dosya seçiniz.'); return; }
+    if (!selectedPeriodId) { toast.error('Lütfen bir dönem seçiniz.'); return; }
     setLoading(true);
     try {
-      const data: Record<string, string> = {
-        grade: form.grade,
-        semester: form.semester,
-        academicYear: form.academicYear,
-        note: form.note,
-        volunteerOrg: form.volunteerOrg,
-        periodId: period?.id || '',
-      };
-      if (docType === 'transcript') await documentApi.uploadTranscript(profileId, data, file);
-      else if (docType === 'student-certificate') await documentApi.uploadStudentCertificate(profileId, data, file);
-      else await documentApi.uploadVolunteerReport(profileId, data, file);
+      await documentApi.uploadDynamicDocument(profileId, selectedPeriodId, docType.code, dynamicAnswers, file);
       toast.success('Belge yüklendi, onay bekleniyor.');
       setOpen(false);
       onUploaded?.();
@@ -535,7 +505,7 @@ function PeriodUploadButton({ period, profileId, docType, onUploaded }: {
     }
   }
 
-  if (!isOpen) {
+  if (openPeriods.length === 0) {
     return <button disabled className="btn-secondary btn-sm opacity-50 cursor-not-allowed">Yükleme Kapalı</button>;
   }
 
@@ -544,42 +514,40 @@ function PeriodUploadButton({ period, profileId, docType, onUploaded }: {
       <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-modal w-full max-w-md">
           <div className="p-5 border-b border-gray-200">
-            <h3 className="font-semibold">Belge Yükle</h3>
+            <h3 className="font-semibold">{docType.name} Yükle</h3>
           </div>
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="form-label">Sınıf</label>
-                <select className="form-select" value={form.grade} onChange={e => setForm(f => ({ ...f, grade: e.target.value }))}>
-                  <option value="">Seçiniz</option>
-                  {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}. Sınıf</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="form-label">Eğitim Yılı</label>
-                <input className="form-input" placeholder="2024-2025" value={form.academicYear} onChange={e => setForm(f => ({ ...f, academicYear: e.target.value }))} />
-              </div>
-            </div>
-            {docType !== 'student-certificate' && (
-              <div>
-                <label className="form-label">Dönem</label>
-                <select className="form-select" value={form.semester} onChange={e => setForm(f => ({ ...f, semester: e.target.value }))}>
-                  <option value="">Seçiniz</option>
-                  <option value="GUZ">Güz</option>
-                  <option value="BAHAR">Bahar</option>
-                </select>
-              </div>
-            )}
-            {docType === 'volunteer-report' && (
-              <div>
-                <label className="form-label">Gönüllülük Yapılan Kurum <span className="text-primary-500">*</span></label>
-                <input className="form-input" value={form.volunteerOrg} onChange={e => setForm(f => ({ ...f, volunteerOrg: e.target.value }))} required />
-              </div>
-            )}
             <div>
-              <label className="form-label">Not / Açıklama</label>
-              <input className="form-input" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} />
+              <label className="form-label">Yüklenecek Dönem <span className="text-primary-500">*</span></label>
+              <select className="form-select" value={selectedPeriodId} onChange={e => setSelectedPeriodId(e.target.value)} required>
+                {openPeriods.map(p => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+              </select>
             </div>
+            
+            {customFields.map(field => (
+              <div key={field.id}>
+                <label className="form-label">{field.label} {field.required && <span className="text-primary-500">*</span>}</label>
+                {field.type === 'textarea' ? (
+                  <textarea
+                    className="form-input"
+                    required={field.required}
+                    value={dynamicAnswers[field.id] || ''}
+                    onChange={e => setDynamicAnswers(p => ({ ...p, [field.id]: e.target.value }))}
+                  />
+                ) : (
+                  <input
+                    type={field.type === 'number' ? 'number' : 'text'}
+                    className="form-input"
+                    required={field.required}
+                    value={dynamicAnswers[field.id] || ''}
+                    onChange={e => setDynamicAnswers(p => ({ ...p, [field.id]: e.target.value }))}
+                  />
+                )}
+              </div>
+            ))}
+
             <div>
               <label className="form-label">Dosya (PDF, JPG, PNG) <span className="text-primary-500">*</span></label>
               <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="form-input py-1.5" onChange={e => setFile(e.target.files?.[0] || null)} required />
@@ -598,7 +566,7 @@ function PeriodUploadButton({ period, profileId, docType, onUploaded }: {
 
   return (
     <button onClick={() => setOpen(true)} className="btn-primary btn-sm">
-      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
       Belge Yükle
     </button>
   );
@@ -669,12 +637,11 @@ export function ActivityTab({ profileId }: ActivityTabProps) {
                 {moduleLabels[log.module] || log.module}
               </td>
               <td>
-                <span className={`badge ${
-                  log.action === 'APPROVE' ? 'badge-approved' :
+                <span className={`badge ${log.action === 'APPROVE' ? 'badge-approved' :
                   log.action === 'REJECT' ? 'badge-rejected' :
-                  log.action === 'UPLOAD' ? 'badge-primary' :
-                  'badge-gray'
-                } text-xs`}>
+                    log.action === 'UPLOAD' ? 'badge-primary' :
+                      'badge-gray'
+                  } text-xs`}>
                   {actionLabels[log.action] || log.action}
                 </span>
               </td>

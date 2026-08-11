@@ -4,13 +4,25 @@ import { AppError } from '../middleware/errorHandler';
 import { storageService } from '../lib/storage';
 import { ApprovableEntityType, AuditAction, DocumentPeriodType, DocumentType, Role } from '../types/enums';
 
-// ── Get Active Upload Periods ────────────────────────────────────────
 export async function getActivePeriods(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const periods = await prisma.documentPeriod.findMany({
       orderBy: { createdAt: 'desc' },
     });
     res.json(periods);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Get Active Document Types ────────────────────────────────────────
+export async function getActiveDocumentTypes(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const types = await prisma.documentTypeConfig.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(types);
   } catch (err) {
     next(err);
   }
@@ -216,3 +228,29 @@ export async function uploadVolunteerReport(req: Request, res: Response, next: N
     next(err);
   }
 }
+
+// ── Upload Dynamic Document ───────────────────────────────────────────
+export async function uploadDynamicDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { profileId, periodId, type, dynamicFields } = req.body;
+    if (!profileId || !periodId || !type) throw new AppError(400, 'profileId, periodId ve type zorunludur.');
+
+    await getProfileAndValidate(req, profileId);
+
+    const period = await prisma.documentPeriod.findUnique({ where: { id: periodId } });
+    if (!period?.isOpen) throw new AppError(400, 'Bu dönem için yükleme kapalı.');
+
+    // Save with approval
+    const doc = await saveDocumentWithApproval(req, profileId, {
+      type,
+      isStatic: false,
+      periodId,
+      dynamicFields: dynamicFields || null,
+    });
+
+    res.status(201).json({ message: 'Belge yüklendi, onay bekleniyor.', document: doc });
+  } catch (err) {
+    next(err);
+  }
+}
+

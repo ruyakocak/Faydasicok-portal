@@ -46,12 +46,12 @@ export default function AdminLayout() {
       {/* Sidebar */}
       <aside className="w-56 bg-white border-r border-gray-200 flex flex-col fixed inset-y-0 left-0 z-20">
         {/* Logo */}
-        <div className="px-4 h-14 flex items-center gap-3 border-b border-gray-200">
-          <div className="h-8 flex items-center flex-shrink-0">
+        <div className="px-3 h-14 flex items-center justify-between border-b border-gray-200">
+          <div className="h-7 flex items-center flex-shrink-0">
             <img src="/logo.png" alt="Logo" className="h-full object-contain" />
           </div>
-          <div className="overflow-hidden">
-            <div className="text-xs text-gray-400">Yönetim Paneli</div>
+          <div className="text-[10px] font-semibold text-gray-400 uppercase text-right leading-tight tracking-wider">
+            Yönetim<br/>Paneli
           </div>
         </div>
 

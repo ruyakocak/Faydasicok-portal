@@ -1,39 +1,37 @@
 import { useEffect, useState } from 'react';
 import { adminApi } from '../../api';
-import type { DocumentPeriod } from '../../types';
+import type { DocumentPeriod, DocumentTypeConfig } from '../../types';
+import DocumentTypesTab from './DocumentTypesTab';
 import toast from 'react-hot-toast';
 
-const periodTypeLabels: Record<string, string> = {
-  TRANSCRIPT: 'Transkript',
-  STUDENT_CERTIFICATE: 'Öğrenci Belgesi',
-  VOLUNTEER_REPORT: 'STK Gönüllülük Raporu',
-};
 
-const periodDescriptions: Record<string, string> = {
-  TRANSCRIPT: 'Öğrencilerin güncel dönem not döküm belgesi (PDF).',
-  STUDENT_CERTIFICATE: 'Öğrencinin aktif kayıt durumunu gösteren güncel e-devlet belgesi.',
-  VOLUNTEER_REPORT: 'Bursiyerlerin sivil toplum kuruluşlarında yaptıkları gönüllülük faaliyet raporu.',
-};
 
 export default function PeriodsPage() {
   const [periods, setPeriods] = useState<DocumentPeriod[]>([]);
+  const [docTypes, setDocTypes] = useState<DocumentTypeConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showWarningModal, setShowWarningModal] = useState(false);
   const [newLabel, setNewLabel] = useState('');
   const [creating, setCreating] = useState(false);
   const [selectedSemester, setSelectedSemester] = useState('');
+  const [activeTab, setActiveTab] = useState<'periods' | 'types'>('periods');
 
   async function load() {
     setLoading(true);
     try {
-      const data = await adminApi.listPeriods();
-      setPeriods(data);
+      const [periodsData, typesData] = await Promise.all([
+        adminApi.listPeriods(),
+        adminApi.listDocumentTypes(),
+      ]);
+      setPeriods(periodsData);
+      setDocTypes(typesData);
       
       // Group by label to find unique semesters
-      const semesters = Array.from(new Set(data.map(p => p.label)));
+      const semesters = Array.from(new Set(periodsData.map(p => p.label)));
       if (semesters.length > 0) {
         // If there's an active (isOpen) period, select its label. Otherwise select the latest one.
-        const active = data.find(p => p.isOpen);
+        const active = periodsData.find(p => p.isOpen);
         setSelectedSemester(active ? active.label : semesters[0]);
       }
     } finally {
@@ -44,11 +42,42 @@ export default function PeriodsPage() {
   useEffect(() => { load(); }, []);
 
   async function handleToggle(period: DocumentPeriod) {
-    await adminApi.updatePeriod(period.id, { isOpen: !period.isOpen });
-    toast.success(`${periodTypeLabels[period.type]} yükleme izni ${period.isOpen ? 'kapatıldı' : 'açıldı'}.`);
+    const res = await adminApi.updatePeriod(period.id, { isOpen: !period.isOpen }) as any;
+    
+    if (res.autoClosedOtherSemesters) {
+      setShowWarningModal(true);
+    }
+    
+    const docTypeName = docTypes.find(d => d.code === period.type)?.name || period.type;
+    toast.success(`${docTypeName} yükleme izni ${period.isOpen ? 'kapatıldı' : 'açıldı'}.`);
     // Reload periods
     const data = await adminApi.listPeriods();
     setPeriods(data);
+  }
+
+  async function handleAddToSemester(docType: DocumentTypeConfig) {
+    if (!selectedSemester) return;
+    
+    // Find an existing period in this semester to copy its academicYear/semester code.
+    const existingPeriod = periods.find(p => p.label === selectedSemester);
+    if (!existingPeriod) {
+      toast.error('Dönem bilgileri bulunamadı.');
+      return;
+    }
+    
+    try {
+      await adminApi.createPeriod({
+        type: docType.code,
+        label: selectedSemester,
+        semester: existingPeriod.semester,
+        academicYear: existingPeriod.academicYear,
+        isOpen: false
+      });
+      toast.success(`${docType.name} bu döneme eklendi.`);
+      await load();
+    } catch (err: any) {
+      toast.error('Eklenirken bir hata oluştu');
+    }
   }
 
   async function handleCreateSemester(e: React.FormEvent) {
@@ -57,11 +86,17 @@ export default function PeriodsPage() {
     setCreating(true);
     try {
       // Create the 3 base periods for this new semester
-      await Promise.all([
-        adminApi.createPeriod({ type: 'TRANSCRIPT', label: newLabel, semester: 'GUZ', academicYear: '' }),
-        adminApi.createPeriod({ type: 'STUDENT_CERTIFICATE', label: newLabel, semester: 'GUZ', academicYear: '' }),
-        adminApi.createPeriod({ type: 'VOLUNTEER_REPORT', label: newLabel, semester: 'GUZ', academicYear: '' }),
-      ]);
+      const activeTypes = docTypes.filter(t => t.isActive);
+      if (activeTypes.length === 0) {
+        toast.error('Aktif bir belge türü bulunamadı. Lütfen önce belge türü ekleyin.');
+        setCreating(false);
+        return;
+      }
+      await Promise.all(
+        activeTypes.map(t =>
+          adminApi.createPeriod({ type: t.code, label: newLabel, semester: 'GUZ', academicYear: '' })
+        )
+      );
       toast.success('Yeni dönem başarıyla oluşturuldu.');
       setShowCreate(false);
       setNewLabel('');
@@ -86,15 +121,36 @@ export default function PeriodsPage() {
       <div className="page-header flex items-start justify-between">
         <div>
           <h1 className="page-title">Dönem ve Evrak Yönetimi</h1>
-          <p className="page-subtitle">Aktif eğitim dönemini seçin ve toplanacak belgeleri belirleyin</p>
+          <p className="page-subtitle">Eğitim dönemlerini ve toplanacak evrak türlerini belirleyin</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-1.5">
-          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Yeni Dönem Ekle
+        {activeTab === 'periods' && (
+          <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-1.5">
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Yeni Dönem Ekle
+          </button>
+        )}
+      </div>
+
+      <div className="border-b border-gray-200 mb-6 flex gap-6">
+        <button
+          onClick={() => setActiveTab('periods')}
+          className={`py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'periods' ? 'border-primary-500 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+        >
+          Dönem Yönetimi
+        </button>
+        <button
+          onClick={() => setActiveTab('types')}
+          className={`py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'types' ? 'border-primary-500 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+        >
+          Belge Türü Ayarları
         </button>
       </div>
 
-      {loading ? (
+      {activeTab === 'types' && <DocumentTypesTab />}
+
+      {activeTab === 'periods' && (
+        <>
+          {loading ? (
         <div className="flex items-center justify-center py-20">
           <span className="spinner border-gray-300 border-t-primary-500 w-8 h-8" />
         </div>
@@ -132,7 +188,8 @@ export default function PeriodsPage() {
               <h2 className="text-base font-semibold text-gray-800">{selectedSemester} Evrak Ayarları</h2>
             </div>
             <div className="divide-y divide-gray-100">
-              {['TRANSCRIPT', 'STUDENT_CERTIFICATE', 'VOLUNTEER_REPORT'].map(type => {
+              {docTypes.map(docType => {
+                const type = docType.code;
                 const period = selectedSemesterPeriods.find(p => p.type === type);
                 const isOpen = period?.isOpen ?? false;
                 const docCount = (period as any)?._count?.documents ?? 0;
@@ -141,14 +198,14 @@ export default function PeriodsPage() {
                   <div key={type} className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 hover:bg-gray-50/50 transition-colors">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <h4 className="font-semibold text-gray-900 text-sm sm:text-base">{periodTypeLabels[type]}</h4>
+                        <h4 className="font-semibold text-gray-900 text-sm sm:text-base">{docType.name}</h4>
                         {isOpen && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700 border border-green-200 animate-pulse">
                             Aktif Alımda
                           </span>
                         )}
                       </div>
-                      <p className="text-xs sm:text-sm text-gray-500 mt-1 max-w-2xl">{periodDescriptions[type]}</p>
+                      <p className="text-xs sm:text-sm text-gray-500 mt-1 max-w-2xl">{docType.description}</p>
                       <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
                         <span>Yüklenen Belge: <strong className="text-gray-700 font-medium">{docCount} adet</strong></span>
                       </div>
@@ -169,7 +226,9 @@ export default function PeriodsPage() {
                           }`} />
                         </button>
                       ) : (
-                        <span className="text-xs text-gray-400">Oluşturuluyor...</span>
+                        <button onClick={() => handleAddToSemester(docType)} className="btn-secondary btn-sm text-xs py-1 px-3">
+                          Bu Döneme Ekle
+                        </button>
                       )}
                     </div>
                   </div>
@@ -179,6 +238,8 @@ export default function PeriodsPage() {
           </div>
         </div>
       )}
+      </>
+    )}
 
       {/* Create Semester Modal */}
       {showCreate && (
@@ -208,6 +269,45 @@ export default function PeriodsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Warning Modal */}
+      {showWarningModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden border border-amber-100 animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-amber-100 flex items-center justify-between bg-amber-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-amber-900">Otomatik Kapatma Bildirimi</h3>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-6">
+              <p className="text-sm text-gray-700 mb-4">
+                Sistemde aynı anda sadece <strong>TEK BİR dönemin</strong> aktif olmasına izin verilmektedir.
+              </p>
+              <p className="text-sm text-gray-700">
+                Siz bu dönemi açtığınız için, çakışmayı önlemek adına <strong className="text-amber-700">DİĞER TÜM DÖNEMLERDEKİ</strong> (eski dönemler vb.) açık evrak yüklemeleri otomatik olarak KAPATILMIŞTIR!
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end bg-gray-50/50">
+              <button
+                onClick={() => setShowWarningModal(false)}
+                className="px-5 py-2 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors shadow-sm"
+              >
+                Anladım
+              </button>
+            </div>
           </div>
         </div>
       )}

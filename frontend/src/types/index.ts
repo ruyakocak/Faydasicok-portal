@@ -1,6 +1,6 @@
 export interface User {
   id: string;
-  role: 'STUDENT' | 'REVIEWER' | 'ADMIN';
+  role: 'STUDENT' | 'REVIEWER' | 'ADMIN' | 'MENTOR';
   profileId?: string;
   tcKimlikNo?: string;
   email?: string;
@@ -80,39 +80,52 @@ export interface MentorProfile {
   };
 }
 
+export interface DocumentTypeConfig {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  customFields: string | null; // JSON string of custom fields
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Document {
   id: string;
   studentProfileId: string;
   type: string;
   isStatic: boolean;
-  periodId?: string;
-  period?: DocumentPeriod;
-  grade?: number;
-  semester?: string;
-  academicYear?: string;
-  transcriptNote?: string;
-  volunteerOrg?: string;
-  volunteerNote?: string;
+  periodId?: string | null;
+  period?: DocumentPeriod | null;
+  grade?: number | null;
+  semester?: string | null;
+  academicYear?: string | null;
+  transcriptNote?: string | null;
+  volunteerOrg?: string | null;
+  volunteerNote?: string | null;
+  dynamicFields?: string | null; // JSON string of custom answers
   filePath: string;
   originalFileName: string;
   mimeType: string;
   fileSize: number;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  rejectionNote?: string;
+  status: string;
+  rejectionNote?: string | null;
   uploadedAt: string;
   updatedAt: string;
 }
 
 export interface DocumentPeriod {
   id: string;
-  type: 'TRANSCRIPT' | 'STUDENT_CERTIFICATE' | 'VOLUNTEER_REPORT';
+  type: string;
   label: string;
-  semester?: string;
-  academicYear?: string;
-  grade?: number;
+  semester: string;
+  academicYear: string;
   isOpen: boolean;
-  startDate?: string;
-  endDate?: string;
+  createdAt: string;
+  updatedAt: string;
+  documents?: Document[];
+  approvableChanges?: ApprovableChange[];
 }
 
 export interface ApprovableChange {

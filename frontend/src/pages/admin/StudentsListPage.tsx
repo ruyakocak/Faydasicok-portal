@@ -158,6 +158,26 @@ export default function StudentsListPage() {
     }
   }
 
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const blob = await adminApi.exportStudentsReport();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bursiyer-raporu-${Date.now()}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Rapor başarıyla indirildi.');
+    } catch (err) {
+      toast.error('Rapor indirilirken hata oluştu.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="animate-fade-in">
       <div className="page-header flex items-start justify-between">
@@ -166,14 +186,19 @@ export default function StudentsListPage() {
           <p className="page-subtitle">{result?.pagination.total ?? 0} bursiyer kayıtlı</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={handleExport} disabled={exporting} className="btn-secondary btn-sm text-green-700 border-green-200 hover:bg-green-50">
+            {exporting ? (
+              <span className="spinner w-4 h-4 border-green-700 mr-1" />
+            ) : (
+              <svg viewBox="0 0 24 24" className="w-4 h-4 mr-1" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            )}
+            Excel İndir
+          </button>
           <button onClick={() => { setCreateModalOpen(true); setCreateResult(null); setNewStudentForm({ tcKimlikNo: '', firstName: '', lastName: '' }); }} className="btn-primary btn-sm">
             <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
             Bursiyer Ekle
           </button>
-          <button onClick={downloadTemplate} className="btn-secondary btn-sm">
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-            Şablon İndir
-          </button>
+
           <button onClick={() => { setBulkModalOpen(true); setCreatedResults([]); setPastedTcs(''); }} className="btn-secondary btn-sm">
             <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
             Toplu TC Yapıştır
