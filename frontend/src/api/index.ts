@@ -59,6 +59,9 @@ export const documentApi = {
   getPeriods: (): Promise<DocumentPeriod[]> =>
     api.get('/documents/periods').then((r) => r.data),
 
+  getActiveTypes: () =>
+    api.get('/documents/types').then((r) => r.data),
+
   uploadStatic: (profileId: string, type: string, file: File) => {
     const fd = new FormData();
     fd.append('profileId', profileId);
@@ -89,6 +92,18 @@ export const documentApi = {
     Object.entries(data).forEach(([k, v]) => fd.append(k, v));
     fd.append('file', file);
     return api.post('/documents/volunteer-report', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
+
+  uploadDynamicDocument: (profileId: string, periodId: string, type: string, dynamicFields: any, file: File) => {
+    const fd = new FormData();
+    fd.append('profileId', profileId);
+    fd.append('periodId', periodId);
+    fd.append('type', type);
+    if (dynamicFields) {
+      fd.append('dynamicFields', JSON.stringify(dynamicFields));
+    }
+    fd.append('file', file);
+    return api.post('/documents/dynamic', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
   },
 };
 
@@ -162,6 +177,18 @@ export const adminApi = {
 
   assignMentor: (studentId: string, mentorId: string | null) =>
     api.post('/admin/assign-mentor', { studentId, mentorId }).then((r) => r.data),
+
+  listDocumentTypes: () =>
+    api.get('/admin/document-types').then((r) => r.data),
+
+  createDocumentType: (data: any) =>
+    api.post('/admin/document-types', data).then((r) => r.data),
+
+  updateDocumentType: (id: string, data: any) =>
+    api.patch(`/admin/document-types/${id}`, data).then((r) => r.data),
+
+  deleteDocumentType: (id: string) =>
+    api.delete(`/admin/document-types/${id}`).then((r) => r.data),
 };
 
 // ── Audit Logs ────────────────────────────────────────────────────────

@@ -4,7 +4,6 @@ import type { StudentProfile, Document as DocFile, DocumentPeriod, AuditLog } fr
 import { studentApi, documentApi, auditApi } from '../api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { tr } from 'date-fns/locale';
 import { UNIVERSITIES } from '../constants/universities';
 
 // ── Status Badge ──────────────────────────────────────────────────────
@@ -366,18 +365,6 @@ export function EducationTab({ profile, onSave, readOnly }: {
   );
 }
 
-// ── Static Document Types ─────────────────────────────────────────────
-const STATIC_DOC_TYPES = [
-  { type: 'APPLICATION_FORM', label: 'Başvuru Formu' },
-  { type: 'YKS_RESULT', label: 'YKS Sonuç Belgesi' },
-  { type: 'UNIVERSITY_PLACEMENT', label: 'Üniversite Yerleşme Belgesi' },
-  { type: 'MOTHER_INCOME', label: 'Anne Gelir Belgesi' },
-  { type: 'FATHER_INCOME', label: 'Baba Gelir Belgesi' },
-  { type: 'ID_PHOTOCOPY', label: 'Kimlik Fotokopisi' },
-  { type: 'CRIMINAL_RECORD', label: 'Adli Sicil Kaydı' },
-  { type: 'GRADUATION_CERTIFICATE', label: 'Üniversite Mezuniyet Belgesi' },
-];
-
 // ── Documents Tab ─────────────────────────────────────────────────────
 export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }: {
   profile: StudentProfile;
@@ -386,147 +373,122 @@ export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }
   onUpload?: () => void;
   readOnly?: boolean;
 }) {
-  const staticDocs = documents.filter(d => d.isStatic);
-  const transcripts = documents.filter(d => d.type === 'TRANSCRIPT');
-  const certificates = documents.filter(d => d.type === 'STUDENT_CERTIFICATE');
-  const volunteerReports = documents.filter(d => d.type === 'VOLUNTEER_REPORT');
+  const [docTypes, setDocTypes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const transcriptPeriods = periods.filter(p => p.type === 'TRANSCRIPT');
-  const certPeriods = periods.filter(p => p.type === 'STUDENT_CERTIFICATE');
-  const volunteerPeriods = periods.filter(p => p.type === 'VOLUNTEER_REPORT');
+  useEffect(() => {
+    // Fetch from public authenticated endpoint
+    documentApi.getActiveTypes().then(types => {
+      setDocTypes(types);
+    }).catch(() => {
+      // Ignore errors or show toast
+    }).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return <div className="py-10 text-center"><span className="spinner w-8 h-8" /></div>;
+  }
 
   return (
     <div className="space-y-8">
-      {/* Transcripts */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-medium text-gray-900">Transkriptler</h3>
-          {!readOnly && (
-            <PeriodUploadButton
-              periods={transcriptPeriods}
-              profileId={profile.id}
-              docType="transcript"
-              onUploaded={onUpload}
-            />
-          )}
-        </div>
-        <DocumentTable docs={transcripts} showGrade />
-      </section>
+      {docTypes.map(docType => {
+        const typeDocs = documents.filter(d => d.type === docType.code);
+        const typePeriods = periods.filter(p => p.type === docType.code);
 
-      {/* Student Certificates */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-medium text-gray-900">Öğrenci Belgeleri</h3>
-          {!readOnly && (
-            <PeriodUploadButton
-              periods={certPeriods}
-              profileId={profile.id}
-              docType="student-certificate"
-              onUploaded={onUpload}
-            />
-          )}
-        </div>
-        <DocumentTable docs={certificates} />
-      </section>
-
-      {/* Volunteer Reports */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-medium text-gray-900">STK Gönüllülük Raporları</h3>
-          {!readOnly && (
-            <PeriodUploadButton
-              periods={volunteerPeriods}
-              profileId={profile.id}
-              docType="volunteer-report"
-              onUploaded={onUpload}
-            />
-          )}
-        </div>
-        <DocumentTable docs={volunteerReports} showVolunteer />
-      </section>
+        return (
+          <section key={docType.code}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium text-gray-900">{docType.name}</h3>
+              {!readOnly && (
+                <PeriodUploadButton
+                  periods={typePeriods}
+                  profileId={profile.id}
+                  docType={docType}
+                  onUploaded={onUpload}
+                />
+              )}
+            </div>
+            <DocumentTable docs={typeDocs} docType={docType} />
+          </section>
+        );
+      })}
     </div>
   );
 }
 
 
 
-function DocumentTable({ docs, showVolunteer, showGrade }: { docs: DocFile[]; showVolunteer?: boolean; showGrade?: boolean }) {
+function DocumentTable({ docs, docType }: { docs: DocFile[]; docType: any }) {
   if (!docs.length) {
     return <p className="text-sm text-gray-400 text-center py-4">Henüz belge yüklenmedi.</p>;
   }
+  
+  let customFields: any[] = [];
+  try {
+    customFields = docType.customFields ? JSON.parse(docType.customFields) : [];
+  } catch (e) {}
+
   return (
     <div className="overflow-x-auto">
       <table className="data-table table-fixed w-full min-w-[850px]">
         <thead>
           <tr>
-            <th className={showGrade ? 'w-64' : 'w-[352px]'}>Dönem</th>
-            {showGrade && <th className="w-24">Sınıf</th>}
-            <th className={showVolunteer ? 'w-40' : 'w-[352px]'}>Yüklenme Tarihi</th>
-            {showVolunteer && <th className="w-48">Kurum</th>}
-            <th className="w-32">Durum</th>
+            <th className="w-56">Dönem</th>
+            <th className="w-36">Yüklenme Tarihi</th>
+            {customFields.map(f => (
+              <th key={f.id} className="w-56 whitespace-normal break-words">{f.label}</th>
+            ))}
+            <th className="w-40">Durum</th>
             <th className="w-auto">Dosya</th>
           </tr>
         </thead>
         <tbody>
-          {docs.map(doc => (
-            <tr key={doc.id}>
-              <td>{doc.period?.label || (doc.academicYear ? `${doc.academicYear} ${doc.semester === 'GUZ' ? 'Güz' : doc.semester === 'BAHAR' ? 'Bahar' : ''}` : '—')}</td>
-              {showGrade && <td>{doc.grade ? `${doc.grade}. Sınıf` : '—'}</td>}
-              <td className="text-gray-500 text-xs">{format(new Date(doc.uploadedAt), 'dd.MM.yyyy HH:mm')}</td>
-              {showVolunteer && <td>{doc.volunteerOrg || '—'}</td>}
-              <td><StatusBadge status={doc.status} note={doc.rejectionNote} /></td>
-              <td>
-                <a href={`/${doc.filePath}`} target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline text-xs truncate max-w-32 inline-block">
-                  {doc.originalFileName}
-                </a>
-              </td>
-            </tr>
-          ))}
+          {docs.map(doc => {
+            let answers: any = {};
+            try { answers = doc.dynamicFields ? JSON.parse(doc.dynamicFields) : {}; } catch (e) {}
+            // Backwards compatibility for legacy fields
+            if (docType.code === 'TRANSCRIPT' && doc.grade) answers['Sınıf'] = doc.grade;
+            if (docType.code === 'VOLUNTEER_REPORT' && doc.volunteerOrg) answers['Kurum'] = doc.volunteerOrg;
+            
+            return (
+              <tr key={doc.id}>
+                <td>{doc.period?.label || (doc.academicYear ? `${doc.academicYear} ${doc.semester === 'GUZ' ? 'Güz' : doc.semester === 'BAHAR' ? 'Bahar' : ''}` : '—')}</td>
+                <td className="text-gray-500 text-xs">{format(new Date(doc.uploadedAt), 'dd.MM.yyyy HH:mm')}</td>
+                {customFields.map(f => (
+                  <td key={f.id} className="truncate" title={answers[f.id]}>{answers[f.id] || '—'}</td>
+                ))}
+                <td><StatusBadge status={doc.status} note={doc.rejectionNote} /></td>
+                <td>
+                  <a href={`/${doc.filePath}`} target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline text-xs truncate max-w-32 inline-block">
+                    {doc.originalFileName}
+                  </a>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
 
-function StaticUploadButton({ profileId, type, onUploaded }: { profileId: string; type: string; onUploaded?: () => void }) {
-  const [loading, setLoading] = useState(false);
-
-  async function handle(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setLoading(true);
-    try {
-      await documentApi.uploadStatic(profileId, type, file);
-      toast.success('Belge yüklendi, onay bekleniyor.');
-      onUploaded?.();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <label className={`btn-secondary btn-sm cursor-pointer flex-shrink-0 ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
-      {loading ? <span className="spinner border-gray-300 border-t-gray-700 w-3 h-3" /> : (
-        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
-      )}
-      Yükle
-      <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="sr-only" onChange={handle} />
-    </label>
-  );
-}
+// Removed StaticUploadButton as it is unused
 
 function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
   periods?: DocumentPeriod[];
   profileId: string;
-  docType: string;
+  docType: any;
   onUploaded?: () => void;
 }) {
   const openPeriods = periods.filter(p => p.isOpen);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedPeriodId, setSelectedPeriodId] = useState(openPeriods[0]?.id || '');
-  const [form, setForm] = useState({ grade: '', semester: '', academicYear: '', volunteerOrg: '', note: '' });
+  const [dynamicAnswers, setDynamicAnswers] = useState<Record<string, any>>({});
   const [file, setFile] = useState<File | null>(null);
+
+  let customFields: any[] = [];
+  try { customFields = docType.customFields ? JSON.parse(docType.customFields) : []; } catch(e) {}
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -534,17 +496,7 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
     if (!selectedPeriodId) { toast.error('Lütfen bir dönem seçiniz.'); return; }
     setLoading(true);
     try {
-      const data: Record<string, string> = {
-        grade: form.grade,
-        semester: form.semester,
-        academicYear: form.academicYear,
-        note: form.note,
-        volunteerOrg: form.volunteerOrg,
-        periodId: selectedPeriodId,
-      };
-      if (docType === 'transcript') await documentApi.uploadTranscript(profileId, data, file);
-      else if (docType === 'student-certificate') await documentApi.uploadStudentCertificate(profileId, data, file);
-      else await documentApi.uploadVolunteerReport(profileId, data, file);
+      await documentApi.uploadDynamicDocument(profileId, selectedPeriodId, docType.code, dynamicAnswers, file);
       toast.success('Belge yüklendi, onay bekleniyor.');
       setOpen(false);
       onUploaded?.();
@@ -562,7 +514,7 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
       <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-modal w-full max-w-md">
           <div className="p-5 border-b border-gray-200">
-            <h3 className="font-semibold">Belge Yükle</h3>
+            <h3 className="font-semibold">{docType.name} Yükle</h3>
           </div>
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
             <div>
@@ -573,25 +525,29 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
                 ))}
               </select>
             </div>
-            {docType === 'transcript' && (
-              <div>
-                <label className="form-label">Sınıf</label>
-                <select className="form-select" value={form.grade} onChange={e => setForm(f => ({ ...f, grade: e.target.value }))}>
-                  <option value="">Seçiniz</option>
-                  {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}. Sınıf</option>)}
-                </select>
+            
+            {customFields.map(field => (
+              <div key={field.id}>
+                <label className="form-label">{field.label} {field.required && <span className="text-primary-500">*</span>}</label>
+                {field.type === 'textarea' ? (
+                  <textarea
+                    className="form-input"
+                    required={field.required}
+                    value={dynamicAnswers[field.id] || ''}
+                    onChange={e => setDynamicAnswers(p => ({ ...p, [field.id]: e.target.value }))}
+                  />
+                ) : (
+                  <input
+                    type={field.type === 'number' ? 'number' : 'text'}
+                    className="form-input"
+                    required={field.required}
+                    value={dynamicAnswers[field.id] || ''}
+                    onChange={e => setDynamicAnswers(p => ({ ...p, [field.id]: e.target.value }))}
+                  />
+                )}
               </div>
-            )}
-            {docType === 'volunteer-report' && (
-              <div>
-                <label className="form-label">Gönüllülük Yapılan Kurum <span className="text-primary-500">*</span></label>
-                <input className="form-input" value={form.volunteerOrg} onChange={e => setForm(f => ({ ...f, volunteerOrg: e.target.value }))} required />
-              </div>
-            )}
-            <div>
-              <label className="form-label">Not / Açıklama</label>
-              <input className="form-input" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} />
-            </div>
+            ))}
+
             <div>
               <label className="form-label">Dosya (PDF, JPG, PNG) <span className="text-primary-500">*</span></label>
               <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="form-input py-1.5" onChange={e => setFile(e.target.files?.[0] || null)} required />

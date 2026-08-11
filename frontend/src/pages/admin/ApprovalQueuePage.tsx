@@ -1,16 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { approvalApi, adminApi } from '../../api';
-import type { ApprovableChange, PaginatedResponse, DocumentPeriod } from '../../types';
+import type { ApprovableChange, PaginatedResponse, DocumentPeriod, DocumentTypeConfig } from '../../types';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
-
-const filterOptions: Record<string, { label: string; type: 'entity' | 'document' }> = {
-  TRANSCRIPT: { label: 'Transkript', type: 'document' },
-  VOLUNTEER_REPORT: { label: 'STK Raporu', type: 'document' },
-  STUDENT_CERTIFICATE: { label: 'Öğrenci Belgesi', type: 'document' },
-};
 
 const documentTypeLabels: Record<string, string> = {
   TRANSCRIPT: 'Transkript',
@@ -34,19 +28,31 @@ export default function ApprovalQueuePage() {
   const [entityFilter, setEntityFilter] = useState('');
   const [periodFilter, setPeriodFilter] = useState('');
   const [periods, setPeriods] = useState<DocumentPeriod[]>([]);
+  const [docTypes, setDocTypes] = useState<DocumentTypeConfig[]>([]);
 
   useEffect(() => {
     adminApi.listPeriods().then(setPeriods).catch(console.error);
+    adminApi.listDocumentTypes().then(setDocTypes).catch(console.error);
   }, []);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState('');
   const [page, setPage] = useState(1);
 
+  const dynamicFilterOptions = useMemo(() => {
+    const options: Record<string, { label: string; type: 'entity' | 'document' }> = {};
+    
+    docTypes.forEach(t => {
+      options[t.code] = { label: t.name, type: 'document' };
+    });
+    
+    return options;
+  }, [docTypes]);
+
   const load = useCallback(async () => {
     setLoading(true);
     const params: Record<string, string> = { status: statusFilter, page: String(page), limit: '20' };
     if (periodFilter) params.periodLabel = periodFilter;
-    const filter = filterOptions[entityFilter];
+    const filter = dynamicFilterOptions[entityFilter];
     if (filter) {
       if (filter.type === 'document') {
         params.documentType = entityFilter;
@@ -139,7 +145,7 @@ export default function ApprovalQueuePage() {
             onChange={e => { setEntityFilter(e.target.value); setPage(1); }}
           >
             <option value="">Tüm Türler</option>
-            {Object.entries(filterOptions).map(([k, v]) => (
+            {Object.entries(dynamicFilterOptions).map(([k, v]) => (
               <option key={k} value={k}>{v.label}</option>
             ))}
           </select>
@@ -174,8 +180,7 @@ export default function ApprovalQueuePage() {
                     </th>
                   )}
                   <th>Öğrenci</th>
-                  <th>Tür</th>
-                  <th>Alan / Belge</th>
+                  <th>İşlem / Belge</th>
                   <th>Eski Değer</th>
                   <th>Yeni Değer / Dosya</th>
                   <th>Tarih</th>
@@ -206,16 +211,16 @@ export default function ApprovalQueuePage() {
                       <div className="text-xs text-gray-400">{change.studentProfile?.department}</div>
                     </td>
                     <td>
-                      <span className="badge-gray text-xs">
-                        {change.entityType === 'DOCUMENT' && change.document?.type
-                          ? documentTypeLabels[change.document.type] || change.document.type
-                          : entityTypeLabels[change.entityType] || change.entityType}
+                      {change.entityType !== 'DOCUMENT' && (
+                        <span className="badge-gray text-[10px] mb-1 block w-max uppercase tracking-wider">
+                          {entityTypeLabels[change.entityType] || change.entityType}
+                        </span>
+                      )}
+                      <span className="text-sm text-gray-800 font-medium">
+                        {change.entityType === 'DOCUMENT' 
+                          ? (docTypes.find(d => d.code === change.document?.type)?.name || documentTypeLabels[change.document?.type || ''] || change.document?.type || '—') 
+                          : change.fieldName || '—'}
                       </span>
-                    </td>
-                    <td className="text-sm text-gray-700">
-                      {change.entityType === 'DOCUMENT' 
-                        ? (documentTypeLabels[change.document?.type || ''] || change.document?.type || '—') 
-                        : change.fieldName || '—'}
                     </td>
                     <td className="text-sm text-gray-500 max-w-32 truncate">
                       {change.oldValue || '—'}

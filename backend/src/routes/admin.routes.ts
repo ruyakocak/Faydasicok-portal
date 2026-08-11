@@ -16,6 +16,10 @@ import {
   listMentors,
   assignMentor,
   exportStudentsReport,
+  listDocumentTypes,
+  createDocumentType,
+  updateDocumentType,
+  deleteDocumentType,
 } from '../controllers/admin.controller';
 import { upload } from '../middleware/upload.middleware';
 import multer from 'multer';
@@ -38,6 +42,12 @@ adminRouter.get('/reports/students-export', requireAdminOrReviewer, exportStuden
 adminRouter.get('/periods', requireAdminOrReviewer, listPeriods);
 adminRouter.post('/periods', requireAdmin, createPeriod);
 adminRouter.patch('/periods/:id', requireAdmin, updatePeriod);
+
+// Document Type Configs — admin only
+adminRouter.get('/document-types', requireAdminOrReviewer, listDocumentTypes);
+adminRouter.post('/document-types', requireAdmin, createDocumentType);
+adminRouter.patch('/document-types/:id', requireAdmin, updateDocumentType);
+adminRouter.delete('/document-types/:id', requireAdmin, deleteDocumentType);
 
 // Users — admin only
 adminRouter.get('/users', requireAdmin, listUsers);

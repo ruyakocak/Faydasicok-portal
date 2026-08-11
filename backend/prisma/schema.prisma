@@ -165,6 +165,23 @@ model DocumentPeriod {
 }
 
 // ─────────────────────────────────────────────
+// DOCUMENT TYPE CONFIG (DYNAMIC FIELDS)
+// ─────────────────────────────────────────────
+
+model DocumentTypeConfig {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  name         String
+  description  String?
+  customFields String?  // JSON array of custom field definitions (e.g. [{ id, label, type, required }])
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("document_type_configs")
+}
+
+// ─────────────────────────────────────────────
 // DOCUMENTS
 // ─────────────────────────────────────────────
 
@@ -189,6 +206,9 @@ model Document {
   // STK specific
   volunteerOrg     String?
   volunteerNote    String?
+
+  // Dynamic fields
+  dynamicFields    String?        // JSON object storing answers for custom fields
 
   // File info
   filePath         String

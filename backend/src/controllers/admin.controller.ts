@@ -663,3 +663,65 @@ export async function exportStudentsReport(req: Request, res: Response, next: Ne
     next(err);
   }
 }
+
+// ── Document Type Config (Dynamic Document Types) ────────────────────
+
+export async function listDocumentTypes(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const types = await prisma.documentTypeConfig.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(types);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function createDocumentType(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { code, name, description, customFields, isActive } = req.body;
+    if (!code || !name) throw new AppError(400, 'Kod ve Ad zorunludur.');
+
+    const existing = await prisma.documentTypeConfig.findUnique({ where: { code } });
+    if (existing) throw new AppError(400, 'Bu koda sahip bir belge türü zaten var.');
+
+    const type = await prisma.documentTypeConfig.create({
+      data: { code, name, description, customFields, isActive: isActive ?? true },
+    });
+    res.status(201).json(type);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateDocumentType(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { code, name, description, customFields, isActive } = req.body;
+
+    if (code) {
+      const existing = await prisma.documentTypeConfig.findUnique({ where: { code } });
+      if (existing && existing.id !== id) {
+        throw new AppError(400, 'Bu koda sahip başka bir belge türü var.');
+      }
+    }
+
+    const type = await prisma.documentTypeConfig.update({
+      where: { id },
+      data: { code, name, description, customFields, isActive },
+    });
+    res.json(type);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteDocumentType(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    await prisma.documentTypeConfig.delete({ where: { id } });
+    res.json({ message: 'Belge türü silindi.' });
+  } catch (err) {
+    next(err);
+  }
+}
