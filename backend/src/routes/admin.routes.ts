@@ -5,16 +5,21 @@ import {
   listStudents,
   createStudent,
   bulkCreateStudents,
+  updateStudentProfile,
+  uploadStudentPhoto,
   getCsvTemplate,
   listPeriods,
   createPeriod,
   updatePeriod,
+  updateSemester,
+  deleteSemester,
   listUsers,
   createUser,
   deleteUser,
   resetStudentPassword,
   listMentors,
   createMentor,
+  updateMentor,
   deleteMentor,
   assignMentor,
   exportStudentsReport,
@@ -22,6 +27,10 @@ import {
   createDocumentType,
   updateDocumentType,
   deleteDocumentType,
+  listScholarshipCategories,
+  createScholarshipCategory,
+  updateScholarshipCategory,
+  deleteScholarshipCategory,
 } from '../controllers/admin.controller';
 import { upload } from '../middleware/upload.middleware';
 import multer from 'multer';
@@ -35,6 +44,8 @@ adminRouter.get('/dashboard', requireAdminOrReviewer, getDashboard);
 // Students — admin + reviewer can list; only admin can create
 adminRouter.get('/students', requireAdminOrReviewer, listStudents);
 adminRouter.post('/students', requireAdmin, createStudent);
+adminRouter.patch('/students/:id', requireAdminOrReviewer, updateStudentProfile);
+adminRouter.post('/students/:id/photo', requireAdminOrReviewer, upload.single('file'), uploadStudentPhoto);
 adminRouter.post('/students/:id/reset-password', requireAdminOrReviewer, resetStudentPassword);
 adminRouter.post('/students/bulk-create', requireAdmin, multer({ storage: multer.memoryStorage() }).single('file'), bulkCreateStudents);
 adminRouter.get('/students/csv-template', requireAdmin, getCsvTemplate);
@@ -44,6 +55,9 @@ adminRouter.get('/reports/students-export', requireAdminOrReviewer, exportStuden
 adminRouter.get('/periods', requireAdminOrReviewer, listPeriods);
 adminRouter.post('/periods', requireAdmin, createPeriod);
 adminRouter.patch('/periods/:id', requireAdmin, updatePeriod);
+
+adminRouter.patch('/semesters', requireAdmin, updateSemester);
+adminRouter.post('/semesters/delete', requireAdmin, deleteSemester);
 
 // Document Type Configs — admin only
 adminRouter.get('/document-types', requireAdminOrReviewer, listDocumentTypes);
@@ -59,5 +73,12 @@ adminRouter.delete('/users/:id', requireAdmin, deleteUser);
 // Mentors
 adminRouter.get('/mentors', requireAdminOrReviewer, listMentors);
 adminRouter.post('/mentors', requireAdmin, upload.single('file'), createMentor);
+adminRouter.patch('/mentors/:id', requireAdmin, upload.single('file'), updateMentor);
 adminRouter.delete('/mentors/:id', requireAdmin, deleteMentor);
 adminRouter.post('/assign-mentor', requireAdminOrReviewer, assignMentor);
+
+// Scholarship Categories
+adminRouter.get('/scholarship-categories', requireAdminOrReviewer, listScholarshipCategories);
+adminRouter.post('/scholarship-categories', requireAdmin, createScholarshipCategory);
+adminRouter.patch('/scholarship-categories/:id', requireAdmin, updateScholarshipCategory);
+adminRouter.delete('/scholarship-categories/:id', requireAdmin, deleteScholarshipCategory);

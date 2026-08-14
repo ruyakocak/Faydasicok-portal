@@ -8,6 +8,15 @@ export interface User {
   forcePasswordChange?: boolean;
 }
 
+export interface ScholarshipCategory {
+  id: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface StudentProfile {
   id: string;
   userId: string;
@@ -19,7 +28,8 @@ export interface StudentProfile {
   registeredCity?: string;
   scholarshipSources?: string;
   scholarshipDate?: string;
-  scholarshipGroup?: string;
+  scholarshipCategoryId?: string;
+  scholarshipCategory?: ScholarshipCategory;
   studentStatus: string;
   enrollmentStatus: string;
   phone?: string;
@@ -78,14 +88,16 @@ export interface MentorProfile {
   _count?: {
     students: number;
   };
+  students?: { id: string; firstName: string; lastName: string; universityName?: string | null }[];
 }
 
 export interface DocumentTypeConfig {
   id: string;
   code: string;
   name: string;
-  description: string | null;
-  customFields: string | null; // JSON string of custom fields
+  description?: string;
+  customFields?: string; // JSON array string
+  categoryIds?: string | null; // JSON array of scholarship category IDs
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -121,7 +133,11 @@ export interface DocumentPeriod {
   label: string;
   semester: string;
   academicYear: string;
+  grade?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
   isOpen: boolean;
+  categoryIds?: string | null; // JSON array of scholarship category IDs (null = all)
   createdAt: string;
   updatedAt: string;
   documents?: Document[];

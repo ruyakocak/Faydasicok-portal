@@ -71,7 +71,7 @@ export async function listStudents(req: Request, res: Response, next: NextFuncti
     if (grade) where.grade = parseInt(grade as string);
     if (studentStatus) where.studentStatus = studentStatus;
     if (enrollmentStatus) where.enrollmentStatus = enrollmentStatus;
-    if (scholarshipGroup) where.scholarshipGroup = scholarshipGroup;
+    if (scholarshipGroup) where.scholarshipCategoryId = scholarshipGroup;
 
     let profileIds: string[] | undefined;
     if (hasPending === 'true') {
@@ -96,6 +96,7 @@ export async function listStudents(req: Request, res: Response, next: NextFuncti
         include: {
           user: { select: { id: true, tcKimlikNo: true, isActive: true } },
           mentor: true,
+          scholarshipCategory: true,
           _count: { select: { approvableChanges: { where: { status: 'PENDING' } } } },
         },
         orderBy: { createdAt: 'desc' },
@@ -122,7 +123,7 @@ export async function listStudents(req: Request, res: Response, next: NextFuncti
 // ── Create Single Student ──────────────────────────────────────────────
 export async function createStudent(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { tcKimlikNo, firstName, lastName } = req.body;
+    const { tcKimlikNo, firstName, lastName, scholarshipCategoryId } = req.body;
     if (!tcKimlikNo || !/^\d{11}$/.test(tcKimlikNo)) {
       throw new AppError(400, 'Geçersiz TC formatı (11 hane olmalı)');
     }
@@ -146,6 +147,7 @@ export async function createStudent(req: Request, res: Response, next: NextFunct
           create: {
             firstName: firstName || '',
             lastName: lastName || '',
+            scholarshipCategoryId: scholarshipCategoryId || null,
             studentStatus: 'INCOMPLETE',
           },
         },
@@ -169,6 +171,105 @@ export async function createStudent(req: Request, res: Response, next: NextFunct
   }
 }
 
+// ── Update Student Profile (Admin direct edit) ────────────────────────
+export async function updateStudentProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params; // StudentProfile ID
+    const data = req.body;
+    
+    // Convert string empty values to null or valid data
+    const profileData: any = { ...data };
+
+    if (profileData.scholarshipCategoryId === '') {
+      profileData.scholarshipCategoryId = null;
+    }
+
+    // Format boolean fields properly if sent as string
+    ['fatherAlive', 'motherAlive'].forEach(key => {
+      if (profileData[key] !== undefined) {
+        profileData[key] = profileData[key] === true || profileData[key] === 'true' || profileData[key] === 'Evet';
+      }
+    });
+
+    // Parse numeric fields
+    ['grade', 'fatherAge', 'fatherIncome', 'motherAge', 'motherIncome', 'familyMemberCount', 'siblingCount', 'siblingsInEducation', 'highSchoolGradYear'].forEach(key => {
+      if (profileData[key] !== undefined) {
+        profileData[key] = profileData[key] === '' ? null : Number(profileData[key]);
+      }
+    });
+
+    // Parse date fields
+    ['birthDate', 'scholarshipDate'].forEach(key => {
+      if (profileData[key] !== undefined) {
+        profileData[key] = profileData[key] ? new Date(profileData[key]) : null;
+      }
+    });
+    
+    const updated = await prisma.studentProfile.update({
+      where: { id },
+      data: profileData
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.UPDATE,
+        module: 'Student',
+        entityId: id,
+        entityType: 'StudentProfile',
+        newValue: JSON.stringify(profileData),
+      }
+    });
+
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Upload Student Profile Photo (Admin) ──────────────────────────────
+
+export async function uploadStudentPhoto(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    if (!req.file) throw new AppError(400, 'Dosya bulunamadı.');
+
+    const profile = await prisma.studentProfile.findUnique({ where: { id } });
+    if (!profile) throw new AppError(404, 'Öğrenci bulunamadı.');
+
+    const storedFile = await storageService.save(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype
+    );
+
+    // If there was an old photo, delete it (optional)
+    if (profile.photoPath) {
+      await storageService.delete(profile.photoPath).catch(console.error);
+    }
+
+    const updated = await prisma.studentProfile.update({
+      where: { id },
+      data: { photoPath: storedFile.filePath },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.UPDATE,
+        module: 'Student',
+        entityId: id,
+        entityType: 'StudentProfile',
+        newValue: 'Photo Updated',
+      }
+    });
+
+    res.json({ photoPath: updated.photoPath });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ── Bulk Create Students ─────────────────────────────────────────────
 export async function bulkCreateStudents(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -181,7 +282,7 @@ export async function bulkCreateStudents(req: Request, res: Response, next: Next
         .split('\n')
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
-      group = String(req.body.scholarshipGroup || '').trim();
+      group = String(req.body.scholarshipCategoryId || req.body.scholarshipGroup || '').trim();
     } else if (req.file) {
       const records = parse(req.file.buffer.toString('utf-8'), {
         columns: true,
@@ -189,7 +290,7 @@ export async function bulkCreateStudents(req: Request, res: Response, next: Next
         trim: true,
       });
       tcsArray = records.map((r: any) => String(r['TC Kimlik No'] || r['tc'] || r['TC'] || '').trim()).filter((t: any) => t.length > 0);
-      group = String(req.body.scholarshipGroup || '').trim();
+      group = String(req.body.scholarshipCategoryId || req.body.scholarshipGroup || '').trim();
     } else {
       throw new AppError(400, 'Parametre hatası. CSV dosyası veya TC listesi gerekli.');
     }
@@ -234,7 +335,7 @@ export async function bulkCreateStudents(req: Request, res: Response, next: Next
               create: {
                 firstName: '',
                 lastName: '',
-                scholarshipGroup: group || null,
+                scholarshipCategoryId: group || null,
                 studentStatus: StudentStatus.INCOMPLETE,
               },
             },
@@ -315,11 +416,16 @@ export async function listPeriods(req: Request, res: Response, next: NextFunctio
 // ── Create Period ─────────────────────────────────────────────────────
 export async function createPeriod(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { type, label, semester, academicYear, grade, isOpen, startDate, endDate } = req.body;
+    const { type, label, semester, academicYear, grade, isOpen, startDate, endDate, categoryIds } = req.body;
     if (!type || !label) throw new AppError(400, 'Tür ve etiket zorunludur.');
 
+    // categoryIds: string[] | null → store as JSON string
+    const categoryIdsStr = Array.isArray(categoryIds) && categoryIds.length > 0
+      ? JSON.stringify(categoryIds)
+      : null;
+
     const period = await prisma.documentPeriod.create({
-      data: { type, label, semester, academicYear, grade, isOpen: isOpen ?? false, startDate, endDate },
+      data: { type, label, semester, academicYear, grade, isOpen: isOpen ?? false, startDate, endDate, categoryIds: categoryIdsStr },
     });
     res.status(201).json(period);
   } catch (err) {
@@ -331,33 +437,22 @@ export async function createPeriod(req: Request, res: Response, next: NextFuncti
 export async function updatePeriod(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
-    const { isOpen, label, startDate, endDate, grade, semester, academicYear } = req.body;
+    const { isOpen, label, startDate, endDate, grade, semester, academicYear, categoryIds } = req.body;
 
     let closedCount = 0;
-    if (isOpen === true) {
-      const existing = await prisma.documentPeriod.findUnique({ where: { id } });
-      if (existing) {
-        // Tüm sistemde aynı anda sadece TEK BİR dönemin (label) aktif olabilmesi için,
-        // başka bir döneme ait (farklı label'a sahip) açık olan tüm evrak yüklemelerini kapat.
-        const r1 = await prisma.documentPeriod.updateMany({
-          where: { label: { not: existing.label }, isOpen: true },
-          data: { isOpen: false },
-        });
-        closedCount += r1.count;
-        
-        // Aynı dönem içinde aynı evrak türünden birden fazla varsa (olmamalı ama önlem olarak),
-        // sadece mevcut olanı açık bırak.
-        const r2 = await prisma.documentPeriod.updateMany({
-          where: { label: existing.label, type: existing.type, id: { not: id }, isOpen: true },
-          data: { isOpen: false },
-        });
-        closedCount += r2.count;
-      }
+    // (Auto-close logic removed per user request to allow multiple open periods simultaneously)
+
+    // Build update data, including categoryIds if provided
+    const updateData: any = { isOpen, label, startDate, endDate, grade, semester, academicYear };
+    if (categoryIds !== undefined) {
+      updateData.categoryIds = Array.isArray(categoryIds) && categoryIds.length > 0
+        ? JSON.stringify(categoryIds)
+        : null;
     }
 
     const period = await prisma.documentPeriod.update({
       where: { id },
-      data: { isOpen, label, startDate, endDate, grade, semester, academicYear },
+      data: updateData,
     });
 
     await prisma.auditLog.create({
@@ -372,6 +467,129 @@ export async function updatePeriod(req: Request, res: Response, next: NextFuncti
     });
 
     res.json({ ...period, autoClosedOtherSemesters: closedCount > 0 });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteSemester(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { label } = req.body;
+    if (!label) throw new AppError(400, 'Silinecek dönemin adı (label) gerekli.');
+
+    // Find all periods with this label
+    const periods = await prisma.documentPeriod.findMany({ where: { label } });
+    if (periods.length === 0) {
+      res.json({ message: 'Bu ada sahip bir dönem bulunamadı.' });
+      return;
+    }
+
+    const periodIds = periods.map(p => p.id);
+
+    // Check if any documents belong to these periods
+    const documentCount = await prisma.document.count({
+      where: { periodId: { in: periodIds } },
+    });
+
+    if (documentCount > 0) {
+      throw new AppError(400, 'Bu döneme (tüm alt evraklarına) yüklenmiş belgeler var. Önce öğrencilerin yüklediği belgeleri silmelisiniz veya dönemi pasife almalısınız.');
+    }
+
+    await prisma.documentPeriod.deleteMany({
+      where: { label },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.DELETE,
+        module: 'Semester',
+        entityId: label,
+        entityType: 'DocumentPeriodGroup',
+        newValue: JSON.stringify({ deleted: true, count: periods.length }),
+      },
+    });
+
+    res.json({ message: 'Dönem tüm evraklarıyla birlikte başarıyla silindi.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateSemester(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { oldLabel, label, semester, academicYear, startDate, endDate, grade, categoryIds } = req.body;
+    if (!oldLabel) throw new AppError(400, 'Güncellenecek dönemin adı (oldLabel) gerekli.');
+
+    // If changing label, ensure new label is not conflicting if it's different
+    if (label && label !== oldLabel) {
+      const existing = await prisma.documentPeriod.findFirst({ where: { label } });
+      if (existing) {
+        throw new AppError(400, 'Bu isimde başka bir dönem zaten mevcut.');
+      }
+    }
+
+    const dataToUpdate: any = {};
+    if (label !== undefined) dataToUpdate.label = label;
+    if (semester !== undefined) dataToUpdate.semester = semester;
+    if (academicYear !== undefined) dataToUpdate.academicYear = academicYear;
+    if (startDate !== undefined) dataToUpdate.startDate = startDate;
+    if (endDate !== undefined) dataToUpdate.endDate = endDate;
+    if (grade !== undefined) dataToUpdate.grade = grade;
+
+    let updatedCount = 0;
+
+    if (categoryIds !== undefined) {
+      // If we are updating categories, we cannot just updateMany.
+      // We must intersect the new semester categories with each document's native categories.
+      const periodsToUpdate = await prisma.documentPeriod.findMany({ where: { label: oldLabel } });
+      const docTypes = await prisma.documentTypeConfig.findMany();
+
+      for (const p of periodsToUpdate) {
+        const dt = docTypes.find(d => d.code === p.type);
+        let nativeCats: string[] = [];
+        if (dt && dt.categoryIds) {
+          try { nativeCats = JSON.parse(dt.categoryIds); } catch {}
+        }
+
+        let finalCatIds = categoryIds.length > 0 ? [...categoryIds] : [];
+        if (nativeCats.length > 0) {
+          if (categoryIds.length > 0) {
+            finalCatIds = nativeCats.filter(id => categoryIds.includes(id));
+          } else {
+            finalCatIds = nativeCats;
+          }
+        }
+
+        await prisma.documentPeriod.update({
+          where: { id: p.id },
+          data: {
+            ...dataToUpdate,
+            categoryIds: finalCatIds.length > 0 ? JSON.stringify(finalCatIds) : null,
+          },
+        });
+      }
+      updatedCount = periodsToUpdate.length;
+    } else {
+      const updated = await prisma.documentPeriod.updateMany({
+        where: { label: oldLabel },
+        data: dataToUpdate,
+      });
+      updatedCount = updated.count;
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.UPDATE,
+        module: 'Semester',
+        entityId: oldLabel,
+        entityType: 'DocumentPeriodGroup',
+        newValue: JSON.stringify(dataToUpdate),
+      },
+    });
+
+    res.json({ message: 'Dönem bilgileri başarıyla güncellendi.', updatedCount });
   } catch (err) {
     next(err);
   }
@@ -443,17 +661,23 @@ export async function deleteUser(req: Request, res: Response, next: NextFunction
 // ── Reset Student Password ────────────────────────────────────────────
 export async function resetStudentPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { id } = req.params;
-    const user = await prisma.user.findFirst({
-      where: { id, role: Role.STUDENT },
+    const { id } = req.params; // this is the profileId
+
+    const profile = await prisma.studentProfile.findUnique({
+      where: { id },
     });
-    if (!user) throw new AppError(404, 'Öğrenci bulunamadı.');
+    if (!profile) throw new AppError(404, 'Öğrenci bulunamadı.');
+
+    const user = await prisma.user.findFirst({
+      where: { id: profile.userId, role: Role.STUDENT },
+    });
+    if (!user) throw new AppError(404, 'Öğrenci kullanıcısı bulunamadı.');
 
     const newPassword = Math.floor(100000 + Math.random() * 900000).toString();
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
 
     await prisma.user.update({
-      where: { id },
+      where: { id: user.id },
       data: { passwordHash },
     });
 
@@ -462,7 +686,7 @@ export async function resetStudentPassword(req: Request, res: Response, next: Ne
         userId: req.user!.userId,
         action: AuditAction.UPDATE,
         module: 'Student',
-        entityId: id,
+        entityId: user.id,
         entityType: 'User',
         newValue: 'Password Reset',
       },
@@ -479,7 +703,8 @@ export async function listMentors(req: Request, res: Response, next: NextFunctio
   try {
     const mentors = await prisma.mentorProfile.findMany({
       include: {
-        _count: { select: { students: true } }
+        _count: { select: { students: true } },
+        students: { select: { id: true, firstName: true, lastName: true, universityName: true } }
       },
       orderBy: { firstName: 'asc' },
     });
@@ -519,6 +744,44 @@ export async function createMentor(req: Request, res: Response, next: NextFuncti
     });
 
     res.status(201).json(mentor);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Update Mentor ────────────────────────────────────────────────────
+export async function updateMentor(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (req.user!.role !== Role.ADMIN) {
+      throw new AppError(403, 'Bu işlem için yetkiniz yok.');
+    }
+    const { id } = req.params;
+    const { firstName, lastName, title, company, phone, email } = req.body;
+
+    const mentor = await prisma.mentorProfile.findUnique({ where: { id } });
+    if (!mentor) throw new AppError(404, 'Mentör bulunamadı.');
+
+    let photoPath = mentor.photoPath;
+    if (req.file) {
+      const stored = await storageService.save(req.file.buffer, req.file.originalname, req.file.mimetype);
+      if (photoPath) await storageService.delete(photoPath).catch(console.error);
+      photoPath = stored.filePath;
+    }
+
+    const updated = await prisma.mentorProfile.update({
+      where: { id },
+      data: {
+        firstName: firstName || mentor.firstName,
+        lastName: lastName || mentor.lastName,
+        title: title !== undefined ? title : mentor.title,
+        company: company !== undefined ? company : mentor.company,
+        phone: phone !== undefined ? phone : mentor.phone,
+        email: email !== undefined ? email : mentor.email,
+        photoPath,
+      },
+    });
+
+    res.json(updated);
   } catch (err) {
     next(err);
   }
@@ -730,14 +993,18 @@ export async function listDocumentTypes(req: Request, res: Response, next: NextF
 
 export async function createDocumentType(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { code, name, description, customFields, isActive } = req.body;
+    const { code, name, description, customFields, isActive, categoryIds } = req.body;
     if (!code || !name) throw new AppError(400, 'Kod ve Ad zorunludur.');
 
     const existing = await prisma.documentTypeConfig.findUnique({ where: { code } });
     if (existing) throw new AppError(400, 'Bu koda sahip bir belge türü zaten var.');
 
+    const categoryIdsStr = Array.isArray(categoryIds) && categoryIds.length > 0
+      ? JSON.stringify(categoryIds)
+      : null;
+
     const type = await prisma.documentTypeConfig.create({
-      data: { code, name, description, customFields, isActive: isActive ?? true },
+      data: { code, name, description, customFields, isActive: isActive ?? true, categoryIds: categoryIdsStr },
     });
     res.status(201).json(type);
   } catch (err) {
@@ -748,7 +1015,7 @@ export async function createDocumentType(req: Request, res: Response, next: Next
 export async function updateDocumentType(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
-    const { code, name, description, customFields, isActive } = req.body;
+    const { code, name, description, customFields, isActive, categoryIds } = req.body;
 
     if (code) {
       const existing = await prisma.documentTypeConfig.findUnique({ where: { code } });
@@ -757,9 +1024,16 @@ export async function updateDocumentType(req: Request, res: Response, next: Next
       }
     }
 
+    const updateData: any = { code, name, description, customFields, isActive };
+    if (categoryIds !== undefined) {
+      updateData.categoryIds = Array.isArray(categoryIds) && categoryIds.length > 0
+        ? JSON.stringify(categoryIds)
+        : null;
+    }
+
     const type = await prisma.documentTypeConfig.update({
       where: { id },
-      data: { code, name, description, customFields, isActive },
+      data: updateData,
     });
     res.json(type);
   } catch (err) {
@@ -772,6 +1046,93 @@ export async function deleteDocumentType(req: Request, res: Response, next: Next
     const { id } = req.params;
     await prisma.documentTypeConfig.delete({ where: { id } });
     res.json({ message: 'Belge türü silindi.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Scholarship Categories ─────────────────────────────────────────────
+
+export async function listScholarshipCategories(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const categories = await prisma.scholarshipCategory.findMany({
+      orderBy: { name: 'asc' },
+    });
+    res.json(categories);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function createScholarshipCategory(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { name, description } = req.body;
+    if (!name) throw new AppError(400, 'Kategori adı zorunludur.');
+
+    const category = await prisma.scholarshipCategory.create({
+      data: { name: name.trim(), description: description?.trim() },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.CREATE,
+        module: 'ScholarshipCategory',
+        entityId: category.id,
+        entityType: 'ScholarshipCategory',
+        newValue: category.name,
+      },
+    });
+
+    res.status(201).json(category);
+  } catch (err: any) {
+    if (err.code === 'P2002') return next(new AppError(400, 'Bu kategori adı zaten kullanılıyor.'));
+    next(err);
+  }
+}
+
+export async function updateScholarshipCategory(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { name, description, isActive } = req.body;
+
+    const data: any = {};
+    if (name !== undefined) data.name = name.trim();
+    if (description !== undefined) data.description = description.trim();
+    if (isActive !== undefined) data.isActive = Boolean(isActive);
+
+    const category = await prisma.scholarshipCategory.update({
+      where: { id },
+      data,
+    });
+
+    res.json(category);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteScholarshipCategory(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+
+    // Check if any student is using it
+    const inUse = await prisma.studentProfile.count({ where: { scholarshipCategoryId: id } });
+    if (inUse > 0) throw new AppError(400, 'Bu kategoriye ait öğrenciler bulunduğu için silinemez. Pasife almayı deneyin.');
+
+    await prisma.scholarshipCategory.delete({ where: { id } });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.DELETE,
+        module: 'ScholarshipCategory',
+        entityId: id,
+        entityType: 'ScholarshipCategory',
+      },
+    });
+
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

@@ -28,7 +28,7 @@ export default function StudentsListPage() {
 
   // Single Create
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [newStudentForm, setNewStudentForm] = useState({ tcKimlikNo: '', firstName: '', lastName: '' });
+  const [newStudentForm, setNewStudentForm] = useState({ tcKimlikNo: '', firstName: '', lastName: '', scholarshipCategoryId: '' });
   const [createResult, setCreateResult] = useState<{ tcKimlikNo?: string; password?: string; error?: string } | null>(null);
 
   // States for Mentor assignment modal
@@ -38,9 +38,12 @@ export default function StudentsListPage() {
   const [selectedMentorId, setSelectedMentorId] = useState<string>('');
   const [assigningMentor, setAssigningMentor] = useState(false);
 
-  // Load mentors once
+  const [categories, setCategories] = useState<import('../../types').ScholarshipCategory[]>([]);
+
+  // Load mentors and categories once
   useEffect(() => {
     adminApi.listMentors().then(setMentorsList).catch(console.error);
+    adminApi.listScholarshipCategories().then(setCategories).catch(console.error);
   }, []);
 
   const load = useCallback(async () => {
@@ -92,7 +95,7 @@ export default function StudentsListPage() {
     try {
       const res = await adminApi.bulkCreateJson({
         tcs: pastedTcs,
-        scholarshipGroup: modalGroup,
+        scholarshipCategoryId: modalGroup,
       });
       setCreatedResults(res.data);
       toast.success('Bursiyer oluşturma işlemi tamamlandı.');
@@ -109,7 +112,12 @@ export default function StudentsListPage() {
     setCreating(true);
     setCreateResult(null);
     try {
-      const res = await adminApi.createStudent(newStudentForm);
+      const res = await adminApi.createStudent({
+        tcKimlikNo: newStudentForm.tcKimlikNo,
+        firstName: newStudentForm.firstName,
+        lastName: newStudentForm.lastName,
+        scholarshipCategoryId: newStudentForm.scholarshipCategoryId || undefined,
+      });
       setCreateResult({ tcKimlikNo: res.tcKimlikNo, password: res.password });
       load();
       toast.success('Bursiyer oluşturuldu.');
@@ -194,7 +202,7 @@ export default function StudentsListPage() {
             )}
             Excel İndir
           </button>
-          <button onClick={() => { setCreateModalOpen(true); setCreateResult(null); setNewStudentForm({ tcKimlikNo: '', firstName: '', lastName: '' }); }} className="btn-primary btn-sm">
+          <button onClick={() => { setCreateModalOpen(true); setCreateResult(null); setNewStudentForm({ tcKimlikNo: '', firstName: '', lastName: '', scholarshipCategoryId: '' }); }} className="btn-primary btn-sm">
             <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
             Bursiyer Ekle
           </button>
@@ -230,8 +238,9 @@ export default function StudentsListPage() {
             onChange={(e) => { setScholarshipGroup(e.target.value); setPage(1); }}
           >
             <option value="">Tüm Burs Grupları</option>
-            <option value="Sedefteki İnciler">Sedefteki İnciler</option>
-            <option value="İz Bırakanlar">İz Bırakanlar</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
           </select>
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input
@@ -265,6 +274,7 @@ export default function StudentsListPage() {
                   <th>TC Kimlik No</th>
                   <th>Üniversite / Bölüm</th>
                   <th>Sınıf</th>
+                  <th>Kategori</th>
                   <th>Kayıt Durumu</th>
                   <th>Mentör</th>
                   <th>Onay</th>
@@ -285,6 +295,13 @@ export default function StudentsListPage() {
                       <div className="text-gray-500 text-xs">{profile.department}</div>
                     </td>
                     <td className="text-center">{profile.grade ? `${profile.grade}. Sınıf` : '—'}</td>
+                    <td>
+                      {profile.scholarshipCategory ? (
+                        <span className="badge badge-gray text-xs">{profile.scholarshipCategory.name}</span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </td>
                     <td>
                       <span className={`badge ${
                         profile.studentStatus === 'ACTIVE' ? 'badge-approved' :
@@ -371,8 +388,9 @@ export default function StudentsListPage() {
                     required
                   >
                     <option value="">Grup Seçin...</option>
-                    <option value="Sedefteki İnciler">Sedefteki İnciler</option>
-                    <option value="İz Bırakanlar">İz Bırakanlar</option>
+                    {categories.filter(c => c.isActive).map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
                   </select>
                 </div>
                 
@@ -486,7 +504,20 @@ export default function StudentsListPage() {
                       onChange={(e) => setNewStudentForm(prev => ({ ...prev, tcKimlikNo: e.target.value }))}
                     />
                   </div>
-
+                  <div>
+                    <label className="form-label">Bursiyer Kategorisi</label>
+                    <select
+                      className="form-select"
+                      value={newStudentForm.scholarshipCategoryId}
+                      onChange={(e) => setNewStudentForm(prev => ({ ...prev, scholarshipCategoryId: e.target.value }))}
+                      required
+                    >
+                      <option value="">Kategori Seçin...</option>
+                      {categories.filter(c => c.isActive).map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   {createResult?.error && (
                     <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg border border-red-100">
                       {createResult.error}

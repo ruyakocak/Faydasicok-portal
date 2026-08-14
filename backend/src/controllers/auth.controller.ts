@@ -13,6 +13,8 @@ const BCRYPT_ROUNDS = 12;
 export async function login(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { identifier, password } = req.body;
+    console.log('--- LOGIN ATTEMPT ---');
+    console.log('Identifier:', identifier, 'Password:', password);
     if (!identifier || !password) {
       throw new AppError(400, 'Kullanıcı adı ve şifre zorunludur.');
     }

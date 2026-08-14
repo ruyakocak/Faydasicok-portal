@@ -9,6 +9,29 @@ export async function getActivePeriods(req: Request, res: Response, next: NextFu
     const periods = await prisma.documentPeriod.findMany({
       orderBy: { createdAt: 'desc' },
     });
+
+    // If the requester is a student, filter periods by their scholarship category
+    if (req.user!.role === Role.STUDENT) {
+      const profile = await prisma.studentProfile.findUnique({
+        where: { userId: req.user!.userId },
+        select: { scholarshipCategoryId: true },
+      });
+      const studentCatId = profile?.scholarshipCategoryId;
+
+      const filtered = periods.filter(p => {
+        if (!p.categoryIds) return true; // null = all categories
+        try {
+          const cats: string[] = JSON.parse(p.categoryIds);
+          if (cats.length === 0) return true;
+          return studentCatId ? cats.includes(studentCatId) : false;
+        } catch {
+          return true;
+        }
+      });
+      res.json(filtered);
+      return;
+    }
+
     res.json(periods);
   } catch (err) {
     next(err);
@@ -41,6 +64,18 @@ async function getProfileAndValidate(req: Request, profileId: string) {
   }
 
   return profile;
+}
+
+// ── Helper: check if period allows this student's category ────────────
+function isPeriodAllowedForCategory(period: { categoryIds: string | null }, scholarshipCategoryId: string | null | undefined): boolean {
+  if (!period.categoryIds) return true; // null = all categories
+  try {
+    const cats: string[] = JSON.parse(period.categoryIds);
+    if (cats.length === 0) return true;
+    return scholarshipCategoryId ? cats.includes(scholarshipCategoryId) : false;
+  } catch {
+    return true;
+  }
 }
 
 // ── Helper: save file and create document + approvable change ─────────
@@ -135,13 +170,22 @@ export async function uploadTranscript(req: Request, res: Response, next: NextFu
       if (!period?.isOpen) {
         throw new AppError(400, 'Bu dönem için transkript yükleme şu anda kapalı.');
       }
+      // Check category restriction
+      const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
+      if (!isPeriodAllowedForCategory(period, profile?.scholarshipCategoryId)) {
+        throw new AppError(403, 'Bu dönem sizin burs kategoriniz için açık değil.');
+      }
     } else {
-      // Check if there's any open transcript period
-      const openPeriod = await prisma.documentPeriod.findFirst({
+      // Check if there's any open transcript period matching this student's category
+      const openPeriods = await prisma.documentPeriod.findMany({
         where: { type: DocumentPeriodType.TRANSCRIPT, isOpen: true },
       });
-      if (!openPeriod && req.user!.role === Role.STUDENT) {
-        throw new AppError(400, 'Transkript yükleme şu anda kapalı.');
+      if (req.user!.role === Role.STUDENT) {
+        const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
+        const hasMatch = openPeriods.some(p => isPeriodAllowedForCategory(p, profile?.scholarshipCategoryId));
+        if (!hasMatch) {
+          throw new AppError(400, 'Transkript yükleme şu anda kapalı.');
+        }
       }
     }
 
@@ -172,11 +216,17 @@ export async function uploadStudentCertificate(req: Request, res: Response, next
     if (periodId) {
       const period = await prisma.documentPeriod.findUnique({ where: { id: periodId } });
       if (!period?.isOpen) throw new AppError(400, 'Bu dönem için öğrenci belgesi yükleme kapalı.');
+      const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
+      if (!isPeriodAllowedForCategory(period, profile?.scholarshipCategoryId)) {
+        throw new AppError(403, 'Bu dönem sizin burs kategoriniz için açık değil.');
+      }
     } else if (req.user!.role === Role.STUDENT) {
-      const openPeriod = await prisma.documentPeriod.findFirst({
+      const openPeriods = await prisma.documentPeriod.findMany({
         where: { type: DocumentPeriodType.STUDENT_CERTIFICATE, isOpen: true },
       });
-      if (!openPeriod) throw new AppError(400, 'Öğrenci belgesi yükleme şu anda kapalı.');
+      const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
+      const hasMatch = openPeriods.some(p => isPeriodAllowedForCategory(p, profile?.scholarshipCategoryId));
+      if (!hasMatch) throw new AppError(400, 'Öğrenci belgesi yükleme şu anda kapalı.');
     }
 
     const doc = await saveDocumentWithApproval(req, profileId, {
@@ -205,11 +255,17 @@ export async function uploadVolunteerReport(req: Request, res: Response, next: N
     if (periodId) {
       const period = await prisma.documentPeriod.findUnique({ where: { id: periodId } });
       if (!period?.isOpen) throw new AppError(400, 'Bu dönem için STK raporu yükleme kapalı.');
+      const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
+      if (!isPeriodAllowedForCategory(period, profile?.scholarshipCategoryId)) {
+        throw new AppError(403, 'Bu dönem sizin burs kategoriniz için açık değil.');
+      }
     } else if (req.user!.role === Role.STUDENT) {
-      const openPeriod = await prisma.documentPeriod.findFirst({
+      const openPeriods = await prisma.documentPeriod.findMany({
         where: { type: DocumentPeriodType.VOLUNTEER_REPORT, isOpen: true },
       });
-      if (!openPeriod) throw new AppError(400, 'STK Gönüllülük Raporu yükleme şu anda kapalı.');
+      const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
+      const hasMatch = openPeriods.some(p => isPeriodAllowedForCategory(p, profile?.scholarshipCategoryId));
+      if (!hasMatch) throw new AppError(400, 'STK Gönüllülük Raporu yükleme şu anda kapalı.');
     }
 
     const doc = await saveDocumentWithApproval(req, profileId, {
@@ -239,6 +295,12 @@ export async function uploadDynamicDocument(req: Request, res: Response, next: N
 
     const period = await prisma.documentPeriod.findUnique({ where: { id: periodId } });
     if (!period?.isOpen) throw new AppError(400, 'Bu dönem için yükleme kapalı.');
+
+    // Check category restriction
+    const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
+    if (!isPeriodAllowedForCategory(period, profile?.scholarshipCategoryId)) {
+      throw new AppError(403, 'Bu dönem sizin burs kategoriniz için açık değil.');
+    }
 
     // Save with approval
     const doc = await saveDocumentWithApproval(req, profileId, {

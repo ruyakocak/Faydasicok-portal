@@ -22,14 +22,36 @@ export default function StudentDetailPage() {
   const [mentorsList, setMentorsList] = useState<any[]>([]);
   const [selectedMentorId, setSelectedMentorId] = useState<string>('');
   const [assigningMentor, setAssigningMentor] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
 
-  async function handleResetPassword() {
-    if (!window.confirm('Bu öğrencinin şifresini sıfırlamak istediğinizden emin misiniz?')) return;
+  async function handleResetPasswordClick() {
+    setShowResetModal(true);
+  }
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Yükleme sırasında basit bir toast ile bildir
+    const loadingToast = toast.loading('Fotoğraf yükleniyor...');
+    try {
+      await adminApi.uploadStudentPhoto(profileId!, file);
+      toast.success('Fotoğraf başarıyla yüklendi.', { id: loadingToast });
+      loadAll();
+    } catch (err) {
+      toast.error('Fotoğraf yüklenirken hata oluştu.', { id: loadingToast });
+    }
+  }
+
+  async function confirmResetPassword() {
     setResetting(true);
     try {
       const res = await adminApi.resetPassword(profileId!);
       setNewPass(res.password);
       toast.success('Şifre sıfırlandı!');
+      setShowResetModal(false);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Şifre sıfırlanırken bir hata oluştu.');
     } finally {
       setResetting(false);
     }
@@ -108,12 +130,25 @@ export default function StudentDetailPage() {
       {/* Profile header */}
       <div className="card mb-6">
         <div className="card-body flex items-start gap-5">
-          <div className="w-16 h-16 rounded-xl bg-primary-100 flex items-center justify-center text-primary-600 text-xl font-bold overflow-hidden flex-shrink-0">
+          <div className="relative group w-16 h-16 rounded-xl bg-primary-100 flex items-center justify-center text-primary-600 text-xl font-bold overflow-hidden flex-shrink-0 cursor-pointer">
+            <input 
+              type="file" 
+              accept="image/*" 
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+              title="Fotoğraf Yükle"
+              onChange={handlePhotoUpload}
+            />
             {profile.photoPath ? (
-              <img src={`/${profile.photoPath}`} alt="Profil" className="w-full h-full object-cover" />
+              <img src={`/${profile.photoPath}`} alt="Profil" className="w-full h-full object-cover group-hover:opacity-70 transition-opacity" />
             ) : (
-              <img src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${profile.user?.tcKimlikNo || profile.id}`} alt="Avatar" className="w-full h-full object-cover" />
+              <img src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${profile.user?.tcKimlikNo || profile.id}`} alt="Avatar" className="w-full h-full object-cover group-hover:opacity-70 transition-opacity" />
             )}
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
           </div>
           <div className="flex-1">
             <h1 className="text-xl font-semibold">{profile.firstName} {profile.lastName}</h1>
@@ -126,28 +161,25 @@ export default function StudentDetailPage() {
               </span>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-3 flex-shrink-0">
+          <div className="flex flex-col items-end gap-1.5 w-full max-w-[200px]">
             {pendingChanges.length > 0 && (
               <div className="text-center bg-amber-50 border border-amber-200 rounded px-3 py-1 w-full">
                 <span className="badge-pending text-base font-bold block">{pendingChanges.length}</span>
                 <span className="text-[10px] text-gray-500 font-medium">Onay Bekliyor</span>
               </div>
             )}
-
-            <div className="flex flex-col items-end gap-1.5 w-full">
-              <button
-                onClick={handleResetPassword}
-                disabled={resetting}
-                className="btn-secondary btn-sm text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 py-1 px-2.5 text-xs"
-              >
-                {resetting ? <span className="spinner border-red-600/30 border-t-red-600 w-4 h-4" /> : 'Şifreyi Sıfırla'}
-              </button>
-              {newPass && (
-                <div className="bg-red-50 text-red-800 border border-red-200 rounded p-2 text-xs font-mono mt-1 text-right max-w-[200px]">
-                  Yeni Şifre: <span className="font-bold text-sm bg-white px-1.5 py-0.5 rounded border border-red-300 select-all">{newPass}</span>
-                </div>
-              )}
-            </div>
+            <button
+              onClick={handleResetPasswordClick}
+              disabled={resetting}
+              className="btn-secondary btn-sm text-amber-700 hover:text-amber-800 hover:bg-amber-50 border-amber-200 py-1 px-2.5 text-xs w-full justify-center"
+            >
+              {resetting ? <span className="spinner border-amber-600/30 border-t-amber-600 w-4 h-4" /> : 'Şifreyi Sıfırla'}
+            </button>
+            {newPass && (
+              <div className="bg-green-50 text-green-800 border border-green-200 rounded p-2 text-xs font-mono mt-1 text-center w-full">
+                Yeni: <span className="font-bold text-sm bg-white px-1.5 py-0.5 rounded border border-green-300 select-all">{newPass}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -195,8 +227,14 @@ export default function StudentDetailPage() {
           ))}
         </div>
         <div className="card-body">
-          {activeTab === 0 && <PersonalTab profile={profile} readOnly />}
-          {activeTab === 1 && <EducationTab profile={profile} readOnly />}
+          {activeTab === 0 && <PersonalTab profile={profile} readOnly={false} onSave={async (data) => {
+            await adminApi.updateStudentProfile(profile.id, data);
+            loadAll();
+          }} />}
+          {activeTab === 1 && <EducationTab profile={profile} readOnly={false} onSave={async (data) => {
+            await adminApi.updateStudentProfile(profile.id, data);
+            loadAll();
+          }} />}
           {activeTab === 2 && (
             <DocumentsTab profile={profile} documents={documents} periods={periods} onUpload={loadAll} readOnly />
           )}
@@ -303,6 +341,52 @@ export default function StudentDetailPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Password Reset Confirmation Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden border border-amber-100 animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-amber-100 flex items-center justify-between bg-amber-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-amber-900">Şifreyi Sıfırla</h3>
+              </div>
+              <button onClick={() => setShowResetModal(false)} className="text-amber-400 hover:text-amber-600 transition-colors">
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6">
+              <p className="text-sm text-gray-700 mb-4">
+                <strong>{profile.firstName} {profile.lastName}</strong> isimli öğrencinin sistem giriş şifresini sıfırlamak istediğinize emin misiniz?
+              </p>
+              <p className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                <span className="font-semibold text-amber-600 block mb-1">BİLGİLENDİRME:</span>
+                Sıfırlama işlemi sonrasında sistem 6 haneli rastgele bir şifre üretecektir. Bu şifreyi öğrenciyle paylaşmanız gerekmektedir.
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
+              <button onClick={() => setShowResetModal(false)} className="btn-secondary px-5">
+                İptal
+              </button>
+              <button onClick={confirmResetPassword} className="btn-primary bg-amber-600 hover:bg-amber-700 focus:ring-amber-500 px-5" disabled={resetting}>
+                {resetting ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Evet, Sıfırla'}
+              </button>
+            </div>
           </div>
         </div>
       )}

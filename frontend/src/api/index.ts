@@ -45,6 +45,8 @@ export const studentApi = {
   updateBankInfo: (profileId: string, iban: string, bankName: string) =>
     api.patch(`/students/${profileId}/bank-info`, { iban, bankName }).then((r) => r.data),
 
+
+
   uploadPhoto: (profileId: string, file: File) => {
     const fd = new FormData();
     fd.append('photo', file);
@@ -130,8 +132,19 @@ export const adminApi = {
   listStudents: (params?: Record<string, string>): Promise<PaginatedResponse<StudentProfile>> =>
     api.get('/admin/students', { params }).then((r) => r.data),
 
-  createStudent: (data: { tcKimlikNo: string; firstName: string; lastName: string }) =>
+  createStudent: (data: { tcKimlikNo: string; firstName: string; lastName: string; scholarshipCategoryId?: string }) =>
     api.post('/admin/students', data).then((r) => r.data),
+
+  updateStudentProfile: (id: string, data: any) =>
+    api.patch(`/admin/students/${id}`, data).then((r) => r.data),
+
+  uploadStudentPhoto: (id: string, file: File): Promise<{ photoPath: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post(`/admin/students/${id}/photo`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data);
+  },
 
   getCsvTemplate: () =>
     api.get('/admin/students/csv-template', { responseType: 'blob' }).then((r) => r.data),
@@ -145,7 +158,7 @@ export const adminApi = {
     }).then((r) => r.data);
   },
 
-  bulkCreateJson: (data: { tcs: string; scholarshipGroup: string }) =>
+  bulkCreateJson: (data: { tcs: string; scholarshipCategoryId: string }) =>
     api.post('/admin/students/bulk-create', data).then((r) => r.data),
 
   resetPassword: (id: string): Promise<{ password: string }> =>
@@ -157,11 +170,33 @@ export const adminApi = {
   listPeriods: (): Promise<DocumentPeriod[]> =>
     api.get('/admin/periods').then((r) => r.data),
 
-  createPeriod: (data: Partial<DocumentPeriod>) =>
+  createPeriod: (data: Omit<Partial<DocumentPeriod>, 'categoryIds'> & { categoryIds?: string[] }) =>
     api.post('/admin/periods', data).then((r) => r.data),
 
-  updatePeriod: (id: string, data: Partial<DocumentPeriod>) =>
+  updatePeriod: (id: string, data: Omit<Partial<DocumentPeriod>, 'categoryIds'> & { categoryIds?: string[] }) =>
     api.patch(`/admin/periods/${id}`, data).then((r) => r.data),
+
+  updateSemester: (data: { oldLabel: string; label?: string; semester?: string; academicYear?: string; startDate?: string | null; endDate?: string | null; grade?: number | null; categoryIds?: string[] }) =>
+    api.patch('/admin/semesters', data).then((r) => r.data),
+
+  deleteSemester: (label: string) =>
+    api.post('/admin/semesters/delete', { label }).then((r) => r.data),
+
+  updatePeriodCategories: (id: string, categoryIds: string[]) =>
+    api.patch(`/admin/periods/${id}`, { categoryIds }).then((r) => r.data),
+
+  // Scholarship Categories
+  listScholarshipCategories: (): Promise<import('../types').ScholarshipCategory[]> =>
+    api.get('/admin/scholarship-categories').then((r) => r.data),
+
+  createScholarshipCategory: (data: { name: string; description?: string }) =>
+    api.post('/admin/scholarship-categories', data).then((r) => r.data),
+
+  updateScholarshipCategory: (id: string, data: { name?: string; description?: string; isActive?: boolean }) =>
+    api.patch(`/admin/scholarship-categories/${id}`, data).then((r) => r.data),
+
+  deleteScholarshipCategory: (id: string) =>
+    api.delete(`/admin/scholarship-categories/${id}`).then((r) => r.data),
 
   listUsers: () =>
     api.get('/admin/users').then((r) => r.data),
@@ -177,6 +212,9 @@ export const adminApi = {
 
   createMentor: (formData: FormData) =>
     api.post('/admin/mentors', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+
+  updateMentor: (id: string, formData: FormData) =>
+    api.patch(`/admin/mentors/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
 
   deleteMentor: (id: string) =>
     api.delete(`/admin/mentors/${id}`).then((r) => r.data),

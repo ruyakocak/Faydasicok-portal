@@ -21,6 +21,7 @@ export async function getStudentProfile(req: Request, res: Response, next: NextF
       include: {
         user: { select: { id: true, tcKimlikNo: true, email: true, role: true, isActive: true } },
         mentor: true,
+        scholarshipCategory: true,
         approvableChanges: {
           where: { status: 'PENDING' },
           select: { id: true, entityType: true, fieldName: true, createdAt: true },
@@ -123,7 +124,7 @@ export async function updatePersonalInfo(req: Request, res: Response, next: Next
     if (!profile) throw new AppError(404, 'Profil bulunamadı.');
     if (!canAccessProfile(req, id, profile.userId)) throw new AppError(403, 'Erişim reddedildi.');
 
-    const fields = ['firstName', 'lastName', 'gender', 'birthDate', 'birthPlace', 'registeredCity', 'scholarshipSources', 'scholarshipDate', 'scholarshipGroup'];
+    const fields = ['firstName', 'lastName', 'gender', 'birthDate', 'birthPlace', 'registeredCity', 'scholarshipSources', 'scholarshipDate', 'scholarshipCategoryId'];
     if (req.user?.role === Role.ADMIN || req.user?.role === Role.REVIEWER) {
       fields.push('studentStatus');
     }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import type { StudentProfile, Document as DocFile, DocumentPeriod, AuditLog } from '../types';
-import { studentApi, documentApi, auditApi } from '../api';
+import { studentApi, documentApi, auditApi, adminApi } from '../api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { UNIVERSITIES } from '../constants/universities';
@@ -89,6 +89,13 @@ export function PersonalTab({ profile, onSave, readOnly }: {
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<StudentProfile>>({});
   const [saving, setSaving] = useState(false);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    if (isAdmin && editing) {
+      adminApi.listScholarshipCategories().then(setCategories).catch(console.error);
+    }
+  }, [isAdmin, editing]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     setFormData((prev: any) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -142,9 +149,21 @@ export function PersonalTab({ profile, onSave, readOnly }: {
         <FieldRow label="Doğum Tarihi" value={profile.birthDate ? format(new Date(profile.birthDate), 'dd.MM.yyyy') : null}
           editing={editing} name="birthDate" type="date" onChange={handleChange} />
         <FieldRow label="Doğum Yeri" value={profile.birthPlace} editing={editing} name="birthPlace" onChange={handleChange} />
-        <FieldRow label="Nüfusa Kayıtlı Şehir" value={profile.registeredCity} editing={editing} name="registeredCity" onChange={handleChange} />
-        <FieldRow label="Burs Talep Tarihi" value={profile.scholarshipDate ? format(new Date(profile.scholarshipDate), 'dd.MM.yyyy') : null}
-          editing={editing} name="scholarshipDate" type="date" onChange={handleChange} />
+        {isAdmin && editing ? (
+          <FieldRow 
+            label="Bursiyer Kategorisi" 
+            value={formData.scholarshipCategoryId || profile.scholarshipCategoryId || ''} 
+            editing={true} 
+            name="scholarshipCategoryId" 
+            onChange={handleChange}
+            options={[
+              { value: '', label: 'Kategori Yok' },
+              ...categories.map(c => ({ value: c.id, label: c.name }))
+            ]}
+          />
+        ) : (
+          <FieldRow label="Bursiyer Kategorisi" value={profile.scholarshipCategory?.name || 'Kategori Yok'} />
+        )}
         {isAdmin ? (
           <FieldRow label="Kayıt Durumu" value={profile.studentStatus} editing={editing} name="studentStatus" onChange={handleChange}
             options={[{ value: 'INCOMPLETE', label: 'Tamamlanmadı' }, { value: 'ACTIVE', label: 'Aktif' }, { value: 'PASSIVE', label: 'Pasif' }, { value: 'GRADUATED', label: 'Mezun' }]} />
@@ -179,13 +198,24 @@ function BankInfoForm({ profileId }: { profileId: string }) {
   const [iban, setIban] = useState('');
   const [bankName, setBankName] = useState('');
   const [saving, setSaving] = useState(false);
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'REVIEWER';
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      await studentApi.updateBankInfo(profileId, iban, bankName);
-      toast.success('Banka bilgisi güncelleme talebi gönderildi.');
+      if (isAdmin) {
+        // Admin updates directly
+        await adminApi.updateStudentProfile(profileId, { iban, bankName });
+        toast.success('Banka bilgisi güncellendi.');
+        // Notify parent to reload (if possible, else they can just refresh)
+        window.location.reload(); 
+      } else {
+        // Student goes through approval
+        await studentApi.updateBankInfo(profileId, iban, bankName);
+        toast.success('Banka bilgisi güncelleme talebi gönderildi.');
+      }
       setOpen(false);
     } finally {
       setSaving(false);
@@ -194,9 +224,11 @@ function BankInfoForm({ profileId }: { profileId: string }) {
 
   return open ? (
     <form onSubmit={handleSave} className="mt-3 space-y-3 border-t border-gray-200 pt-3">
-      <div className="text-xs text-status-pending-text bg-status-pending-bg rounded p-2">
-        Banka bilgisi değişikliği her zaman admin onayına gönderilir.
-      </div>
+      {!isAdmin && (
+        <div className="text-xs text-status-pending-text bg-status-pending-bg rounded p-2">
+          Banka bilgisi değişikliği her zaman admin onayına gönderilir.
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="form-label">Banka Adı</label>
@@ -391,10 +423,42 @@ export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }
 
   return (
     <div className="space-y-8">
-      {docTypes.map(docType => {
-        const typeDocs = documents.filter(d => d.type === docType.code);
-        const typePeriods = periods.filter(p => p.type === docType.code);
+      {docTypes.filter(docType => {
+        let dtCatIds: string[] = [];
+        try {
+          dtCatIds = docType.categoryIds ? JSON.parse(docType.categoryIds) : [];
+          if (!Array.isArray(dtCatIds)) dtCatIds = [];
+        } catch {}
 
+        // Eğer belge türünün bir kategori kısıtlaması varsa ve öğrencinin kategorisi buna uymuyorsa, gösterme
+        if (dtCatIds.length > 0 && profile.scholarshipCategoryId && !dtCatIds.includes(profile.scholarshipCategoryId)) {
+          return false;
+        }
+        if (dtCatIds.length > 0 && !profile.scholarshipCategoryId) {
+          // Belge türü kısıtlı ama öğrencinin kategorisi yoksa, yine gösterme
+          return false;
+        }
+
+        return true;
+      }).map(docType => {
+        const typeDocs = documents.filter(d => d.type === docType.code);
+        // Öğrencinin kategorisine açık olan dönemleri filtrele
+        const typePeriods = periods.filter(p => {
+          if (p.type !== docType.code) return false;
+          // Fallback: If for some reason we still need to check period categories, we ignore it here
+          // as the single source of truth is now the DocumentType (Belge Türü) categoryIds.return true;
+          return true;
+        });
+
+        const hasOpenPeriod = typePeriods.some(p => p.isOpen);
+        const hasUploadedDocs = typeDocs.length > 0;
+
+        // Kullanıcının talebi: 'yüklemeye açık olmayan belgeler ekranda gözükmesin'
+        // Eğer bu belge türü o anda yüklemeye açık değilse ve daha önce yüklenmiş belge de yoksa tamamen gizleyelim.
+        if (!hasOpenPeriod && !hasUploadedDocs) {
+          return null;
+        }
+        
         return (
           <section key={docType.code}>
             <div className="flex items-center justify-between mb-3">

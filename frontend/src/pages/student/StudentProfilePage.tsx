@@ -17,6 +17,8 @@ export default function StudentProfilePage() {
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
+  const [docTypes, setDocTypes] = useState<any[]>([]);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   // Slider & Calendar states
   const [slideIndex, setSlideIndex] = useState(0);
@@ -28,22 +30,26 @@ export default function StudentProfilePage() {
   async function loadAll() {
     if (!profileId) return;
     try {
-      const [p, d, periods, evs] = await Promise.all([
+      const [p, d, periods, evs, types] = await Promise.all([
         studentApi.getProfile(profileId),
         studentApi.getDocuments(profileId),
         documentApi.getPeriods(),
         eventApi.listEvents(),
+        documentApi.getActiveTypes().catch(() => []),
       ]);
       setProfile(p);
       setDocuments(d);
       setPeriods(periods);
       setEvents(evs);
+      setDocTypes(types);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => { loadAll(); }, [profileId]);
+
+
 
   if (loading) {
     return (
@@ -60,6 +66,32 @@ export default function StudentProfilePage() {
   }
 
   const hasPending = (profile.approvableChanges?.length ?? 0) > 0;
+
+  const activeDeadlines = periods.filter(p => {
+    if (!p.isOpen) return false;
+
+    // Fallback: If for some reason we still need to check period categories, we ignore it here
+    // as the single source of truth is now the DocumentType (Belge Türü) categoryIds.
+
+    const docTypeObj = docTypes.find(dt => dt.code === p.type);
+    if (docTypeObj) {
+      let dtCatIds: string[] = [];
+      try {
+        dtCatIds = docTypeObj.categoryIds ? JSON.parse(docTypeObj.categoryIds) : [];
+        if (!Array.isArray(dtCatIds)) dtCatIds = [];
+      } catch {}
+
+      if (dtCatIds.length > 0 && profile.scholarshipCategoryId && !dtCatIds.includes(profile.scholarshipCategoryId)) {
+        return false;
+      }
+      if (dtCatIds.length > 0 && !profile.scholarshipCategoryId) {
+        return false;
+      }
+    }
+
+    const isUploaded = documents.some(d => d.periodId === p.id && d.status !== 'REJECTED');
+    return !isUploaded;
+  });
 
   return (
     <div className="animate-fade-in">
@@ -301,25 +333,100 @@ export default function StudentProfilePage() {
                   <h1 className="text-xl font-semibold text-gray-900">
                     {profile.firstName} {profile.lastName}
                   </h1>
-                  <p className="text-sm text-gray-500 mt-0.5">
-                    {profile.department} — {profile.universityName}
-                  </p>
-                  {profile.scholarshipGroup && (
+                  {(profile.department || profile.universityName) && (
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {[profile.department, profile.universityName].filter(Boolean).join(' — ')}
+                    </p>
+                  )}
+                  {(profile.scholarshipCategory?.name) && (
                     <div className="mt-2 flex items-center gap-1.5">
-                      {profile.scholarshipGroup === 'Sedefteki İnciler' ? (
+                      {(profile.scholarshipCategory?.name) === 'Sedefteki İnciler' ? (
                         <img src="/sedefteki-inciler-logo.png" alt="Sedefteki İnciler" className="h-6 object-contain" />
-                      ) : (
+                      ) : (profile.scholarshipCategory?.name) === 'İz Bırakanlar' ? (
                         <img src="/izbirakanlar-logo.png" alt="İz Bırakanlar" className="h-6 object-contain" />
+                      ) : (
+                        <svg viewBox="0 0 24 24" className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 14l9-5-9-5-9 5 9 5z" /><path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" /></svg>
                       )}
-                      <span className="text-[11px] font-semibold text-gray-500">{profile.scholarshipGroup} Programı</span>
+                      <span className="text-[11px] font-semibold text-gray-500">{profile.scholarshipCategory?.name} Programı</span>
                     </div>
                   )}
                 </div>
-                {hasPending && (
-                  <span className="badge-pending flex-shrink-0">
-                    {profile.approvableChanges!.length} onay bekliyor
-                  </span>
-                )}
+                <div className="flex items-center gap-3">
+                  {hasPending && (
+                    <span className="badge-pending flex-shrink-0">
+                      {profile.approvableChanges!.length} onay bekliyor
+                    </span>
+                  )}
+                  
+                  {/* Notifications Bell */}
+                  <div className="relative">
+                    <button 
+                      onClick={() => setIsNotificationsOpen(!isNotificationsOpen)} 
+                      className="p-2 rounded-full hover:bg-gray-100 transition-colors relative text-gray-600 hover:text-gray-900"
+                    >
+                      <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                      </svg>
+                      {activeDeadlines.length > 0 && (
+                        <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center font-bold border-2 border-white">
+                          {activeDeadlines.length}
+                        </span>
+                      )}
+                    </button>
+
+                    {isNotificationsOpen && (
+                      <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-100 rounded-xl shadow-lg z-50 overflow-hidden animate-fade-in">
+                        <div className="p-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                          <h3 className="font-semibold text-gray-800 text-sm">Bildirimler</h3>
+                          <span className="text-xs text-gray-500">{activeDeadlines.length} yeni bildirim</span>
+                        </div>
+                        <div className="max-h-80 overflow-y-auto">
+                          {activeDeadlines.length === 0 ? (
+                            <div className="p-6 text-center text-gray-500 text-sm">
+                              Yeni bildiriminiz yok.
+                            </div>
+                          ) : (
+                            <div className="flex flex-col">
+                              {activeDeadlines.map(period => {
+                                const docTypeObj = docTypes.find(dt => dt.code === period.type);
+                                let labelText = docTypeObj ? docTypeObj.name : period.type;
+                                if (!docTypeObj) {
+                                  if (period.type === 'TRANSCRIPT') labelText = 'Transkripti';
+                                  else if (period.type === 'STUDENT_CERTIFICATE') labelText = 'Öğrenci Belgesi';
+                                  else if (period.type === 'VOLUNTEER_REPORT') labelText = 'STK Gönüllülük Raporu';
+                                }
+
+                                return (
+                                  <div key={period.id} className="p-3 border-b border-gray-100 hover:bg-gray-50 transition-colors flex items-start gap-3">
+                                    <div className="mt-0.5 flex-shrink-0 w-2 h-2 bg-primary-500 rounded-full" />
+                                    <div>
+                                      <p className="text-sm text-gray-800 font-medium">
+                                        <span className="font-bold text-primary-600">{labelText}</span> yüklemeye açıldı!
+                                      </p>
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        Lütfen {period.label} dönemi için belgenizi yükleyiniz.
+                                      </p>
+                                      <button
+                                        onClick={() => {
+                                          setIsNotificationsOpen(false);
+                                          setActiveTab(2);
+                                        }}
+                                        className="text-xs font-semibold text-primary-600 hover:text-primary-700 mt-2 flex items-center gap-1"
+                                      >
+                                        Hemen Yükle
+                                        <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-1 mt-3">
@@ -352,77 +459,7 @@ export default function StudentProfilePage() {
         </div>
       </div>
 
-      {/* Deadlines Section */}
-      {(() => {
-        const activeDeadlines = periods.filter(p => {
-          if (!p.isOpen) return false;
-          // Check if already uploaded and not rejected
-          const isUploaded = documents.some(d => d.periodId === p.id && d.status !== 'REJECTED');
-          return !isUploaded;
-        });
 
-        if (activeDeadlines.length === 0) return null;
-
-        return (
-          <div className="space-y-3 mb-6">
-            {activeDeadlines.map(period => {
-              let diffDays: number | null = null;
-              if (period.endDate) {
-                const diffTime = new Date(period.endDate).getTime() - new Date().getTime();
-                diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-              }
-
-              // Determine icon and color scheme based on urgency
-              const isUrgent = diffDays !== null && diffDays <= 5;
-              const cardBg = isUrgent ? 'bg-red-50/80 border-red-200 text-red-800' : 'bg-amber-50/80 border-amber-200 text-amber-800';
-              const iconColor = isUrgent ? 'text-red-500' : 'text-amber-500';
-
-              let labelText = '';
-              if (period.type === 'TRANSCRIPT') labelText = 'Transkripti';
-              else if (period.type === 'STUDENT_CERTIFICATE') labelText = 'Öğrenci Belgesi';
-              else if (period.type === 'VOLUNTEER_REPORT') labelText = 'STK Gönüllülük Raporu';
-
-              return (
-                <div key={period.id} className={`flex items-center justify-between p-4 rounded-xl border ${cardBg} shadow-sm animate-fade-in`}>
-                  <div className="flex items-center gap-3">
-                    <div className="flex-shrink-0">
-                      {isUrgent ? (
-                        <svg className={`w-5 h-5 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                      ) : (
-                        <svg className={`w-5 h-5 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      )}
-                    </div>
-                    <div>
-                      <span className="font-semibold text-sm">
-                        {period.label} {labelText}
-                      </span>
-                      <span className="text-xs ml-2 opacity-90 font-medium bg-white/50 px-2 py-0.5 rounded-full">
-                        {diffDays !== null 
-                          ? (diffDays > 0 ? `son ${diffDays} gün!` : 'son gün!') 
-                          : 'Yükleme Açık'}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setActiveTab(2)}
-                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${
-                      isUrgent 
-                        ? 'bg-red-600 border-red-600 text-white hover:bg-red-700' 
-                        : 'bg-amber-600 border-amber-600 text-white hover:bg-amber-700'
-                    }`}
-                  >
-                    Hemen Yükle
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        );
-      })()}
 
       {/* 2-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -445,14 +482,20 @@ export default function StudentProfilePage() {
               {activeTab === 0 && (
                 <PersonalTab
                   profile={profile}
-                  onSave={(data) => studentApi.updatePersonal(profile.id, data)}
+                  onSave={async (data) => {
+                    await studentApi.updatePersonal(profile.id, data);
+                    await loadAll();
+                  }}
                   readOnly={false}
                 />
               )}
               {activeTab === 1 && (
                 <EducationTab
                   profile={profile}
-                  onSave={(data) => studentApi.updateEducation(profile.id, data)}
+                  onSave={async (data) => {
+                    await studentApi.updateEducation(profile.id, data);
+                    await loadAll();
+                  }}
                   readOnly={false}
                 />
               )}

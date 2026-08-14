@@ -4,7 +4,7 @@ import type { ApprovableChange, PaginatedResponse, DocumentPeriod, DocumentTypeC
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 const documentTypeLabels: Record<string, string> = {
   TRANSCRIPT: 'Transkript',
@@ -21,18 +21,22 @@ const entityTypeLabels: Record<string, string> = {
 };
 
 export default function ApprovalQueuePage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [result, setResult] = useState<PaginatedResponse<ApprovableChange> | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [statusFilter, setStatusFilter] = useState('PENDING');
-  const [entityFilter, setEntityFilter] = useState('');
-  const [periodFilter, setPeriodFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'PENDING');
+  const [entityFilter, setEntityFilter] = useState(searchParams.get('entity') || '');
+  const [periodFilter, setPeriodFilter] = useState(searchParams.get('periodLabel') || '');
+  const [categoryFilter, setCategoryFilter] = useState(searchParams.get('category') || '');
   const [periods, setPeriods] = useState<DocumentPeriod[]>([]);
   const [docTypes, setDocTypes] = useState<DocumentTypeConfig[]>([]);
+  const [categories, setCategories] = useState<import('../../types').ScholarshipCategory[]>([]);
 
   useEffect(() => {
     adminApi.listPeriods().then(setPeriods).catch(console.error);
     adminApi.listDocumentTypes().then(setDocTypes).catch(console.error);
+    adminApi.listScholarshipCategories().then(setCategories).catch(console.error);
   }, []);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState('');
@@ -52,6 +56,7 @@ export default function ApprovalQueuePage() {
     setLoading(true);
     const params: Record<string, string> = { status: statusFilter, page: String(page), limit: '20' };
     if (periodFilter) params.periodLabel = periodFilter;
+    if (categoryFilter) params.categoryId = categoryFilter;
     const filter = dynamicFilterOptions[entityFilter];
     if (filter) {
       if (filter.type === 'document') {
@@ -59,14 +64,33 @@ export default function ApprovalQueuePage() {
       } else {
         params.entityType = entityFilter;
       }
+    } else if (entityFilter) {
+      // If docTypes hasn't loaded yet, we can blindly pass it to documentType or entityType
+      // depending on if it's a known entity type
+      if (['DOCUMENT', 'BANK_INFO', 'PERSONAL_INFO', 'FAMILY_INFO', 'EDUCATION_INFO'].includes(entityFilter)) {
+        params.entityType = entityFilter;
+      } else {
+        params.documentType = entityFilter;
+      }
     }
+
     try {
       const data = await approvalApi.getQueue(params);
       setResult(data);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, entityFilter, periodFilter, page]);
+  }, [statusFilter, entityFilter, periodFilter, categoryFilter, page, dynamicFilterOptions]);
+
+  // Update URL when filters change
+  useEffect(() => {
+    const newParams = new URLSearchParams();
+    if (statusFilter !== 'PENDING') newParams.set('status', statusFilter);
+    if (entityFilter) newParams.set('entity', entityFilter);
+    if (periodFilter) newParams.set('periodLabel', periodFilter);
+    if (categoryFilter) newParams.set('category', categoryFilter);
+    setSearchParams(newParams, { replace: true });
+  }, [statusFilter, entityFilter, periodFilter, categoryFilter, setSearchParams]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -128,6 +152,16 @@ export default function ApprovalQueuePage() {
             <option value="PENDING">Onay Bekliyor</option>
             <option value="APPROVED">Onaylananlar</option>
             <option value="REJECTED">Reddedilenler</option>
+          </select>
+          <select
+            className="form-select text-sm w-44"
+            value={categoryFilter}
+            onChange={e => { setCategoryFilter(e.target.value); setPage(1); }}
+          >
+            <option value="">Tüm Kategoriler</option>
+            {categories.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
           </select>
           <select
             className="form-select text-sm w-48"

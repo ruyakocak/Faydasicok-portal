@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { adminApi } from '../../api';
-import type { DocumentTypeConfig } from '../../types';
+import type { DocumentTypeConfig, ScholarshipCategory } from '../../types';
 import toast from 'react-hot-toast';
 
 interface CustomField {
@@ -12,6 +12,7 @@ interface CustomField {
 
 export default function DocumentTypesTab() {
   const [types, setTypes] = useState<DocumentTypeConfig[]>([]);
+  const [categories, setCategories] = useState<ScholarshipCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -23,19 +24,25 @@ export default function DocumentTypesTab() {
     description: string;
     isActive: boolean;
     customFields: CustomField[];
+    categoryIds: string[];
   }>({
     code: '',
     name: '',
     description: '',
     isActive: true,
     customFields: [],
+    categoryIds: [],
   });
 
   async function load() {
     setLoading(true);
     try {
-      const data = await adminApi.listDocumentTypes();
+      const [data, cats] = await Promise.all([
+        adminApi.listDocumentTypes(),
+        adminApi.listScholarshipCategories(),
+      ]);
       setTypes(data);
+      setCategories(cats);
     } finally {
       setLoading(false);
     }
@@ -48,6 +55,12 @@ export default function DocumentTypesTab() {
     try {
       parsedFields = item.customFields ? JSON.parse(item.customFields) : [];
     } catch (e) {}
+
+    let parsedCatIds: string[] = [];
+    try {
+      parsedCatIds = item.categoryIds ? JSON.parse(item.categoryIds) : [];
+      if (!Array.isArray(parsedCatIds)) parsedCatIds = [];
+    } catch (e) {}
     
     setForm({
       id: item.id,
@@ -56,12 +69,13 @@ export default function DocumentTypesTab() {
       description: item.description || '',
       isActive: item.isActive,
       customFields: parsedFields,
+      categoryIds: parsedCatIds,
     });
     setShowModal(true);
   }
 
   function handleAdd() {
-    setForm({ code: '', name: '', description: '', isActive: true, customFields: [] });
+    setForm({ code: '', name: '', description: '', isActive: true, customFields: [], categoryIds: [] });
     setShowModal(true);
   }
 
@@ -118,6 +132,7 @@ export default function DocumentTypesTab() {
         description: form.description,
         isActive: form.isActive,
         customFields: JSON.stringify(form.customFields),
+        categoryIds: form.categoryIds.length > 0 ? form.categoryIds : undefined,
       };
       
       if (form.id) {
@@ -140,6 +155,8 @@ export default function DocumentTypesTab() {
     return <div className="flex items-center justify-center py-10"><span className="spinner border-gray-300 border-t-primary-500 w-8 h-8" /></div>;
   }
 
+  const activeCategories = categories.filter(c => c.isActive);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -154,19 +171,44 @@ export default function DocumentTypesTab() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {types.map(t => (
-          <div key={t.id} className="card p-5 border-l-4" style={{ borderLeftColor: t.isActive ? '#10b981' : '#9ca3af' }}>
-            <div className="flex items-start justify-between mb-2">
-              <h3 className="font-semibold text-gray-900">{t.name}</h3>
-              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${t.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                {t.isActive ? 'Aktif' : 'Pasif'}
-              </span>
+        {types.map(t => {
+          let catIds: string[] = [];
+          try { catIds = t.categoryIds ? JSON.parse(t.categoryIds) : []; } catch (e) {}
+          
+          return (
+            <div key={t.id} className="card p-5 border-l-4" style={{ borderLeftColor: t.isActive ? '#10b981' : '#9ca3af' }}>
+              <div className="flex items-start justify-between mb-2">
+                <h3 className="font-semibold text-gray-900">{t.name}</h3>
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${t.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                  {t.isActive ? 'Aktif' : 'Pasif'}
+                </span>
+              </div>
+              <p className="text-sm text-gray-600 mb-2 h-10 line-clamp-2">{t.description}</p>
+              
+              <div className="mb-4">
+                <span className="text-[10px] font-medium text-gray-500 block mb-1">Kategoriler:</span>
+                <div className="flex flex-wrap gap-1">
+                  {catIds.length > 0 ? (
+                    catIds.map(id => {
+                      const cat = categories.find(c => c.id === id);
+                      return cat ? (
+                        <span key={id} className="px-1.5 py-0.5 bg-primary-50 text-primary-700 rounded text-[10px]">
+                          {cat.name}
+                        </span>
+                      ) : null;
+                    })
+                  ) : (
+                    <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px]">
+                      Tüm Kategoriler
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              <button onClick={() => handleEdit(t)} className="btn-secondary btn-sm w-full text-xs">Düzenle</button>
             </div>
-            <p className="text-sm text-gray-600 mb-4 h-10 line-clamp-2">{t.description}</p>
-            
-            <button onClick={() => handleEdit(t)} className="btn-secondary btn-sm w-full text-xs">Düzenle</button>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {showModal && (
@@ -189,7 +231,40 @@ export default function DocumentTypesTab() {
                   <label className="form-label">Açıklama</label>
                   <input className="form-input" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Öğrencilere gösterilecek açıklama..." />
                 </div>
-                <div className="col-span-2 flex items-center gap-2">
+                <div className="col-span-2">
+                  <label className="form-label mb-1.5">Bursiyer Kategorileri</label>
+                  <p className="text-[11px] text-gray-400 mb-2">Bu belge türü hangi kategorilere özel olsun? Hiçbiri seçilmezse tüm kategorilerde geçerli olur.</p>
+                  <div className="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2 bg-gray-50/50">
+                    {activeCategories.length === 0 ? (
+                      <p className="text-xs text-gray-400">Henüz kategori tanımlanmamış.</p>
+                    ) : (
+                      activeCategories.map(cat => (
+                        <label key={cat.id} className="flex items-center gap-2 cursor-pointer hover:bg-white p-1.5 rounded transition-colors">
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+                            checked={form.categoryIds.includes(cat.id)}
+                            onChange={() => {
+                              setForm(prev => ({
+                                ...prev,
+                                categoryIds: prev.categoryIds.includes(cat.id)
+                                  ? prev.categoryIds.filter(id => id !== cat.id)
+                                  : [...prev.categoryIds, cat.id]
+                              }));
+                            }}
+                          />
+                          <span className="text-sm text-gray-700">{cat.name}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                  {form.categoryIds.length === 0 && activeCategories.length > 0 && (
+                    <span className="text-[11px] text-blue-500 mt-1.5 block">
+                      ℹ️ Hiçbir kategori seçilmedi — belge türü tüm bursiyerlere açık olacak.
+                    </span>
+                  )}
+                </div>
+                <div className="col-span-2 flex items-center gap-2 mt-2">
                   <input type="checkbox" id="isActive" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500" />
                   <label htmlFor="isActive" className="text-sm font-medium text-gray-700">Aktif (Yeni açılan dönemlerde otomatik eklensin mi?)</label>
                 </div>

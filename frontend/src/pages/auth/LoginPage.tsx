@@ -11,9 +11,9 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!identifier.trim() || !password) return;
+    if (!identifier.trim() || !password.trim()) return;
     try {
-      await login(identifier.trim(), password);
+      await login(identifier.trim(), password.trim());
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       if (user.role === 'STUDENT') {
         navigate('/student/profile');

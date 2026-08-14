@@ -83,7 +83,8 @@ model StudentProfile {
   registeredCity     String? // Nüfusa kayıtlı şehir
   scholarshipSources String? // Burs alınan yer(ler) — JSON array as string
   scholarshipDate    DateTime? // Burs talep tarihi
-  scholarshipGroup   String? // Sedefteki İnciler / İz Bırakanlar
+  scholarshipCategoryId String?
+  scholarshipCategory   ScholarshipCategory? @relation(fields: [scholarshipCategoryId], references: [id], onDelete: SetNull)
   studentStatus      String   @default("INCOMPLETE") // INCOMPLETE, ACTIVE, PASSIVE, GRADUATED
   enrollmentStatus   String   @default("ENROLLED") // ENROLLED, ON_LEAVE, GRADUATED, DROPPED
 
@@ -142,6 +143,23 @@ model StudentProfile {
 }
 
 // ─────────────────────────────────────────────
+// SCHOLARSHIP CATEGORIES
+// ─────────────────────────────────────────────
+
+model ScholarshipCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  students    StudentProfile[]
+
+  @@map("scholarship_categories")
+}
+
+// ─────────────────────────────────────────────
 // DOCUMENT PERIODS
 // ─────────────────────────────────────────────
 
@@ -153,6 +171,7 @@ model DocumentPeriod {
   academicYear String?           // e.g. "2025-2026"
   grade       Int?               // Which grade this applies to (null = all)
   isOpen      Boolean            @default(false)
+  categoryIds String?            // JSON array of scholarship category IDs (null = all categories)
   startDate   DateTime?
   endDate     DateTime?          // Auto-close date
   createdAt   DateTime           @default(now())
@@ -173,6 +192,7 @@ model DocumentTypeConfig {
   name         String
   description  String?
   customFields String?  // JSON array of custom field definitions (e.g. [{ id, label, type, required }])
+  categoryIds  String?  // JSON array of scholarship category IDs (null = all categories)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

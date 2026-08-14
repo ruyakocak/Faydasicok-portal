@@ -6,7 +6,7 @@ import { ApprovableEntityType, AuditAction } from '../types/enums';
 // ── Get Approval Queue ────────────────────────────────────────────────
 export async function getApprovalQueue(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { status = 'PENDING', entityType, documentType, periodLabel, page = '1', limit = '20', studentId } = req.query;
+    const { status = 'PENDING', entityType, documentType, periodLabel, page = '1', limit = '20', studentId, categoryId } = req.query;
 
     const where: any = {
       status: status as string,
@@ -20,6 +20,7 @@ export async function getApprovalQueue(req: Request, res: Response, next: NextFu
       if (periodLabel) where.document.period = { label: periodLabel as string };
     }
     if (studentId) where.studentProfileId = studentId as string;
+    if (categoryId) where.studentProfile = { scholarshipCategoryId: categoryId as string };
 
     const skip = (Number(page) - 1) * Number(limit);
 
