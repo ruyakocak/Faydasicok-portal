@@ -11,10 +11,15 @@ import {
 } from '../controllers/student.controller';
 import { authenticate, requireStudent, requireAdminOrReviewer } from '../middleware/auth.middleware';
 import { upload } from '../middleware/upload.middleware';
+import { listScholarshipCategories } from '../controllers/admin.controller';
 
 export const studentRouter = Router();
 
 studentRouter.use(authenticate);
+
+// Allow students to fetch scholarship categories for their profile
+studentRouter.get('/scholarship-categories', listScholarshipCategories);
+
 
 // Student can access their own profile; admin/reviewer can access any
 studentRouter.get('/:id/profile', getStudentProfile);

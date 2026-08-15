@@ -29,10 +29,7 @@ export default function PeriodsPage() {
   const [selectedSemester, setSelectedSemester] = useState('');
   const [activeTab, setActiveTab] = useState<'periods' | 'types'>('periods');
 
-  // Category edit modal state
-  const [editCatPeriod, setEditCatPeriod] = useState<DocumentPeriod | null>(null);
-  const [editCatIds, setEditCatIds] = useState<string[]>([]);
-  const [savingCats, setSavingCats] = useState(false);
+
 
   // Semester edit modal state
   const [editSemesterLabel, setEditSemesterLabel] = useState<string | null>(null);
@@ -50,6 +47,31 @@ export default function PeriodsPage() {
   // Semester delete confirmation modal state
   const [deleteSemesterLabel, setDeleteSemesterLabel] = useState<string | null>(null);
   const [deletingSemester, setDeletingSemester] = useState(false);
+
+  // Single period (document request) edit modal state
+  const [editPeriod, setEditPeriod] = useState<DocumentPeriod | null>(null);
+  const [editPeriodForm, setEditPeriodForm] = useState<{
+    startDate: string;
+    endDate: string;
+    grade: number | '';
+    categoryIds: string[];
+  }>({ startDate: '', endDate: '', grade: '', categoryIds: [] });
+  const [savingPeriod, setSavingPeriod] = useState(false);
+
+  // Single period delete state
+  const [deletePeriodId, setDeletePeriodId] = useState<string | null>(null);
+  const [deletingPeriod, setDeletingPeriod] = useState(false);
+
+  // Single period add modal state
+  const [showAddPeriod, setShowAddPeriod] = useState(false);
+  const [addPeriodForm, setAddPeriodForm] = useState<{
+    type: string;
+    startDate: string;
+    endDate: string;
+    grade: number | '';
+    categoryIds: string[];
+  }>({ type: '', startDate: '', endDate: '', grade: '', categoryIds: [] });
+  const [addingPeriod, setAddingPeriod] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -91,37 +113,7 @@ export default function PeriodsPage() {
     setPeriods(data);
   }
 
-  async function handleAddToSemester(docType: DocumentTypeConfig) {
-    if (!selectedSemester) return;
-    
-    // Find an existing period in this semester to copy its academicYear/semester code.
-    const existingPeriod = periods.find(p => p.label === selectedSemester);
-    if (!existingPeriod) {
-      toast.error('Dönem bilgileri bulunamadı.');
-      return;
-    }
-    
-    let catIds: string[] | undefined;
-    try {
-      const parsed = docType.categoryIds ? JSON.parse(docType.categoryIds) : [];
-      if (Array.isArray(parsed) && parsed.length > 0) catIds = parsed;
-    } catch {}
 
-    try {
-      await adminApi.createPeriod({
-        type: docType.code,
-        label: selectedSemester,
-        semester: existingPeriod.semester,
-        academicYear: existingPeriod.academicYear,
-        categoryIds: catIds,
-        isOpen: false
-      });
-      toast.success(`${docType.name} bu döneme eklendi.`);
-      await load();
-    } catch (err: any) {
-      toast.error('Eklenirken bir hata oluştu');
-    }
-  }
 
   async function handleCreateSemester(e: React.FormEvent) {
     e.preventDefault();
@@ -177,34 +169,7 @@ export default function PeriodsPage() {
     }
   }
 
-  function openCategoryEditor(period: DocumentPeriod) {
-    setEditCatPeriod(period);
-    setEditCatIds(parseCategoryIds(period));
-  }
 
-  function toggleEditCatId(catId: string) {
-    setEditCatIds(prev =>
-      prev.includes(catId)
-        ? prev.filter(id => id !== catId)
-        : [...prev, catId]
-    );
-  }
-
-  async function handleSaveCategories() {
-    if (!editCatPeriod) return;
-    setSavingCats(true);
-    try {
-      await adminApi.updatePeriodCategories(editCatPeriod.id, editCatIds);
-      toast.success('Kategori atamaları güncellendi.');
-      setEditCatPeriod(null);
-      const data = await adminApi.listPeriods();
-      setPeriods(data);
-    } catch {
-      toast.error('Kategori güncellenirken bir hata oluştu.');
-    } finally {
-      setSavingCats(false);
-    }
-  }
 
   function openSemesterEditor(label: string) {
     const existingPeriods = periods.filter(p => p.label === label);
@@ -297,6 +262,102 @@ export default function PeriodsPage() {
     }
   }
 
+  // Single Document Request handlers
+  function openPeriodEditor(period: DocumentPeriod) {
+    setEditPeriod(period);
+    setEditPeriodForm({
+      startDate: period.startDate ? new Date(period.startDate).toISOString().slice(0, 16) : '',
+      endDate: period.endDate ? new Date(period.endDate).toISOString().slice(0, 16) : '',
+      grade: period.grade || '',
+      categoryIds: parseCategoryIds(period),
+    });
+  }
+
+  function toggleEditPeriodCatId(catId: string) {
+    setEditPeriodForm(prev => ({
+      ...prev,
+      categoryIds: prev.categoryIds.includes(catId)
+        ? prev.categoryIds.filter(id => id !== catId)
+        : [...prev.categoryIds, catId]
+    }));
+  }
+
+  async function handleSavePeriod(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editPeriod) return;
+    setSavingPeriod(true);
+    try {
+      await adminApi.updatePeriod(editPeriod.id, {
+        startDate: editPeriodForm.startDate ? new Date(editPeriodForm.startDate).toISOString() : null,
+        endDate: editPeriodForm.endDate ? new Date(editPeriodForm.endDate).toISOString() : null,
+        grade: editPeriodForm.grade === '' ? null : Number(editPeriodForm.grade),
+        categoryIds: editPeriodForm.categoryIds,
+      });
+      toast.success('Evrak talebi ayarları başarıyla güncellendi.');
+      setEditPeriod(null);
+      await load();
+    } catch {
+      toast.error('Ayarlar kaydedilirken bir hata oluştu.');
+    } finally {
+      setSavingPeriod(false);
+    }
+  }
+
+  async function handleDeletePeriod() {
+    if (!deletePeriodId) return;
+    setDeletingPeriod(true);
+    try {
+      await adminApi.deletePeriod(deletePeriodId);
+      toast.success('Evrak talebi bu dönemden başarıyla kaldırıldı.');
+      setDeletePeriodId(null);
+      await load();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Kaldırılırken bir hata oluştu.');
+    } finally {
+      setDeletingPeriod(false);
+    }
+  }
+
+  function toggleAddPeriodCatId(catId: string) {
+    setAddPeriodForm(prev => ({
+      ...prev,
+      categoryIds: prev.categoryIds.includes(catId)
+        ? prev.categoryIds.filter(id => id !== catId)
+        : [...prev.categoryIds, catId]
+    }));
+  }
+
+  async function handleAddPeriod(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedSemester || !addPeriodForm.type) return;
+    setAddingPeriod(true);
+    try {
+      // Find an existing period in this semester to copy its academicYear/semester code.
+      const existingPeriod = periods.find(p => p.label === selectedSemester);
+      
+      await adminApi.createPeriod({
+        type: addPeriodForm.type,
+        label: selectedSemester,
+        semester: existingPeriod?.semester || 'GUZ',
+        academicYear: existingPeriod?.academicYear || '',
+        startDate: addPeriodForm.startDate ? new Date(addPeriodForm.startDate).toISOString() : null,
+        endDate: addPeriodForm.endDate ? new Date(addPeriodForm.endDate).toISOString() : null,
+        grade: addPeriodForm.grade === '' ? null : Number(addPeriodForm.grade),
+        categoryIds: addPeriodForm.categoryIds,
+        isOpen: true,
+      });
+
+      toast.success('Yeni evrak talebi başarıyla eklendi.');
+      setShowAddPeriod(false);
+      setAddPeriodForm({ type: '', startDate: '', endDate: '', grade: '', categoryIds: [] });
+      await load();
+    } catch {
+      toast.error('Talep oluşturulurken bir hata oluştu.');
+    } finally {
+      setAddingPeriod(false);
+    }
+  }
+
   // Group periods by semester label
   const semesterMap: Record<string, DocumentPeriod[]> = {};
   periods.forEach(p => {
@@ -344,208 +405,262 @@ export default function PeriodsPage() {
       {activeTab === 'periods' && (
         <>
           {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <span className="spinner border-gray-300 border-t-primary-500 w-8 h-8" />
-        </div>
-      ) : semesters.length === 0 ? (
-        <div className="card p-8 text-center text-gray-500">
-          Henüz oluşturulmuş bir dönem bulunmamaktadır. Sağ üstteki "Yeni Dönem Ekle" butonu ile başlayın.
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Active Semester Selector Card */}
-          <div className="card">
-            <div className="card-body py-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-              <div className="flex-1 max-w-md">
-                <label className="form-label mb-1.5 font-semibold text-gray-700">Aktif Eğitim Dönemi</label>
-                <select
-                  className="form-select text-base py-2.5 px-3.5 border-gray-300 rounded-lg shadow-sm w-full"
-                  value={selectedSemester}
-                  onChange={(e) => setSelectedSemester(e.target.value)}
-                >
-                  {semesters.map(sem => (
-                    <option key={sem} value={sem}>{sem}</option>
-                  ))}
-                </select>
-                
-                {/* Genel Dönem Kategorileri */}
-                <div className="mt-4 flex flex-col gap-1.5">
-                  <span className="text-xs font-semibold text-gray-600">Bu dönemin açık olduğu gruplar (Varsayılan):</span>
-                  <div className="flex flex-wrap gap-2">
-                    {(() => {
-                      const allCatIds = new Set<string>();
-                      selectedSemesterPeriods.forEach(p => {
-                        const ids = parseCategoryIds(p);
-                        ids.forEach(id => allCatIds.add(id));
-                      });
-                      const catIds = Array.from(allCatIds);
-                      const cats = catIds.length > 0 ? categories.filter(c => catIds.includes(c.id)) : [];
-                      return cats.length > 0 ? cats.map(c => (
-                        <span key={c.id} className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-primary-50 text-primary-700 border border-primary-200">
-                          {c.name}
-                        </span>
-                      )) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
-                          Tüm Bursiyerler
-                        </span>
-                      );
-                    })()}
+            <div className="flex items-center justify-center py-20">
+              <span className="spinner border-gray-300 border-t-primary-500 w-8 h-8" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+              
+              {/* Left Column: Semester Navigation Sidebar */}
+              <div className="lg:col-span-1 space-y-4">
+                <div className="card p-4">
+                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-150">
+                    <h3 className="font-semibold text-gray-800 text-sm">Eğitim Dönemleri</h3>
+                    <button 
+                      onClick={() => { setShowCreate(true); setNewCategoryIds([]); }} 
+                      className="text-xs font-semibold text-primary-600 hover:text-primary-700 flex items-center gap-0.5"
+                    >
+                      <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      Yeni
+                    </button>
                   </div>
+                  
+                  {semesters.length === 0 ? (
+                    <p className="text-xs text-gray-500 text-center py-4">Dönem bulunmuyor.</p>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      {semesters.map(sem => {
+                        const isSelected = sem === selectedSemester;
+                        // Count active document requests in this semester
+                        const semPeriods = semesterMap[sem] || [];
+                        const activeCount = semPeriods.filter(p => p.isOpen).length;
+                        
+                        return (
+                          <button
+                            key={sem}
+                            onClick={() => setSelectedSemester(sem)}
+                            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-between ${
+                              isSelected 
+                                ? 'bg-primary-50 text-primary-800 border-l-4 border-primary-600 pl-2' 
+                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                            }`}
+                          >
+                            <span className="truncate pr-2">{sem}</span>
+                            {activeCount > 0 && (
+                              <span className="bg-green-100 text-green-800 text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                {activeCount} Aktif
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-xs text-gray-600 sm:max-w-xs mt-2 sm:mt-0">
-                <svg viewBox="0 0 24 24" className="w-4 h-4 text-blue-600 flex-shrink-0 inline mr-1" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                Aşağıdaki evrak açma/kapama ayarları yalnızca seçili olan <strong>{selectedSemester}</strong> için geçerlidir.
-              </div>
-            </div>
-          </div>
-
-          {/* Active Period Settings List */}
-          <div className="card">
-            <div className="card-header border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-base font-semibold text-gray-800">{selectedSemester} Evrak Ayarları</h2>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => openSemesterEditor(selectedSemester)}
-                  className="btn-secondary btn-sm text-xs py-1 px-3 hover:bg-gray-100"
-                >
-                  Dönemi Düzenle
-                </button>
-                <button
-                  onClick={() => handleDeleteSemesterClick(selectedSemester)}
-                  className="btn-secondary btn-sm text-xs py-1 px-3 text-red-600 hover:text-red-700 hover:bg-red-50"
-                >
-                  Dönemi Sil
-                </button>
-              </div>
-            </div>
-            <div className="divide-y divide-gray-100">
-              {docTypes.filter(docType => {
-                const allCatIds = new Set<string>();
-                selectedSemesterPeriods.forEach(p => {
-                  const ids = parseCategoryIds(p);
-                  ids.forEach(id => allCatIds.add(id));
-                });
-                const semCatIds = Array.from(allCatIds);
-                
-                let dtCatIds: string[] = [];
-                try {
-                  dtCatIds = docType.categoryIds ? JSON.parse(docType.categoryIds) : [];
-                  if (!Array.isArray(dtCatIds)) dtCatIds = [];
-                } catch (e) {}
-
-                if (dtCatIds.length === 0) return true; // Belge türü herkese açıksa her dönemde görünsün
-                if (semCatIds.length === 0) return true; // Dönem herkese açıksa her belge türü görünsün
-                
-                // Dönem belirli gruplara açıksa ve belge türü de belirli gruplara özgüyse, kesişim olmalı
-                return dtCatIds.some(id => semCatIds.includes(id));
-              }).map(docType => {
-                const type = docType.code;
-                const period = selectedSemesterPeriods.find(p => p.type === type);
-                const isOpen = period?.isOpen ?? false;
-                const docCount = (period as any)?._count?.documents ?? 0;
-                
-                let dtCatIds: string[] = [];
-                try {
-                  dtCatIds = docType.categoryIds ? JSON.parse(docType.categoryIds) : [];
-                  if (!Array.isArray(dtCatIds)) dtCatIds = [];
-                } catch (e) {}
-
-                const assignedCats = dtCatIds.length > 0
-                  ? categories.filter(c => dtCatIds.includes(c.id))
-                  : [];
-
-                return (
-                  <div key={type} className="p-5 flex flex-col gap-3 hover:bg-gray-50/50 transition-colors">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-semibold text-gray-900 text-sm sm:text-base">{docType.name}</h4>
-                          {isOpen && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700 border border-green-200 animate-pulse">
-                              Aktif Alımda
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs sm:text-sm text-gray-500 mt-1 max-w-2xl">{docType.description}</p>
-                        <div className="mt-2 flex items-center gap-3 text-[11px] text-gray-500 flex-wrap">
-                          {docCount > 0 ? (
-                            <Link 
-                              to={`/admin/approvals?periodLabel=${encodeURIComponent(selectedSemester)}&entity=${docType.code}`}
-                              className="hover:text-primary-600 transition-colors flex items-center gap-1 group"
-                            >
-                              <span>Yüklenen Belge:</span>
-                              <strong className="text-gray-700 font-medium group-hover:text-primary-600 group-hover:underline">
-                                {docCount} adet
-                              </strong>
-                            </Link>
-                          ) : (
-                            <span>Yüklenen Belge: <strong className="text-gray-700 font-medium">0 adet</strong></span>
-                          )}
-                          {period?.academicYear && (
-                            <span className="border-l border-gray-200 pl-3">Yıl: <strong className="text-gray-700">{period.academicYear}</strong></span>
-                          )}
-                          {period?.grade && (
-                            <span className="border-l border-gray-200 pl-3">Sınıf: <strong className="text-gray-700">{period.grade}. Sınıf</strong></span>
-                          )}
-                          {period?.startDate && (
-                            <span className="border-l border-gray-200 pl-3">Başlangıç: <strong className="text-gray-700">{new Date(period.startDate).toLocaleDateString('tr-TR')}</strong></span>
-                          )}
-                          {period?.endDate && (
-                            <span className="border-l border-gray-200 pl-3">Bitiş: <strong className="text-gray-700">{new Date(period.endDate).toLocaleDateString('tr-TR')}</strong></span>
-                          )}
-                        </div>
+              {/* Right Column: Selected Semester Details & Requested Documents */}
+              <div className="lg:col-span-3 space-y-6 animate-fade-in">
+                {!selectedSemester ? (
+                  <div className="card p-12 text-center text-gray-500 border-2 border-dashed border-gray-200">
+                    <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <h4 className="font-semibold text-gray-800 text-base mb-1">Eğitim Dönemi Seçilmedi</h4>
+                    <p className="text-xs text-gray-500 max-w-xs mx-auto">Detayları ve evrak taleplerini görmek için sol taraftaki listeden bir dönem seçin.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Selected Semester Title and Bulk Action buttons */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-2xl border border-gray-150 shadow-sm">
+                      <div>
+                        <span className="text-xs font-semibold text-primary-600 uppercase tracking-wider">Seçili Dönem</span>
+                        <h2 className="text-2xl font-bold text-gray-900 tracking-tight mt-0.5">{selectedSemester}</h2>
                       </div>
-                      <div className="flex items-center gap-3 self-end sm:self-center">
-                        <span className={`text-xs font-semibold ${isOpen ? 'text-green-600' : 'text-gray-400'}`}>
-                          {isOpen ? 'Yükleme Açık' : 'Yükleme Kapalı'}
-                        </span>
-                        {period ? (
-                          <button
-                            onClick={() => handleToggle(period)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                              isOpen ? 'bg-status-approved' : 'bg-gray-300'
-                            }`}
-                          >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              isOpen ? 'translate-x-6' : 'translate-x-1'
-                            }`} />
-                          </button>
-                        ) : (
-                          <button onClick={() => handleAddToSemester(docType)} className="btn-secondary btn-sm text-xs py-1 px-3">
-                            Bu Döneme Ekle
-                          </button>
-                        )}
+                      
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openSemesterEditor(selectedSemester)}
+                          className="btn-secondary btn-sm px-3.5 py-2 font-semibold text-gray-700 flex items-center gap-1"
+                        >
+                          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          Dönemi Düzenle
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSemesterClick(selectedSemester)}
+                          className="btn-secondary btn-sm px-3.5 py-2 font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100 flex items-center gap-1"
+                        >
+                          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                          Sil
+                        </button>
                       </div>
                     </div>
 
-                    {/* Category badges and edit */}
-                    {period && (
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[11px] font-medium text-gray-500">Kategoriler:</span>
-                        {assignedCats.length > 0 ? (
-                          assignedCats.map(cat => (
-                            <span key={cat.id} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary-50 text-primary-700 border border-primary-200">
-                              {cat.name}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
-                            Tüm Kategoriler
-                          </span>
-                        )}
+                    {/* Document Requests List */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between px-1">
+                        <h3 className="font-bold text-gray-800 text-base">Bu Dönemde Talep Edilen Belgeler</h3>
+                        <span className="text-xs text-gray-500 font-medium">{selectedSemesterPeriods.length} belge isteniyor</span>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+
+                      {selectedSemesterPeriods.length === 0 ? (
+                        <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center">
+                          <svg className="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <h4 className="font-semibold text-gray-800 text-sm mb-1">Evrak Talebi Yok</h4>
+                          <p className="text-xs text-gray-500 max-w-xs mx-auto mb-4">Bu eğitim dönemi için öğrencilerden henüz hiçbir belge talep edilmedi.</p>
+                          <button
+                            onClick={() => {
+                              setAddPeriodForm({ type: '', startDate: '', endDate: '', grade: '', categoryIds: [] });
+                              setShowAddPeriod(true);
+                            }}
+                            className="btn-primary btn-sm px-4"
+                          >
+                            + Evrak Talebi Ekle
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-4">
+                          {selectedSemesterPeriods.map(period => {
+                            const docTypeObj = docTypes.find(dt => dt.code === period.type);
+                            const docCount = (period as any)?._count?.documents ?? 0;
+                            const isOpen = period.isOpen;
+
+                            let parsedCatIds: string[] = [];
+                            try {
+                              parsedCatIds = period.categoryIds ? JSON.parse(period.categoryIds) : [];
+                            } catch {}
+                            const assignedCats = parsedCatIds.length > 0
+                              ? categories.filter(c => parsedCatIds.includes(c.id))
+                              : [];
+
+                            return (
+                              <div key={period.id} className="bg-white rounded-2xl border border-gray-150 p-5 shadow-sm hover:border-gray-200 transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
+                                <div className="flex items-start gap-4">
+                                  <div className="w-10 h-10 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 className="font-bold text-gray-900 text-sm sm:text-base leading-none">
+                                        {docTypeObj?.name || period.type}
+                                      </h4>
+                                      {isOpen && (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 animate-pulse">
+                                          Aktif Alımda
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-gray-500 max-w-xl leading-relaxed">
+                                      {docTypeObj?.description || 'Evrak açıklaması tanımlanmamış.'}
+                                    </p>
+                                    
+                                    {/* Date and Target Info Chips */}
+                                    <div className="flex items-center gap-3 text-[11px] text-gray-500 flex-wrap pt-1">
+                                      {docCount > 0 ? (
+                                        <Link 
+                                          to={`/admin/approvals?periodLabel=${encodeURIComponent(selectedSemester)}&entity=${period.type}`}
+                                          className="text-primary-600 font-semibold hover:underline flex items-center gap-0.5"
+                                        >
+                                          {docCount} Belge Yüklendi
+                                        </Link>
+                                      ) : (
+                                        <span className="font-medium text-gray-400">0 belge yüklendi</span>
+                                      )}
+                                      
+                                      {period.startDate && (
+                                        <span className="border-l border-gray-200 pl-3">Başlangıç: <strong className="text-gray-700">{new Date(period.startDate).toLocaleDateString('tr-TR')}</strong></span>
+                                      )}
+                                      {period.endDate && (
+                                        <span className="border-l border-gray-200 pl-3">Bitiş: <strong className="text-gray-700">{new Date(period.endDate).toLocaleDateString('tr-TR')}</strong></span>
+                                      )}
+                                      {period.grade && (
+                                        <span className="border-l border-gray-200 pl-3">Sınıf: <strong className="text-gray-700">{period.grade}. Sınıf</strong></span>
+                                      )}
+                                    </div>
+
+                                    {/* Categories Limit indicator */}
+                                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                                      <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Hedef Gruplar:</span>
+                                      {assignedCats.length > 0 ? (
+                                        assignedCats.map(cat => (
+                                          <span key={cat.id} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary-50 text-primary-700 border border-primary-200">
+                                            {cat.name}
+                                          </span>
+                                        ))
+                                      ) : (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                                          Tüm Bursiyerler
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Controls */}
+                                <div className="flex items-center gap-3 sm:self-center self-end border-t sm:border-t-0 pt-3 sm:pt-0 w-full sm:w-auto justify-end">
+                                  {/* Toggle Switch */}
+                                  <div className="flex items-center gap-1.5 mr-2">
+                                    <span className={`text-xs font-semibold ${isOpen ? 'text-green-600' : 'text-gray-400'}`}>
+                                      {isOpen ? 'Açık' : 'Kapalı'}
+                                    </span>
+                                    <button
+                                      onClick={() => handleToggle(period)}
+                                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                                        isOpen ? 'bg-status-approved' : 'bg-gray-300'
+                                      }`}
+                                    >
+                                      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                                        isOpen ? 'translate-x-4' : 'translate-x-1'
+                                      }`} />
+                                    </button>
+                                  </div>
+
+                                  {/* Edit & Delete Buttons */}
+                                  <button
+                                    onClick={() => openPeriodEditor(period)}
+                                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                                    title="Talebi Düzenle"
+                                  >
+                                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                  </button>
+                                  <button
+                                    onClick={() => setDeletePeriodId(period.id)}
+                                    className="p-1.5 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-600 transition-colors"
+                                    title="Talebi Sil"
+                                  >
+                                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          
+                          {/* Add New Request Button inside Semester */}
+                          <button
+                            onClick={() => {
+                              setAddPeriodForm({ type: '', startDate: '', endDate: '', grade: '', categoryIds: [] });
+                              setShowAddPeriod(true);
+                            }}
+                            className="w-full py-4 border-2 border-dashed border-gray-200 hover:border-primary-400 hover:bg-primary-50/20 rounded-2xl text-sm font-semibold text-gray-600 hover:text-primary-600 transition-all flex items-center justify-center gap-1.5 mt-2"
+                          >
+                            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Bu Döneme Yeni Belge Talebi Ekle
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
             </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
-      </>
-    )}
 
       {/* Create Semester Modal */}
       {showCreate && (
@@ -779,6 +894,198 @@ export default function PeriodsPage() {
                 Anladım
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Single Period Modal */}
+      {editPeriod && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-modal w-full max-w-lg">
+            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-lg text-gray-900">Evrak Talebini Düzenle</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {(docTypes.find(dt => dt.code === editPeriod.type)?.name) || editPeriod.type} belgesi için talebi güncelliyorsunuz.
+                </p>
+              </div>
+              <button onClick={() => setEditPeriod(null)} className="text-gray-400 hover:text-gray-600">
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form onSubmit={handleSavePeriod} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label mb-1">Başlangıç Tarihi</label>
+                  <input type="datetime-local" className="form-input text-sm p-2" value={editPeriodForm.startDate} onChange={e => setEditPeriodForm(f => ({...f, startDate: e.target.value}))} />
+                </div>
+                <div>
+                  <label className="form-label mb-1">Bitiş Tarihi</label>
+                  <input type="datetime-local" className="form-input text-sm p-2" value={editPeriodForm.endDate} onChange={e => setEditPeriodForm(f => ({...f, endDate: e.target.value}))} />
+                </div>
+                <div className="col-span-2">
+                  <label className="form-label mb-1">Sınıf Kısıtlaması (Boş bırakılırsa tüm sınıflar)</label>
+                  <input type="number" min="1" max="6" className="form-input text-sm p-2" value={editPeriodForm.grade} onChange={e => setEditPeriodForm(f => ({...f, grade: e.target.value === '' ? '' : Number(e.target.value)}))} placeholder="Örn: 1" />
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label mb-1.5 mt-2">Bursiyer Kategorileri Kısıtlaması</label>
+                <p className="text-[11px] text-gray-500 mb-2">
+                  Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse tüm kategorilerden istenir.
+                </p>
+                <div className="border border-gray-200 rounded-lg p-3 max-h-32 overflow-y-auto space-y-1">
+                  {activeCategories.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-2">Henüz aktif kategori bulunmuyor.</p>
+                  ) : (
+                    activeCategories.map(cat => (
+                      <label key={cat.id} className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-1.5 rounded-lg transition-colors">
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300 text-primary-500 focus:ring-primary-500 w-4 h-4"
+                          checked={editPeriodForm.categoryIds.includes(cat.id)}
+                          onChange={() => toggleEditPeriodCatId(cat.id)}
+                        />
+                        <span className="text-sm text-gray-700 font-medium">{cat.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-gray-100 mt-4">
+                <button type="button" onClick={() => setEditPeriod(null)} className="btn-secondary flex-1">İptal</button>
+                <button type="submit" className="btn-primary flex-1" disabled={savingPeriod}>
+                  {savingPeriod ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Kaydet'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Single Period Confirmation Modal */}
+      {deletePeriodId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden border border-red-100 animate-zoom-in">
+            <div className="px-6 py-4 border-b border-red-100 flex items-center justify-between bg-red-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-red-100 text-red-600 flex items-center justify-center">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-red-900">Evrak Talebini Kaldır</h3>
+              </div>
+              <button onClick={() => setDeletePeriodId(null)} className="text-red-400 hover:text-red-600 transition-colors">
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <div className="p-6">
+              <p className="text-sm text-gray-700 mb-4">
+                Bu belge talebini bu dönemden kaldırmak istediğinize emin misiniz? Öğrenciler artık bu dönem için bu belgeyi yükleyemeyecektir.
+              </p>
+              <p className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                <span className="font-semibold text-amber-600 block mb-1">DİKKAT:</span>
+                Eğer bu talebe ait öğrencilerin yüklediği onaylı/bekleyen belgeler varsa silme işlemine izin verilmeyecektir.
+              </p>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
+              <button onClick={() => setDeletePeriodId(null)} className="btn-secondary px-5">İptal</button>
+              <button onClick={handleDeletePeriod} className="btn-primary bg-red-600 hover:bg-red-700 focus:ring-red-500 px-5" disabled={deletingPeriod}>
+                {deletingPeriod ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Evet, Talebi Kaldır'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Document Request Modal */}
+      {showAddPeriod && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-modal w-full max-w-lg">
+            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-lg text-gray-900">Evrak Talebi Ekle</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  <strong>{selectedSemester}</strong> dönemine yeni bir belge toplama talebi ekleyin.
+                </p>
+              </div>
+              <button onClick={() => setShowAddPeriod(false)} className="text-gray-400 hover:text-gray-600">
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form onSubmit={handleAddPeriod} className="p-5 space-y-4">
+              <div>
+                <label className="form-label mb-1">Talep Edilecek Belge Türü</label>
+                <select
+                  className="form-select text-sm p-2"
+                  value={addPeriodForm.type}
+                  onChange={e => setAddPeriodForm(f => ({...f, type: e.target.value}))}
+                  required
+                >
+                  <option value="">Belge Türü Seçin</option>
+                  {docTypes
+                    .filter(t => t.isActive && !selectedSemesterPeriods.some(p => p.type === t.code))
+                    .map(t => (
+                      <option key={t.id} value={t.code}>{t.name}</option>
+                    ))}
+                </select>
+                {docTypes.filter(t => t.isActive && !selectedSemesterPeriods.some(p => p.type === t.code)).length === 0 && (
+                  <span className="text-[11px] text-amber-600 mt-1 block">
+                    ⚠️ Bu döneme eklenebilecek aktif başka bir belge türü bulunmuyor. Önce "Belge Türü Ayarları" sekmesinden yeni bir tür tanımlayın.
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label mb-1">Başlangıç Tarihi (Opsiyonel)</label>
+                  <input type="datetime-local" className="form-input text-sm p-2" value={addPeriodForm.startDate} onChange={e => setAddPeriodForm(f => ({...f, startDate: e.target.value}))} />
+                </div>
+                <div>
+                  <label className="form-label mb-1">Bitiş Tarihi (Opsiyonel)</label>
+                  <input type="datetime-local" className="form-input text-sm p-2" value={addPeriodForm.endDate} onChange={e => setAddPeriodForm(f => ({...f, endDate: e.target.value}))} />
+                </div>
+                <div className="col-span-2">
+                  <label className="form-label mb-1">Sınıf Kısıtlaması (Boş bırakılırsa tüm sınıflar)</label>
+                  <input type="number" min="1" max="6" className="form-input text-sm p-2" value={addPeriodForm.grade} onChange={e => setAddPeriodForm(f => ({...f, grade: e.target.value === '' ? '' : Number(e.target.value)}))} placeholder="Örn: 1" />
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label mb-1.5 mt-2">Bursiyer Kategorileri Kısıtlaması</label>
+                <p className="text-[11px] text-gray-500 mb-2">
+                  Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse tüm kategorilerden istenir.
+                </p>
+                <div className="border border-gray-200 rounded-lg p-3 max-h-32 overflow-y-auto space-y-1">
+                  {activeCategories.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-2">Henüz aktif kategori bulunmuyor.</p>
+                  ) : (
+                    activeCategories.map(cat => (
+                      <label key={cat.id} className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-1.5 rounded-lg transition-colors">
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300 text-primary-500 focus:ring-primary-500 w-4 h-4"
+                          checked={addPeriodForm.categoryIds.includes(cat.id)}
+                          onChange={() => toggleAddPeriodCatId(cat.id)}
+                        />
+                        <span className="text-sm text-gray-700 font-medium">{cat.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-gray-100 mt-4">
+                <button type="button" onClick={() => setShowAddPeriod(false)} className="btn-secondary flex-1">İptal</button>
+                <button type="submit" className="btn-primary flex-1" disabled={addingPeriod || docTypes.filter(t => t.isActive && !selectedSemesterPeriods.some(p => p.type === t.code)).length === 0}>
+                  {addingPeriod ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Talebi Ekle'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

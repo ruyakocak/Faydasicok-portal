@@ -92,8 +92,12 @@ export function PersonalTab({ profile, onSave, readOnly }: {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
-    if (isAdmin && editing) {
-      adminApi.listScholarshipCategories().then(setCategories).catch(console.error);
+    if (editing) {
+      if (isAdmin) {
+        adminApi.listScholarshipCategories().then(setCategories).catch(console.error);
+      } else {
+        studentApi.listScholarshipCategories().then(setCategories).catch(console.error);
+      }
     }
   }, [isAdmin, editing]);
 
@@ -149,7 +153,7 @@ export function PersonalTab({ profile, onSave, readOnly }: {
         <FieldRow label="Doğum Tarihi" value={profile.birthDate ? format(new Date(profile.birthDate), 'dd.MM.yyyy') : null}
           editing={editing} name="birthDate" type="date" onChange={handleChange} />
         <FieldRow label="Doğum Yeri" value={profile.birthPlace} editing={editing} name="birthPlace" onChange={handleChange} />
-        {isAdmin && editing ? (
+        {editing ? (
           <FieldRow 
             label="Bursiyer Kategorisi" 
             value={formData.scholarshipCategoryId || profile.scholarshipCategoryId || ''} 
@@ -157,12 +161,12 @@ export function PersonalTab({ profile, onSave, readOnly }: {
             name="scholarshipCategoryId" 
             onChange={handleChange}
             options={[
-              { value: '', label: 'Kategori Yok' },
+              { value: '', label: 'Seçiniz' },
               ...categories.map(c => ({ value: c.id, label: c.name }))
             ]}
           />
         ) : (
-          <FieldRow label="Bursiyer Kategorisi" value={profile.scholarshipCategory?.name || 'Kategori Yok'} />
+          <FieldRow label="Bursiyer Kategorisi" value={profile.scholarshipCategory?.name || 'Belirtilmemiş'} />
         )}
         {isAdmin ? (
           <FieldRow label="Kayıt Durumu" value={profile.studentStatus} editing={editing} name="studentStatus" onChange={handleChange}
@@ -183,7 +187,7 @@ export function PersonalTab({ profile, onSave, readOnly }: {
         </h4>
         <dl>
           <FieldRow label="Banka" value={profile.bankName} />
-          <FieldRow label="IBAN" value={profile.iban ? `TR***${profile.iban.slice(-4)}` : '—'} />
+          <FieldRow label="IBAN" value={profile.iban || '—'} />
         </dl>
         {!readOnly && (
           <BankInfoForm profileId={profile.id} />

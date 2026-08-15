@@ -13,6 +13,7 @@ import {
   updatePeriod,
   updateSemester,
   deleteSemester,
+  deletePeriod,
   listUsers,
   createUser,
   deleteUser,
@@ -55,6 +56,7 @@ adminRouter.get('/reports/students-export', requireAdminOrReviewer, exportStuden
 adminRouter.get('/periods', requireAdminOrReviewer, listPeriods);
 adminRouter.post('/periods', requireAdmin, createPeriod);
 adminRouter.patch('/periods/:id', requireAdmin, updatePeriod);
+adminRouter.delete('/periods/:id', requireAdmin, deletePeriod);
 
 adminRouter.patch('/semesters', requireAdmin, updateSemester);
 adminRouter.post('/semesters/delete', requireAdmin, deleteSemester);
@@ -82,3 +84,9 @@ adminRouter.get('/scholarship-categories', requireAdminOrReviewer, listScholarsh
 adminRouter.post('/scholarship-categories', requireAdmin, createScholarshipCategory);
 adminRouter.patch('/scholarship-categories/:id', requireAdmin, updateScholarshipCategory);
 adminRouter.delete('/scholarship-categories/:id', requireAdmin, deleteScholarshipCategory);
+
+// Settings - admin only
+import { getSmtpSettings, saveSmtpSettings, testSmtpSettings } from '../controllers/settings.controller';
+adminRouter.get('/settings/smtp', requireAdmin, getSmtpSettings);
+adminRouter.post('/settings/smtp', requireAdmin, saveSmtpSettings);
+adminRouter.post('/settings/smtp/test', requireAdmin, testSmtpSettings);

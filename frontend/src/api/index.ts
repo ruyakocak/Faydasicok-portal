@@ -45,7 +45,8 @@ export const studentApi = {
   updateBankInfo: (profileId: string, iban: string, bankName: string) =>
     api.patch(`/students/${profileId}/bank-info`, { iban, bankName }).then((r) => r.data),
 
-
+  listScholarshipCategories: (): Promise<import('../types').ScholarshipCategory[]> =>
+    api.get('/students/scholarship-categories').then((r) => r.data),
 
   uploadPhoto: (profileId: string, file: File) => {
     const fd = new FormData();
@@ -176,6 +177,9 @@ export const adminApi = {
   updatePeriod: (id: string, data: Omit<Partial<DocumentPeriod>, 'categoryIds'> & { categoryIds?: string[] }) =>
     api.patch(`/admin/periods/${id}`, data).then((r) => r.data),
 
+  deletePeriod: (id: string) =>
+    api.delete(`/admin/periods/${id}`).then((r) => r.data),
+
   updateSemester: (data: { oldLabel: string; label?: string; semester?: string; academicYear?: string; startDate?: string | null; endDate?: string | null; grade?: number | null; categoryIds?: string[] }) =>
     api.patch('/admin/semesters', data).then((r) => r.data),
 
@@ -233,6 +237,14 @@ export const adminApi = {
 
   deleteDocumentType: (id: string) =>
     api.delete(`/admin/document-types/${id}`).then((r) => r.data),
+
+  // Settings
+  getSmtpSettings: () =>
+    api.get('/admin/settings/smtp').then((r) => r.data),
+  saveSmtpSettings: (data: any) =>
+    api.post('/admin/settings/smtp', data).then((r) => r.data),
+  testSmtpSettings: (data: { to: string }) =>
+    api.post('/admin/settings/smtp/test', data).then((r) => r.data),
 };
 
 // ── Audit Logs ────────────────────────────────────────────────────────

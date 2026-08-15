@@ -23,6 +23,7 @@ import AuditLogPage from './pages/admin/AuditLogPage';
 import UsersPage from './pages/admin/UsersPage';
 import EventsPage from './pages/admin/EventsPage';
 import CategoriesPage from './pages/admin/CategoriesPage';
+import SettingsPage from './pages/admin/SettingsPage';
 
 function PrivateRoute({ children, roles }: { children: React.ReactNode; roles?: string[] }) {
   const { user } = useAuth();
@@ -84,6 +85,7 @@ export default function App() {
           <Route path="audit-logs" element={<AuditLogPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="categories" element={<CategoriesPage />} />
+          <Route path="settings" element={<SettingsPage />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 

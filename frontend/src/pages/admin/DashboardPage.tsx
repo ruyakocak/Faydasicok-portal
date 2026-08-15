@@ -33,16 +33,6 @@ function StatCard({ title, value, color, icon, to }: { title: string; value: num
   );
 }
 
-const actionLabels: Record<string, string> = {
-  CREATE: 'Oluşturuldu',
-  UPDATE: 'Güncellendi',
-  DELETE: 'Silindi',
-  APPROVE: 'Onaylandı',
-  REJECT: 'Reddedildi',
-  LOGIN: 'Giriş',
-  LOGOUT: 'Çıkış',
-  UPLOAD: 'Yüklendi',
-};
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardStats | null>(null);
@@ -144,40 +134,80 @@ export default function DashboardPage() {
               <p className="empty-state-desc">Henüz aktivite yok.</p>
             </div>
           ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Kullanıcı</th>
-                  <th>İşlem</th>
-                  <th>Modül</th>
-                  <th>Tarih</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.recentActivity.map((log) => (
-                  <tr key={log.id}>
-                    <td className="font-medium">
-                      {log.user?.username || log.user?.email || log.user?.tcKimlikNo || log.userId}
-                      <span className="ml-1 badge-gray text-xs">{log.user?.role}</span>
-                    </td>
-                    <td>
-                      <span className={`badge ${
-                        log.action === 'APPROVE' ? 'badge-approved' :
-                        log.action === 'REJECT' ? 'badge-rejected' :
-                        log.action === 'LOGIN' || log.action === 'LOGOUT' ? 'badge-gray' :
-                        'badge-pending'
-                      }`}>
-                        {actionLabels[log.action] || log.action}
-                      </span>
-                    </td>
-                    <td className="text-gray-600">{log.module}</td>
-                    <td className="text-gray-500 text-xs">
-                      {format(new Date(log.createdAt), 'dd MMM yyyy HH:mm', { locale: tr })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="divide-y divide-gray-100">
+              {data.recentActivity.map((log) => {
+                const isStudent = log.user?.role === 'STUDENT';
+                const studentName = isStudent && log.user?.studentProfile 
+                  ? `${log.user.studentProfile.firstName} ${log.user.studentProfile.lastName}`
+                  : log.user?.tcKimlikNo || log.user?.username || 'Bir kullanıcı';
+                
+                const adminName = !isStudent 
+                  ? (log.user?.username || log.user?.email || 'Sistem Yöneticisi') 
+                  : null;
+
+                let actionText = '';
+                let iconColor = '';
+                let IconSvg = null;
+
+                if (log.action === 'UPLOAD') {
+                  actionText = `${studentName}, sisteme yeni bir evrak yükledi.`;
+                  iconColor = 'bg-blue-100 text-blue-600';
+                  IconSvg = (
+                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                      <line x1="12" y1="18" x2="12" y2="12"></line>
+                      <line x1="9" y1="15" x2="15" y2="15"></line>
+                    </svg>
+                  );
+                } else if (log.action === 'APPROVE') {
+                  actionText = isStudent
+                    ? `${studentName} profili veya evrakı onaylandı.`
+                    : `${adminName} bir işlemi onayladı.`;
+                  iconColor = 'bg-green-100 text-green-600';
+                  IconSvg = (
+                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                      <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                  );
+                } else if (log.action === 'REJECT') {
+                  actionText = isStudent
+                    ? `${studentName} profili veya evrakı reddedildi.`
+                    : `${adminName} bir işlemi reddetti.`;
+                  iconColor = 'bg-red-100 text-red-600';
+                  IconSvg = (
+                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="15" y1="9" x2="9" y2="15"></line>
+                      <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
+                  );
+                } else {
+                  actionText = `${studentName || adminName} bir işlem gerçekleştirdi.`;
+                  iconColor = 'bg-gray-100 text-gray-600';
+                  IconSvg = <div className="w-2 h-2 rounded-full bg-gray-400" />;
+                }
+
+                return (
+                  <div key={log.id} className="p-4 hover:bg-gray-50 transition-colors flex items-start gap-4">
+                    <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${iconColor}`}>
+                      {IconSvg}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 leading-snug">
+                        {actionText}
+                      </p>
+                      <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                        <span className="font-medium text-gray-600">{log.module}</span>
+                        <span>•</span>
+                        <span>{format(new Date(log.createdAt), 'dd MMMM yyyy, HH:mm', { locale: tr })}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>

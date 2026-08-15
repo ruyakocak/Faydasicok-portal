@@ -62,15 +62,7 @@ export default function StudentsListPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function downloadTemplate() {
-    const blob = await adminApi.getCsvTemplate();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'bursiyer-sablonu.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+
 
   async function handleBulkUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

@@ -14,16 +14,7 @@ const actionLabels: Record<string, string> = {
   UPLOAD: 'Belge Yüklendi',
 };
 
-const actionColors: Record<string, string> = {
-  APPROVE: 'badge-approved',
-  REJECT: 'badge-rejected',
-  LOGIN: 'badge-gray',
-  LOGOUT: 'badge-gray',
-  UPLOAD: 'badge-primary',
-  CREATE: 'badge-primary',
-  UPDATE: 'badge-pending',
-  DELETE: 'badge-rejected',
-};
+
 
 const fieldTranslations: Record<string, string> = {
   isOpen: 'Durum',

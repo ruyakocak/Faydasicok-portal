@@ -19,11 +19,22 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
       prisma.approvableChange.count({ where: { status: 'PENDING' } }),
       prisma.documentPeriod.count({ where: { isOpen: true } }),
       prisma.auditLog.findMany({
-        where: { action: { in: ['APPROVE', 'REJECT', 'UPLOAD'] } },
+        where: { 
+          action: { in: ['APPROVE', 'REJECT', 'UPLOAD'] },
+          user: { role: 'STUDENT' }
+        },
         take: 15,
         orderBy: { createdAt: 'desc' },
         include: {
-          user: { select: { tcKimlikNo: true, email: true, username: true, role: true } },
+          user: { 
+            select: { 
+              tcKimlikNo: true, 
+              email: true, 
+              username: true, 
+              role: true,
+              studentProfile: { select: { firstName: true, lastName: true } }
+            } 
+          },
           approver: { select: { email: true, username: true } },
         },
       }),
@@ -590,6 +601,40 @@ export async function updateSemester(req: Request, res: Response, next: NextFunc
     });
 
     res.json({ message: 'Dönem bilgileri başarıyla güncellendi.', updatedCount });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deletePeriod(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+
+    // Check if any documents belong to this period
+    const documentCount = await prisma.document.count({
+      where: { periodId: id },
+    });
+
+    if (documentCount > 0) {
+      throw new AppError(400, 'Bu belge talebine yüklenmiş öğrenci belgeleri bulunmaktadır. Önce bu belgeleri silmeli veya talebi kapatmalısınız.');
+    }
+
+    const period = await prisma.documentPeriod.delete({
+      where: { id },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.DELETE,
+        module: 'DocumentPeriod',
+        entityId: period.id,
+        entityType: 'DocumentPeriod',
+        newValue: JSON.stringify({ deleted: true, label: period.label, type: period.type }),
+      },
+    });
+
+    res.json({ message: 'Belge talebi başarıyla kaldırıldı.' });
   } catch (err) {
     next(err);
   }

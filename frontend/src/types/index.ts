@@ -6,6 +6,10 @@ export interface User {
   email?: string;
   username?: string;
   forcePasswordChange?: boolean;
+  studentProfile?: {
+    firstName: string;
+    lastName: string;
+  };
 }
 
 export interface ScholarshipCategory {

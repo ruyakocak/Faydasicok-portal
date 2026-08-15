@@ -19,6 +19,14 @@ export default function StudentProfilePage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [docTypes, setDocTypes] = useState<any[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [readPeriodIds, setReadPeriodIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('read_periods');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Slider & Calendar states
   const [slideIndex, setSlideIndex] = useState(0);
@@ -92,6 +100,8 @@ export default function StudentProfilePage() {
     const isUploaded = documents.some(d => d.periodId === p.id && d.status !== 'REJECTED');
     return !isUploaded;
   });
+
+  const unreadDeadlines = activeDeadlines.filter(p => !readPeriodIds.includes(p.id));
 
   return (
     <div className="animate-fade-in">
@@ -361,15 +371,24 @@ export default function StudentProfilePage() {
                   {/* Notifications Bell */}
                   <div className="relative">
                     <button 
-                      onClick={() => setIsNotificationsOpen(!isNotificationsOpen)} 
+                      onClick={() => {
+                        const nextState = !isNotificationsOpen;
+                        setIsNotificationsOpen(nextState);
+                        if (nextState) {
+                          const newReadIds = activeDeadlines.map(p => p.id);
+                          const merged = Array.from(new Set([...readPeriodIds, ...newReadIds]));
+                          setReadPeriodIds(merged);
+                          localStorage.setItem('read_periods', JSON.stringify(merged));
+                        }
+                      }} 
                       className="p-2 rounded-full hover:bg-gray-100 transition-colors relative text-gray-600 hover:text-gray-900"
                     >
                       <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                       </svg>
-                      {activeDeadlines.length > 0 && (
-                        <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center font-bold border-2 border-white">
-                          {activeDeadlines.length}
+                      {unreadDeadlines.length > 0 && (
+                        <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center font-bold border-2 border-white animate-pulse">
+                          {unreadDeadlines.length}
                         </span>
                       )}
                     </button>
@@ -378,7 +397,7 @@ export default function StudentProfilePage() {
                       <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-100 rounded-xl shadow-lg z-50 overflow-hidden animate-fade-in">
                         <div className="p-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                           <h3 className="font-semibold text-gray-800 text-sm">Bildirimler</h3>
-                          <span className="text-xs text-gray-500">{activeDeadlines.length} yeni bildirim</span>
+                          <span className="text-xs text-gray-500">{activeDeadlines.length} aktif süreç</span>
                         </div>
                         <div className="max-h-80 overflow-y-auto">
                           {activeDeadlines.length === 0 ? (
