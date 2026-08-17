@@ -8,6 +8,7 @@ import {
   updateContactInfo,
   uploadProfilePhoto,
   getStudentDocuments,
+  getAnnouncements,
 } from '../controllers/student.controller';
 import { authenticate, requireStudent, requireAdminOrReviewer } from '../middleware/auth.middleware';
 import { upload } from '../middleware/upload.middleware';
@@ -24,6 +25,7 @@ studentRouter.get('/scholarship-categories', listScholarshipCategories);
 // Student can access their own profile; admin/reviewer can access any
 studentRouter.get('/:id/profile', getStudentProfile);
 studentRouter.get('/:id/documents', getStudentDocuments);
+studentRouter.get('/:id/announcements', getAnnouncements);
 
 // Only students can submit changes to their own profile
 studentRouter.patch('/:id/contact', updateContactInfo);

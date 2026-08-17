@@ -2,15 +2,16 @@ import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { ApprovableEntityType, AuditAction } from '../types/enums';
+import { sendDocumentApprovedEmail, sendDocumentRejectedEmail } from '../lib/email.service';
 
-// ── Get Approval Queue ────────────────────────────────────────────────
 export async function getApprovalQueue(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { status = 'PENDING', entityType, documentType, periodLabel, page = '1', limit = '20', studentId, categoryId } = req.query;
+    const { status = 'ALL', entityType, documentType, periodLabel, page = '1', limit = '20', studentId, categoryId } = req.query;
 
-    const where: any = {
-      status: status as string,
-    };
+    const where: any = {};
+    if (status !== 'ALL') {
+      where.status = status as string;
+    }
 
     if (entityType) where.entityType = entityType;
     if (documentType || periodLabel) {
@@ -142,6 +143,36 @@ export async function approveChange(req: Request, res: Response, next: NextFunct
     });
 
     res.json({ message: 'Değişiklik onaylandı.' });
+
+    // Send email notification if a document was approved (fire-and-forget)
+    if (change.entityType === ApprovableEntityType.DOCUMENT && change.documentId) {
+      (async () => {
+        try {
+          const doc = await prisma.document.findUnique({
+            where: { id: change.documentId! },
+            include: {
+              studentProfile: {
+                select: {
+                  firstName: true,
+                  user: { select: { email: true } },
+                },
+              },
+              period: { select: { label: true } },
+            },
+          });
+          if (doc?.studentProfile?.user?.email) {
+            await sendDocumentApprovedEmail({
+              to: doc.studentProfile.user.email,
+              firstName: doc.studentProfile.firstName,
+              documentType: doc.type,
+              periodLabel: doc.period?.label,
+            });
+          }
+        } catch (e) {
+          console.error('[Email] Approve document email error:', e);
+        }
+      })();
+    }
   } catch (err) {
     next(err);
   }
@@ -192,6 +223,37 @@ export async function rejectChange(req: Request, res: Response, next: NextFuncti
     });
 
     res.json({ message: 'Değişiklik reddedildi.' });
+
+    // Send email notification if a document was rejected (fire-and-forget)
+    if (change.entityType === ApprovableEntityType.DOCUMENT && change.documentId) {
+      (async () => {
+        try {
+          const doc = await prisma.document.findUnique({
+            where: { id: change.documentId! },
+            include: {
+              studentProfile: {
+                select: {
+                  firstName: true,
+                  user: { select: { email: true } },
+                },
+              },
+              period: { select: { label: true } },
+            },
+          });
+          if (doc?.studentProfile?.user?.email) {
+            await sendDocumentRejectedEmail({
+              to: doc.studentProfile.user.email,
+              firstName: doc.studentProfile.firstName,
+              documentType: doc.type,
+              periodLabel: doc.period?.label,
+              rejectionNote,
+            });
+          }
+        } catch (e) {
+          console.error('[Email] Reject document email error:', e);
+        }
+      })();
+    }
   } catch (err) {
     next(err);
   }

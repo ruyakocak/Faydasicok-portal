@@ -89,6 +89,8 @@ export function PersonalTab({ profile, onSave, readOnly }: {
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<StudentProfile>>({});
   const [saving, setSaving] = useState(false);
+  const [contactFormOpen, setContactFormOpen] = useState(false);
+  const [bankFormOpen, setBankFormOpen] = useState(false);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
@@ -177,30 +179,58 @@ export function PersonalTab({ profile, onSave, readOnly }: {
         <FieldRow label="Öğrenci Durumu" value={enrollmentStatusLabels[profile.enrollmentStatus] || profile.enrollmentStatus} />
       </dl>
 
+      {/* Contact Info Card */}
+      <div className="mt-6 border border-gray-200 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-medium text-gray-900 flex items-center gap-2">
+            <svg viewBox="0 0 24 24" className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.4 19.79 19.79 0 0 1 1.61 4.74 2 2 0 0 1 3.6 2.54h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.1a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7a2 2 0 0 1 1.72 2.03z"/>
+            </svg>
+            İletişim Bilgileri
+          </h4>
+          {!readOnly && !contactFormOpen && (
+            <button onClick={() => setContactFormOpen(true)} className="btn-secondary btn-sm">İletişim Bilgilerini Düzenle</button>
+          )}
+        </div>
+        {!contactFormOpen ? (
+          <dl>
+            <FieldRow label="E-posta" value={profile.email || profile.user?.email} />
+            <FieldRow label="Telefon" value={profile.phone} />
+            <FieldRow label="Adres" value={profile.address} />
+          </dl>
+        ) : (
+          <ContactInfoForm profile={profile} onClose={() => setContactFormOpen(false)} />
+        )}
+      </div>
+
       {/* Bank Info Card */}
       <div className="mt-6 border border-gray-200 rounded-lg p-4">
-        <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
-          <svg viewBox="0 0 24 24" className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-          </svg>
-          Banka Bilgisi
-        </h4>
-        <dl>
-          <FieldRow label="Banka" value={profile.bankName} />
-          <FieldRow label="IBAN" value={profile.iban || '—'} />
-        </dl>
-        {!readOnly && (
-          <BankInfoForm profileId={profile.id} />
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-medium text-gray-900 flex items-center gap-2">
+            <svg viewBox="0 0 24 24" className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+            </svg>
+            Banka Bilgisi
+          </h4>
+          {!readOnly && !bankFormOpen && (
+            <button onClick={() => setBankFormOpen(true)} className="btn-secondary btn-sm">Banka Bilgisini Güncelle</button>
+          )}
+        </div>
+        {!bankFormOpen ? (
+          <dl>
+            <FieldRow label="Banka" value={profile.bankName} />
+            <FieldRow label="IBAN" value={profile.iban || '—'} />
+          </dl>
+        ) : (
+          <BankInfoForm profile={profile} onClose={() => setBankFormOpen(false)} />
         )}
       </div>
     </div>
   );
 }
 
-function BankInfoForm({ profileId }: { profileId: string }) {
-  const [open, setOpen] = useState(false);
-  const [iban, setIban] = useState('');
-  const [bankName, setBankName] = useState('');
+function ContactInfoForm({ profile, onClose }: { profile: StudentProfile; onClose: () => void }) {
+  const [form, setForm] = useState({ phone: profile.phone || '', email: profile.email || profile.user?.email || '', address: profile.address || '' });
   const [saving, setSaving] = useState(false);
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'REVIEWER';
@@ -210,24 +240,70 @@ function BankInfoForm({ profileId }: { profileId: string }) {
     setSaving(true);
     try {
       if (isAdmin) {
-        // Admin updates directly
-        await adminApi.updateStudentProfile(profileId, { iban, bankName });
-        toast.success('Banka bilgisi güncellendi.');
-        // Notify parent to reload (if possible, else they can just refresh)
-        window.location.reload(); 
+        await adminApi.updateStudentProfile(profile.id, form);
+        toast.success('İletişim bilgileri güncellendi.');
+        window.location.reload();
       } else {
-        // Student goes through approval
-        await studentApi.updateBankInfo(profileId, iban, bankName);
-        toast.success('Banka bilgisi güncelleme talebi gönderildi.');
+        await studentApi.updateContact(profile.id, form);
+        toast.success('İletişim bilgileri güncellendi.');
+        window.location.reload();
       }
-      setOpen(false);
     } finally {
       setSaving(false);
     }
   }
 
-  return open ? (
-    <form onSubmit={handleSave} className="mt-3 space-y-3 border-t border-gray-200 pt-3">
+  return (
+    <form onSubmit={handleSave} className="space-y-3">
+      <div>
+        <label className="form-label">E-posta</label>
+        <input type="email" className="form-input" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+      </div>
+      <div>
+        <label className="form-label">Telefon</label>
+        <input className="form-input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+      </div>
+      <div>
+        <label className="form-label">Adres</label>
+        <textarea className="form-textarea" rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
+      </div>
+      <div className="flex gap-2 pt-2">
+        <button type="button" onClick={onClose} className="btn-secondary btn-sm flex-1">İptal</button>
+        <button type="submit" className="btn-primary btn-sm flex-1" disabled={saving}>
+          {saving ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Kaydet'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function BankInfoForm({ profile, onClose }: { profile: StudentProfile; onClose: () => void }) {
+  const [iban, setIban] = useState(profile.iban || '');
+  const [bankName, setBankName] = useState(profile.bankName || '');
+  const [saving, setSaving] = useState(false);
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'REVIEWER';
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      if (isAdmin) {
+        await adminApi.updateStudentProfile(profile.id, { iban, bankName });
+        toast.success('Banka bilgisi güncellendi.');
+        window.location.reload(); 
+      } else {
+        await studentApi.updateBankInfo(profile.id, iban, bankName);
+        toast.success('Banka bilgisi güncelleme talebi gönderildi.');
+        onClose();
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSave} className="space-y-3">
       {!isAdmin && (
         <div className="text-xs text-status-pending-text bg-status-pending-bg rounded p-2">
           Banka bilgisi değişikliği her zaman admin onayına gönderilir.
@@ -243,15 +319,13 @@ function BankInfoForm({ profileId }: { profileId: string }) {
           <input className="form-input font-mono" placeholder="TR00 0000 0000 0000 0000 0000 00" value={iban} onChange={e => setIban(e.target.value)} required />
         </div>
       </div>
-      <div className="flex gap-2">
-        <button type="button" onClick={() => setOpen(false)} className="btn-secondary btn-sm">İptal</button>
+      <div className="flex gap-2 pt-2">
+        <button type="button" onClick={onClose} className="btn-secondary btn-sm">İptal</button>
         <button type="submit" className="btn-primary btn-sm" disabled={saving}>
           {saving ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Güncelleme Talebi Gönder'}
         </button>
       </div>
     </form>
-  ) : (
-    <button onClick={() => setOpen(true)} className="btn-secondary btn-sm mt-3">Banka Bilgisini Güncelle</button>
   );
 }
 

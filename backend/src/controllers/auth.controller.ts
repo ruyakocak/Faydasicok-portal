@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { prisma } from '../lib/prisma';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jwt';
 import { AppError } from '../middleware/errorHandler';
-import { sendEmail, buildPasswordResetEmail } from '../lib/email';
+import { sendPasswordResetEmail } from '../lib/email.service';
 import { AuditAction, Role } from '../types/enums';
 
 const BCRYPT_ROUNDS = 12;
@@ -27,13 +27,16 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
           { email: identifier },
           { username: identifier },
         ],
-        isActive: true,
       },
       include: { studentProfile: { select: { id: true } } },
     });
 
     if (!user) {
       throw new AppError(401, 'Kullanıcı adı veya şifre hatalı.');
+    }
+
+    if (!user.isActive) {
+      throw new AppError(403, 'Hesabınız pasif durumdadır. Sisteme giriş yapamazsınız.');
     }
 
     const passwordMatch = await bcrypt.compare(password, user.passwordHash);
@@ -173,10 +176,9 @@ export async function forgotPassword(req: Request, res: Response, next: NextFunc
       });
 
       const resetLink = `${process.env.FRONTEND_URL}/reset-password/${token}`;
-      await sendEmail({
+      await sendPasswordResetEmail({
         to: email,
-        subject: 'Faydasıçok Vakfı — Şifre Sıfırlama',
-        html: buildPasswordResetEmail(resetLink),
+        resetLink,
       });
     }
 

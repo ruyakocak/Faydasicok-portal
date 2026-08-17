@@ -4,6 +4,7 @@ import { adminApi } from '../../api';
 import type { DashboardStats } from '../../types';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { generateActionSummary, moduleLabels } from '../../utils/audit';
 
 function StatCard({ title, value, color, icon, to }: { title: string; value: number; color: string; icon: React.ReactNode; to?: string }) {
   const content = (
@@ -135,22 +136,11 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
-              {data.recentActivity.map((log) => {
-                const isStudent = log.user?.role === 'STUDENT';
-                const studentName = isStudent && log.user?.studentProfile 
-                  ? `${log.user.studentProfile.firstName} ${log.user.studentProfile.lastName}`
-                  : log.user?.tcKimlikNo || log.user?.username || 'Bir kullanıcı';
-                
-                const adminName = !isStudent 
-                  ? (log.user?.username || log.user?.email || 'Sistem Yöneticisi') 
-                  : null;
-
-                let actionText = '';
+              {data.recentActivity.slice(0, 5).map((log) => {
                 let iconColor = '';
                 let IconSvg = null;
 
                 if (log.action === 'UPLOAD') {
-                  actionText = `${studentName}, sisteme yeni bir evrak yükledi.`;
                   iconColor = 'bg-blue-100 text-blue-600';
                   IconSvg = (
                     <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -161,9 +151,6 @@ export default function DashboardPage() {
                     </svg>
                   );
                 } else if (log.action === 'APPROVE') {
-                  actionText = isStudent
-                    ? `${studentName} profili veya evrakı onaylandı.`
-                    : `${adminName} bir işlemi onayladı.`;
                   iconColor = 'bg-green-100 text-green-600';
                   IconSvg = (
                     <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -172,9 +159,6 @@ export default function DashboardPage() {
                     </svg>
                   );
                 } else if (log.action === 'REJECT') {
-                  actionText = isStudent
-                    ? `${studentName} profili veya evrakı reddedildi.`
-                    : `${adminName} bir işlemi reddetti.`;
                   iconColor = 'bg-red-100 text-red-600';
                   IconSvg = (
                     <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -184,10 +168,12 @@ export default function DashboardPage() {
                     </svg>
                   );
                 } else {
-                  actionText = `${studentName || adminName} bir işlem gerçekleştirdi.`;
                   iconColor = 'bg-gray-100 text-gray-600';
                   IconSvg = <div className="w-2 h-2 rounded-full bg-gray-400" />;
                 }
+
+                const actionText = generateActionSummary(log);
+                const moduleName = moduleLabels[log.module] || log.module;
 
                 return (
                   <div key={log.id} className="p-4 hover:bg-gray-50 transition-colors flex items-start gap-4">
@@ -199,7 +185,7 @@ export default function DashboardPage() {
                         {actionText}
                       </p>
                       <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
-                        <span className="font-medium text-gray-600">{log.module}</span>
+                        <span className="font-medium text-gray-600">{moduleName}</span>
                         <span>•</span>
                         <span>{format(new Date(log.createdAt), 'dd MMMM yyyy, HH:mm', { locale: tr })}</span>
                       </div>

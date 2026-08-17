@@ -17,6 +17,7 @@ import {
   listUsers,
   createUser,
   deleteUser,
+  updateUser,
   resetStudentPassword,
   listMentors,
   createMentor,
@@ -32,6 +33,10 @@ import {
   createScholarshipCategory,
   updateScholarshipCategory,
   deleteScholarshipCategory,
+  listAnnouncements,
+  createAnnouncement,
+  updateAnnouncement,
+  deleteAnnouncement,
 } from '../controllers/admin.controller';
 import { upload } from '../middleware/upload.middleware';
 import multer from 'multer';
@@ -70,6 +75,7 @@ adminRouter.delete('/document-types/:id', requireAdmin, deleteDocumentType);
 // Users — admin only
 adminRouter.get('/users', requireAdmin, listUsers);
 adminRouter.post('/users', requireAdmin, createUser);
+adminRouter.patch('/users/:id', requireAdmin, updateUser);
 adminRouter.delete('/users/:id', requireAdmin, deleteUser);
 
 // Mentors
@@ -90,3 +96,8 @@ import { getSmtpSettings, saveSmtpSettings, testSmtpSettings } from '../controll
 adminRouter.get('/settings/smtp', requireAdmin, getSmtpSettings);
 adminRouter.post('/settings/smtp', requireAdmin, saveSmtpSettings);
 adminRouter.post('/settings/smtp/test', requireAdmin, testSmtpSettings);
+// Announcements
+adminRouter.get('/announcements', requireAdminOrReviewer, listAnnouncements);
+adminRouter.post('/announcements', requireAdmin, createAnnouncement);
+adminRouter.patch('/announcements/:id', requireAdmin, updateAnnouncement);
+adminRouter.delete('/announcements/:id', requireAdmin, deleteAnnouncement);

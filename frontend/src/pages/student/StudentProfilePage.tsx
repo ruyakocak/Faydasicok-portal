@@ -3,8 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { studentApi, documentApi, eventApi } from '../../api';
 import type { StudentProfile, Document as DocFile, DocumentPeriod, Event } from '../../types';
 import { PersonalTab, EducationTab, DocumentsTab } from '../../components/ProfileTabs';
-import toast from 'react-hot-toast';
-import { format } from 'date-fns';
+import { format, isToday } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 const TABS = ['Kişisel Bilgiler', 'Eğitim Bilgileri', 'Dokümanlar'];
@@ -108,7 +107,11 @@ export default function StudentProfilePage() {
       {/* Top Banner (removed for current scholars) */}
       {/* Events & Calendar Widget */}
       {(() => {
-        if (events.length === 0) return null;
+        const eventsToday = events.filter(e => isToday(new Date(e.date)));
+
+        if (eventsToday.length === 0) {
+          return null;
+        }
         
         // Calendar days calculation
         const year = calendarDate.getFullYear();
@@ -126,7 +129,7 @@ export default function StudentProfilePage() {
           calendarDays.push(i);
         }
 
-        const currentEvent = events[slideIndex] || events[0];
+        const currentEvent = eventsToday[slideIndex] || eventsToday[0];
 
         return (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -138,16 +141,16 @@ export default function StudentProfilePage() {
                   <span className="w-2 h-2 rounded-full bg-status-approved animate-pulse" />
                   Yaklaşan Eğitim ve Etkinlikler
                 </h2>
-                {events.length > 1 && (
+                {eventsToday.length > 1 && (
                   <div className="flex gap-1.5">
                     <button
-                      onClick={() => setSlideIndex(prev => (prev === 0 ? events.length - 1 : prev - 1))}
+                      onClick={() => setSlideIndex(prev => (prev === 0 ? eventsToday.length - 1 : prev - 1))}
                       className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition-colors"
                     >
                       <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
                     </button>
                     <button
-                      onClick={() => setSlideIndex(prev => (prev === events.length - 1 ? 0 : prev + 1))}
+                      onClick={() => setSlideIndex(prev => (prev === eventsToday.length - 1 ? 0 : prev + 1))}
                       className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition-colors"
                     >
                       <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
@@ -455,10 +458,10 @@ export default function StudentProfilePage() {
                     {profile.phone}
                   </div>
                 )}
-                {profile.email && (
+                {(profile.email || profile.user?.email) && (
                   <div className="flex items-center gap-1.5 text-sm text-gray-600">
                     <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                    {profile.email}
+                    {profile.email || profile.user?.email}
                   </div>
                 )}
                 {profile.address && (
@@ -467,11 +470,6 @@ export default function StudentProfilePage() {
                     {profile.address}
                   </div>
                 )}
-              </div>
-
-              {/* Contact edit */}
-              <div className="mt-3">
-                <ContactEditButton profile={profile} onSaved={loadAll} />
               </div>
             </div>
           </div>
@@ -596,60 +594,4 @@ export default function StudentProfilePage() {
   );
 }
 
-function ContactEditButton({ profile, onSaved }: { profile: StudentProfile; onSaved: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ phone: profile.phone || '', email: profile.email || '', address: profile.address || '' });
-  const [saving, setSaving] = useState(false);
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await studentApi.updateContact(profile.id, form);
-      toast.success('İletişim bilgileri güncellendi.');
-      setOpen(false);
-      onSaved();
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)} className="btn-secondary btn-sm">
-        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        İletişim Bilgilerini Düzenle
-      </button>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-modal w-full max-w-sm">
-        <div className="p-5 border-b border-gray-200">
-          <h3 className="font-semibold">İletişim Bilgilerini Güncelle</h3>
-        </div>
-        <form onSubmit={handleSave} className="p-5 space-y-4">
-          <div>
-            <label className="form-label">Telefon</label>
-            <input className="form-input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
-          </div>
-          <div>
-            <label className="form-label">E-posta</label>
-            <input type="email" className="form-input" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-          </div>
-          <div>
-            <label className="form-label">Adres</label>
-            <textarea className="form-textarea" rows={2} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
-          </div>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setOpen(false)} className="btn-secondary flex-1">İptal</button>
-            <button type="submit" className="btn-primary flex-1" disabled={saving}>
-              {saving ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Kaydet'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}

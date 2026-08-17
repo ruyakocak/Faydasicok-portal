@@ -24,8 +24,10 @@ export default function LoginPage() {
       }
       toast.success('Hoş geldiniz!');
     } catch (err: any) {
-      const msg = err.response?.data?.error || 'Kullanıcı adı veya şifre hatalı.';
-      toast.error(msg);
+      if (err.response) {
+        const msg = err.response.data?.error || 'Kullanıcı adı veya şifre hatalı.';
+        toast.error(msg);
+      }
     }
   }
 

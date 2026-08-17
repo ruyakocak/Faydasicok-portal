@@ -316,6 +316,7 @@ model Event {
   date        DateTime
   meetingUrl  String?
   imagePath   String?
+  categoryIds String?  // JSON array of scholarship category IDs, null means all students
   createdAt   DateTime @default(now())
 
   @@map("events")
@@ -372,4 +373,20 @@ model SystemSetting {
   updatedAt DateTime @updatedAt
 
   @@map("system_settings")
+}
+
+// ─────────────────────────────────────────────
+// ANNOUNCEMENTS
+// ─────────────────────────────────────────────
+
+model Announcement {
+  id          String   @id @default(cuid())
+  title       String
+  content     String
+  categoryIds String?  // JSON array of scholarship category IDs, null means all students
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("announcements")
 }

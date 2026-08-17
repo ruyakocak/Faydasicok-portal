@@ -64,19 +64,6 @@ export default function StudentsListPage() {
 
 
 
-  async function handleBulkUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const blob = await adminApi.bulkCreate(file);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `bursiyer-sonuc-${Date.now()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    load();
-  }
-
   async function handleBulkPasteCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!pastedTcs.trim()) {
@@ -203,11 +190,7 @@ export default function StudentsListPage() {
             <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
             Toplu TC Yapıştır
           </button>
-          <label className="btn-primary btn-sm cursor-pointer">
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-            Toplu Yükle
-            <input type="file" accept=".csv" className="sr-only" onChange={handleBulkUpload} />
-          </label>
+
         </div>
       </div>
 

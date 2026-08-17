@@ -2,96 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { auditApi } from '../../api';
 import type { AuditLog, PaginatedResponse } from '../../types';
 import { format } from 'date-fns';
-
-const actionLabels: Record<string, string> = {
-  CREATE: 'Oluşturuldu',
-  UPDATE: 'Güncellendi',
-  DELETE: 'Silindi',
-  APPROVE: 'Onaylandı',
-  REJECT: 'Reddedildi',
-  LOGIN: 'Giriş',
-  LOGOUT: 'Çıkış',
-  UPLOAD: 'Belge Yüklendi',
-};
-
-
-
-const fieldTranslations: Record<string, string> = {
-  isOpen: 'Durum',
-  label: 'Dönem Adı',
-  semester: 'Yarıyıl',
-  academicYear: 'Akademik Yıl',
-  startDate: 'Başlangıç Tarihi',
-  endDate: 'Bitiş Tarihi',
-  grade: 'Sınıf',
-  categoryIds: 'Kategoriler',
-  deleted: 'Silindi',
-  count: 'Kayıt Sayısı',
-  name: 'Kategori Adı',
-  description: 'Açıklama',
-  isActive: 'Aktiflik Durumu',
-  raw: 'Değer',
-};
-
-function tryParseJSON(val: string | null | undefined) {
-  if (!val) return null;
-  try {
-    const p = JSON.parse(val);
-    return typeof p === 'object' && p !== null ? p : { raw: p };
-  } catch {
-    return { raw: val };
-  }
-}
-
-function formatValue(key: string, val: any) {
-  if (val === undefined || val === null || val === '') return '—';
-  if (key === 'isOpen' || key === 'isActive') return val ? 'Açık / Aktif' : 'Kapalı / Pasif';
-  if (typeof val === 'boolean') return val ? 'Evet' : 'Hayır';
-  if (Array.isArray(val)) return val.join(', ');
-  return String(val);
-}
-
-function generateActionSummary(log: AuditLog) {
-  const newVal = tryParseJSON(log.newValue);
-  
-  if (log.module === 'DocumentPeriod') {
-    if (log.action === 'CREATE') return `Yeni dönem oluşturuldu${newVal?.label ? ` (${newVal.label})` : ''}`;
-    if (log.action === 'UPDATE') {
-      if (newVal?.isOpen === true) return 'Dönem erişime açıldı';
-      if (newVal?.isOpen === false) return 'Dönem erişime kapatıldı';
-      return 'Dönem bilgileri güncellendi';
-    }
-  }
-  
-  if (log.module === 'Semester') {
-    if (log.action === 'UPDATE') return 'Dönem grubu (Semester) güncellendi';
-    if (log.action === 'DELETE') return 'Dönem grubu silindi';
-  }
-
-  if (log.module === 'Auth' || log.module === 'User') {
-    if (log.action === 'LOGIN') return 'Sisteme giriş yapıldı';
-    if (log.newValue?.includes('Password')) return 'Kullanıcı şifresi değiştirildi';
-  }
-  
-  if (log.module === 'Student' || log.module === 'StudentProfile') {
-    if (log.action === 'CREATE') return 'Öğrenci hesabı oluşturuldu';
-    if (log.action === 'UPDATE') {
-      if (log.newValue === 'Photo Updated') return 'Öğrenci fotoğrafı güncellendi';
-      return 'Öğrenci profili güncellendi';
-    }
-  }
-  
-  if (log.module === 'Document' || log.action === 'UPLOAD') {
-    return 'Öğrenci tarafından yeni belge yüklendi';
-  }
-  
-  if (log.module === 'DOCUMENT' || log.module === 'ApprovableChange') {
-    if (log.action === 'APPROVE') return 'Belge / Değişiklik onaylandı';
-    if (log.action === 'REJECT') return 'Belge / Değişiklik reddedildi';
-  }
-
-  return `${actionLabels[log.action] || log.action} (${log.module})`;
-}
+import { Link } from 'react-router-dom';
+import { generateActionSummary, tryParseJSON, fieldTranslations, formatValue, actionLabels } from '../../utils/audit';
 
 export default function AuditLogPage() {
   const [result, setResult] = useState<PaginatedResponse<AuditLog> | null>(null);
@@ -274,7 +186,15 @@ export default function AuditLogPage() {
                       {format(new Date(log.createdAt), 'dd.MM.yy HH:mm:ss')}
                     </td>
                     <td className="text-sm font-medium">
-                      {log.user?.username || log.user?.email || log.user?.tcKimlikNo || log.userId}
+                      {log.user?.role === 'STUDENT' && log.user?.studentProfile?.id ? (
+                        <Link to={`/admin/students/${log.user.studentProfile.id}`} className="text-gray-900 hover:underline">
+                          {log.user.studentProfile.firstName 
+                            ? `${log.user.studentProfile.firstName} ${log.user.studentProfile.lastName}`
+                            : log.user.tcKimlikNo || log.userId}
+                        </Link>
+                      ) : (
+                        log.user?.username || log.user?.email || log.user?.tcKimlikNo || log.userId
+                      )}
                     </td>
                     <td>
                       <span className="badge-gray text-xs">{log.user?.role}</span>

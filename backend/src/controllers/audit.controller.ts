@@ -40,7 +40,16 @@ export async function getAuditLogs(req: Request, res: Response, next: NextFuncti
       prisma.auditLog.findMany({
         where,
         include: {
-          user: { select: { id: true, tcKimlikNo: true, email: true, username: true, role: true } },
+          user: { 
+            select: { 
+              id: true, 
+              tcKimlikNo: true, 
+              email: true, 
+              username: true, 
+              role: true,
+              studentProfile: { select: { id: true, firstName: true, lastName: true } }
+            } 
+          },
           approver: { select: { id: true, email: true, username: true } },
         },
         orderBy: { createdAt: 'desc' },

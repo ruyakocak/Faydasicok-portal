@@ -25,7 +25,7 @@ export default function ApprovalQueuePage() {
   const [result, setResult] = useState<PaginatedResponse<ApprovableChange> | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'PENDING');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'ALL');
   const [entityFilter, setEntityFilter] = useState(searchParams.get('entity') || '');
   const [periodFilter, setPeriodFilter] = useState(searchParams.get('periodLabel') || '');
   const [categoryFilter, setCategoryFilter] = useState(searchParams.get('category') || '');
@@ -85,7 +85,7 @@ export default function ApprovalQueuePage() {
   // Update URL when filters change
   useEffect(() => {
     const newParams = new URLSearchParams();
-    if (statusFilter !== 'PENDING') newParams.set('status', statusFilter);
+    if (statusFilter !== 'ALL') newParams.set('status', statusFilter);
     if (entityFilter) newParams.set('entity', entityFilter);
     if (periodFilter) newParams.set('periodLabel', periodFilter);
     if (categoryFilter) newParams.set('category', categoryFilter);
@@ -149,6 +149,7 @@ export default function ApprovalQueuePage() {
             value={statusFilter}
             onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
           >
+            <option value="ALL">Tümü</option>
             <option value="PENDING">Onay Bekliyor</option>
             <option value="APPROVED">Onaylananlar</option>
             <option value="REJECTED">Reddedilenler</option>
@@ -305,10 +306,14 @@ export default function ApprovalQueuePage() {
                       </td>
                     )}
                     {statusFilter !== 'PENDING' && (
-                      <td>
-                        <span className={`badge ${change.status === 'APPROVED' ? 'badge-approved' : 'badge-rejected'}`}>
-                          {change.status === 'APPROVED' ? 'Onaylandı' : 'Reddedildi'}
-                        </span>
+                      <td className="w-32 pr-6">
+                        {change.status === 'PENDING' ? (
+                          <span className="badge badge-gray text-yellow-700 bg-yellow-50">Onay Bekliyor</span>
+                        ) : (
+                          <span className={`badge ${change.status === 'APPROVED' ? 'badge-approved' : 'badge-gray text-red-700 bg-red-50'}`}>
+                            {change.status === 'APPROVED' ? 'Onaylandı' : 'Reddedildi'}
+                          </span>
+                        )}
                         {change.reviewNote && <div className="text-xs text-gray-400 mt-0.5">{change.reviewNote}</div>}
                       </td>
                     )}

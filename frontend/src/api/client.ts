@@ -60,7 +60,10 @@ api.interceptors.response.use(
 
     // Display error toast for non-401 errors
     if (error.response?.status !== 401) {
-      const msg = error.response?.data?.error || 'Bir hata oluştu.';
+      const isNetworkError = !error.response;
+      const msg = isNetworkError 
+        ? 'Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin veya daha sonra tekrar deneyin.' 
+        : (error.response?.data?.error || 'Bir hata oluştu.');
       toast.error(msg);
     }
 

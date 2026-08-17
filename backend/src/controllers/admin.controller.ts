@@ -8,8 +8,58 @@ import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuditAction, Role, StudentStatus } from '../types/enums';
 import { storageService } from '../lib/storage';
+import {
+  sendAnnouncementEmail,
+  sendNewPeriodEmail,
+  sendMentorAssignedEmail,
+} from '../lib/email.service';
+
 
 const BCRYPT_ROUNDS = 12;
+
+const periodEmailTimeouts = new Map<string, NodeJS.Timeout>();
+
+function cancelPeriodEmail(periodId: string) {
+  if (periodEmailTimeouts.has(periodId)) {
+    clearTimeout(periodEmailTimeouts.get(periodId)!);
+    periodEmailTimeouts.delete(periodId);
+  }
+}
+
+function schedulePeriodEmail(periodId: string, delayMs: number = 300000) {
+  cancelPeriodEmail(periodId);
+  
+  const timeout = setTimeout(async () => {
+    periodEmailTimeouts.delete(periodId);
+    try {
+      const p = await prisma.documentPeriod.findUnique({ where: { id: periodId } });
+      if (!p || !p.isOpen) return; // if deleted or closed within 5 mins, skip
+
+      const targetCatIds: string[] | null = p.categoryIds ? JSON.parse(p.categoryIds) : null;
+      const students = await prisma.studentProfile.findMany({
+        where: { user: { isActive: true } },
+        include: { user: { select: { email: true } } },
+      });
+      const targets = students.filter(s => {
+        if (!targetCatIds || targetCatIds.length === 0) return true;
+        return s.scholarshipCategoryId ? targetCatIds.includes(s.scholarshipCategoryId) : false;
+      });
+      const emails = targets.map(s => s.user.email).filter(Boolean) as string[];
+      if (emails.length > 0) {
+        await sendNewPeriodEmail({
+          to: emails,
+          periodLabel: p.label,
+          periodType: p.type,
+          deadline: p.endDate?.toString() || null,
+        });
+      }
+    } catch (e) {
+      console.error('[Email] Delayed period email error:', e);
+    }
+  }, delayMs);
+  
+  periodEmailTimeouts.set(periodId, timeout);
+}
 
 // ── Dashboard ────────────────────────────────────────────────────────
 export async function getDashboard(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -32,7 +82,7 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
               email: true, 
               username: true, 
               role: true,
-              studentProfile: { select: { firstName: true, lastName: true } }
+              studentProfile: { select: { id: true, firstName: true, lastName: true } }
             } 
           },
           approver: { select: { email: true, username: true } },
@@ -220,6 +270,19 @@ export async function updateStudentProfile(req: Request, res: Response, next: Ne
       where: { id },
       data: profileData
     });
+
+    // Sync email to User table if provided
+    if (profileData.email !== undefined) {
+      const existingUserWithEmail = await prisma.user.findFirst({
+        where: { email: profileData.email, id: { not: updated.userId } }
+      });
+      if (!existingUserWithEmail) {
+        await prisma.user.update({
+          where: { id: updated.userId },
+          data: { email: profileData.email || null }
+        });
+      }
+    }
 
     await prisma.auditLog.create({
       data: {
@@ -438,6 +501,12 @@ export async function createPeriod(req: Request, res: Response, next: NextFuncti
     const period = await prisma.documentPeriod.create({
       data: { type, label, semester, academicYear, grade, isOpen: isOpen ?? false, startDate, endDate, categoryIds: categoryIdsStr },
     });
+
+    // Schedule email notifications if period is open
+    if (period.isOpen) {
+      schedulePeriodEmail(period.id);
+    }
+
     res.status(201).json(period);
   } catch (err) {
     next(err);
@@ -449,6 +518,8 @@ export async function updatePeriod(req: Request, res: Response, next: NextFuncti
   try {
     const { id } = req.params;
     const { isOpen, label, startDate, endDate, grade, semester, academicYear, categoryIds } = req.body;
+
+    const previousPeriod = await prisma.documentPeriod.findUnique({ where: { id } });
 
     let closedCount = 0;
     // (Auto-close logic removed per user request to allow multiple open periods simultaneously)
@@ -476,6 +547,12 @@ export async function updatePeriod(req: Request, res: Response, next: NextFuncti
         newValue: JSON.stringify({ isOpen, label }),
       },
     });
+
+    if (isOpen === true && previousPeriod?.isOpen === false) {
+      schedulePeriodEmail(period.id);
+    } else if (isOpen === false) {
+      cancelPeriodEmail(period.id);
+    }
 
     res.json({ ...period, autoClosedOtherSemesters: closedCount > 0 });
   } catch (err) {
@@ -663,6 +740,11 @@ export async function createUser(req: Request, res: Response, next: NextFunction
       throw new AppError(400, 'Bu yetki rolüyle kullanıcı oluşturulamaz.');
     }
 
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      throw new AppError(400, 'Bu e-posta adresi zaten kullanımda.');
+    }
+
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     const user = await prisma.user.create({
@@ -698,6 +780,49 @@ export async function deleteUser(req: Request, res: Response, next: NextFunction
 
     await prisma.user.update({ where: { id }, data: { isActive: false } });
     res.json({ message: 'Kullanıcı devre dışı bırakıldı.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Update User ───────────────────────────────────────────────────────
+export async function updateUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { email, username, role, password, isActive } = req.body;
+    
+    if (role === Role.STUDENT || role === Role.MENTOR) {
+      throw new AppError(400, 'Bu yetki rolüne güncellenemez.');
+    }
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) throw new AppError(404, 'Kullanıcı bulunamadı.');
+    
+    if (email && email !== user.email) {
+      const existingUser = await prisma.user.findUnique({ where: { email } });
+      if (existingUser) throw new AppError(400, 'Bu e-posta adresi zaten kullanımda.');
+    }
+
+    const dataToUpdate: any = {};
+    if (email) dataToUpdate.email = email;
+    if (username) dataToUpdate.username = username;
+    if (role) dataToUpdate.role = role;
+    if (isActive !== undefined) dataToUpdate.isActive = isActive;
+    if (password) {
+       dataToUpdate.passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: dataToUpdate,
+    });
+
+    res.json({
+      id: updatedUser.id,
+      email: updatedUser.email,
+      username: updatedUser.username,
+      role: updatedUser.role,
+    });
   } catch (err) {
     next(err);
   }
@@ -892,6 +1017,32 @@ export async function assignMentor(req: Request, res: Response, next: NextFuncti
         newValue: `Mentor assigned: ${mentorId || 'None'}`,
       },
     });
+
+    // Send email to student if a mentor was assigned (fire-and-forget)
+    if (mentorId && updatedStudent.mentor) {
+      (async () => {
+        try {
+          const studentUser = await prisma.user.findUnique({
+            where: { id: updatedStudent.userId },
+            select: { email: true },
+          });
+          if (studentUser?.email) {
+            await sendMentorAssignedEmail({
+              to: studentUser.email,
+              firstName: updatedStudent.firstName,
+              mentorFirstName: updatedStudent.mentor!.firstName,
+              mentorLastName: updatedStudent.mentor!.lastName,
+              mentorTitle: updatedStudent.mentor!.title,
+              mentorCompany: updatedStudent.mentor!.company,
+              mentorEmail: updatedStudent.mentor!.email,
+              mentorPhone: updatedStudent.mentor!.phone,
+            });
+          }
+        } catch (e) {
+          console.error('[Email] Mentor assign email error:', e);
+        }
+      })();
+    }
 
     res.json(updatedStudent);
   } catch (err) {
@@ -1174,6 +1325,127 @@ export async function deleteScholarshipCategory(req: Request, res: Response, nex
         module: 'ScholarshipCategory',
         entityId: id,
         entityType: 'ScholarshipCategory',
+      },
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Announcements ──────────────────────────────────────────────────────
+
+export async function listAnnouncements(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const announcements = await prisma.announcement.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(announcements);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function createAnnouncement(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { title, content, categoryIds, isActive } = req.body;
+    if (!title || !content) throw new AppError(400, 'Başlık ve içerik zorunludur.');
+
+    const categoryIdsStr = Array.isArray(categoryIds) && categoryIds.length > 0
+      ? JSON.stringify(categoryIds)
+      : null;
+
+    const announcement = await prisma.announcement.create({
+      data: {
+        title: title.trim(),
+        content: content.trim(),
+        categoryIds: categoryIdsStr,
+        isActive: isActive ?? true,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.CREATE,
+        module: 'Announcement',
+        entityId: announcement.id,
+        entityType: 'Announcement',
+        newValue: announcement.title,
+      },
+    });
+
+    // Send email notifications to target students (fire-and-forget)
+    (async () => {
+      try {
+        const targetCatIds: string[] | null = categoryIdsStr ? JSON.parse(categoryIdsStr) : null;
+        const students = await prisma.studentProfile.findMany({
+          where: { user: { isActive: true } },
+          include: { user: { select: { email: true } } },
+        });
+        const targets = students.filter(s => {
+          if (!targetCatIds || targetCatIds.length === 0) return true;
+          return s.scholarshipCategoryId ? targetCatIds.includes(s.scholarshipCategoryId) : false;
+        });
+        const emails = targets.map(s => s.user.email).filter(Boolean) as string[];
+        if (emails.length > 0) {
+          await sendAnnouncementEmail({
+            to: emails,
+            announcementTitle: announcement.title,
+            announcementContent: announcement.content,
+          });
+        }
+      } catch (e) {
+        console.error('[Email] Announcement email error:', e);
+      }
+    })();
+
+    res.status(201).json(announcement);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateAnnouncement(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { title, content, categoryIds, isActive } = req.body;
+
+    const updateData: any = {};
+    if (title !== undefined) updateData.title = title.trim();
+    if (content !== undefined) updateData.content = content.trim();
+    if (isActive !== undefined) updateData.isActive = Boolean(isActive);
+    if (categoryIds !== undefined) {
+      updateData.categoryIds = Array.isArray(categoryIds) && categoryIds.length > 0
+        ? JSON.stringify(categoryIds)
+        : null;
+    }
+
+    const announcement = await prisma.announcement.update({
+      where: { id },
+      data: updateData,
+    });
+
+    res.json(announcement);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteAnnouncement(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+
+    await prisma.announcement.delete({ where: { id } });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.DELETE,
+        module: 'Announcement',
+        entityId: id,
+        entityType: 'Announcement',
       },
     });
 

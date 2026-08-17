@@ -7,6 +7,7 @@ export interface User {
   username?: string;
   forcePasswordChange?: boolean;
   studentProfile?: {
+    id: string;
     firstName: string;
     lastName: string;
   };
@@ -211,5 +212,16 @@ export interface Event {
   date: string;
   meetingUrl: string | null;
   imagePath: string | null;
+  categoryIds?: string | null;
   createdAt: string;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  categoryIds?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

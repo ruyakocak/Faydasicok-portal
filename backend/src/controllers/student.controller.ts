@@ -105,10 +105,25 @@ export async function updateContactInfo(req: Request, res: Response, next: NextF
     if (!canAccessProfile(req, id, profile.userId)) throw new AppError(403, 'Erişim reddedildi.');
 
     const { phone, email, address } = req.body;
+    
+    // Update StudentProfile
     const updated = await prisma.studentProfile.update({
       where: { id },
       data: { phone, email, address },
     });
+
+    // Sync email to User table if provided
+    if (email !== undefined) {
+      const existingUserWithEmail = await prisma.user.findFirst({
+        where: { email, id: { not: profile.userId } }
+      });
+      if (!existingUserWithEmail) {
+        await prisma.user.update({
+          where: { id: profile.userId },
+          data: { email: email || null }
+        });
+      }
+    }
 
     res.json({ message: 'İletişim bilgileri güncellendi.', profile: updated });
   } catch (err) {
@@ -124,7 +139,7 @@ export async function updatePersonalInfo(req: Request, res: Response, next: Next
     if (!profile) throw new AppError(404, 'Profil bulunamadı.');
     if (!canAccessProfile(req, id, profile.userId)) throw new AppError(403, 'Erişim reddedildi.');
 
-    const fields = ['firstName', 'lastName', 'gender', 'birthDate', 'birthPlace', 'registeredCity', 'scholarshipSources', 'scholarshipDate', 'scholarshipCategoryId'];
+    const fields = ['firstName', 'lastName', 'gender', 'birthDate', 'birthPlace', 'registeredCity', 'scholarshipSources', 'scholarshipDate', 'scholarshipCategoryId', 'email', 'phone', 'address'];
     if (req.user?.role === Role.ADMIN || req.user?.role === Role.REVIEWER) {
       fields.push('studentStatus');
     }
@@ -163,6 +178,19 @@ export async function updatePersonalInfo(req: Request, res: Response, next: Next
         prisma.studentProfile.update({ where: { id }, data: updateData }),
         prisma.auditLog.createMany({ data: auditLogs }),
       ]);
+
+      // Sync email to User table if provided
+      if (updateData.email !== undefined) {
+        const existingUserWithEmail = await prisma.user.findFirst({
+          where: { email: updateData.email, id: { not: profile.userId } }
+        });
+        if (!existingUserWithEmail) {
+          await prisma.user.update({
+            where: { id: profile.userId },
+            data: { email: updateData.email || null }
+          });
+        }
+      }
     }
 
     res.json({ message: 'Kişisel bilgileriniz güncellendi.', profile: { ...profile, ...updateData } });
@@ -344,3 +372,37 @@ export async function uploadProfilePhoto(req: Request, res: Response, next: Next
     next(err);
   }
 }
+
+// ── Get Announcements ────────────────────────────────────────────────
+export async function getAnnouncements(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const profile = await prisma.studentProfile.findUnique({ where: { id } });
+    if (!profile) throw new AppError(404, 'Profil bulunamadı.');
+    if (!canAccessProfile(req, id, profile.userId)) throw new AppError(403, 'Erişim reddedildi.');
+
+    // Fetch announcements that are active
+    const announcements = await prisma.announcement.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Filter announcements targeting this student's category or all
+    const targetedAnnouncements = announcements.filter(a => {
+      if (!a.categoryIds) return true; // targeted to all
+      try {
+        const catIds: string[] = JSON.parse(a.categoryIds);
+        if (catIds.length === 0) return true;
+        if (profile.scholarshipCategoryId && catIds.includes(profile.scholarshipCategoryId)) return true;
+        return false;
+      } catch {
+        return true; // if parsing fails, assume all
+      }
+    });
+
+    res.json(targetedAnnouncements);
+  } catch (err) {
+    next(err);
+  }
+}
+

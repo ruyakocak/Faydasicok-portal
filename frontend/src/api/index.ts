@@ -208,6 +208,9 @@ export const adminApi = {
   createUser: (data: { email: string; username?: string; password: string; role?: string; firstName?: string; lastName?: string; title?: string; expertise?: string }) =>
     api.post('/admin/users', data).then((r) => r.data),
 
+  updateUser: (id: string, data: { email?: string; username?: string; password?: string; role?: string }) =>
+    api.patch(`/admin/users/${id}`, data).then((r) => r.data),
+
   deleteUser: (id: string) =>
     api.delete(`/admin/users/${id}`).then((r) => r.data),
 
@@ -263,6 +266,11 @@ export const eventApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then((r) => r.data),
 
+  updateEvent: (id: string, formData: FormData): Promise<Event> =>
+    api.patch(`/events/${id}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data),
+
   deleteEvent: (id: string): Promise<void> =>
     api.delete(`/events/${id}`).then((r) => r.data),
 };
@@ -277,4 +285,22 @@ export const mentorshipApi = {
 
   createNote: (noteText: string, studentId?: string) =>
     api.post('/mentorship/notes', { noteText, studentId }).then((r) => r.data),
+};
+
+// ── Announcements ─────────────────────────────────────────────────────
+export const announcementApi = {
+  listAnnouncements: (): Promise<import('../types').Announcement[]> =>
+    api.get('/admin/announcements').then((r) => r.data),
+
+  createAnnouncement: (data: { title: string; content: string; categoryIds?: string[]; isActive?: boolean }): Promise<import('../types').Announcement> =>
+    api.post('/admin/announcements', data).then((r) => r.data),
+
+  updateAnnouncement: (id: string, data: { title?: string; content?: string; categoryIds?: string[]; isActive?: boolean }): Promise<import('../types').Announcement> =>
+    api.patch(`/admin/announcements/${id}`, data).then((r) => r.data),
+
+  deleteAnnouncement: (id: string): Promise<void> =>
+    api.delete(`/admin/announcements/${id}`).then((r) => r.data),
+
+  getStudentAnnouncements: (profileId: string): Promise<import('../types').Announcement[]> =>
+    api.get(`/students/${profileId}/announcements`).then((r) => r.data),
 };
