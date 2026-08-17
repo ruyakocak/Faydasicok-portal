@@ -39,9 +39,8 @@ export default function PeriodsPage() {
     academicYear: string;
     startDate: string;
     endDate: string;
-    grade: number | '';
     categoryIds: string[];
-  }>({ label: '', semester: '', academicYear: '', startDate: '', endDate: '', grade: '', categoryIds: [] });
+  }>({ label: '', semester: '', academicYear: '', startDate: '', endDate: '', categoryIds: [] });
   const [savingSemester, setSavingSemester] = useState(false);
 
   // Semester delete confirmation modal state
@@ -53,9 +52,8 @@ export default function PeriodsPage() {
   const [editPeriodForm, setEditPeriodForm] = useState<{
     startDate: string;
     endDate: string;
-    grade: number | '';
     categoryIds: string[];
-  }>({ startDate: '', endDate: '', grade: '', categoryIds: [] });
+  }>({ startDate: '', endDate: '', categoryIds: [] });
   const [savingPeriod, setSavingPeriod] = useState(false);
 
   // Single period delete state
@@ -68,9 +66,8 @@ export default function PeriodsPage() {
     type: string;
     startDate: string;
     endDate: string;
-    grade: number | '';
     categoryIds: string[];
-  }>({ type: '', startDate: '', endDate: '', grade: '', categoryIds: [] });
+  }>({ type: '', startDate: '', endDate: '', categoryIds: [] });
   const [addingPeriod, setAddingPeriod] = useState(false);
 
   async function load() {
@@ -190,7 +187,6 @@ export default function PeriodsPage() {
       academicYear: existingPeriod.academicYear || '',
       startDate: existingPeriod.startDate ? new Date(existingPeriod.startDate).toISOString().slice(0, 16) : '',
       endDate: existingPeriod.endDate ? new Date(existingPeriod.endDate).toISOString().slice(0, 16) : '',
-      grade: existingPeriod.grade || '',
       categoryIds: Array.from(allCatIds),
     });
   }
@@ -216,7 +212,6 @@ export default function PeriodsPage() {
         academicYear: semesterForm.academicYear,
         startDate: semesterForm.startDate ? new Date(semesterForm.startDate).toISOString() : null,
         endDate: semesterForm.endDate ? new Date(semesterForm.endDate).toISOString() : null,
-        grade: semesterForm.grade === '' ? null : Number(semesterForm.grade),
         categoryIds: semesterForm.categoryIds,
       };
 
@@ -268,7 +263,6 @@ export default function PeriodsPage() {
     setEditPeriodForm({
       startDate: period.startDate ? new Date(period.startDate).toISOString().slice(0, 16) : '',
       endDate: period.endDate ? new Date(period.endDate).toISOString().slice(0, 16) : '',
-      grade: period.grade || '',
       categoryIds: parseCategoryIds(period),
     });
   }
@@ -290,7 +284,6 @@ export default function PeriodsPage() {
       await adminApi.updatePeriod(editPeriod.id, {
         startDate: editPeriodForm.startDate ? new Date(editPeriodForm.startDate).toISOString() : null,
         endDate: editPeriodForm.endDate ? new Date(editPeriodForm.endDate).toISOString() : null,
-        grade: editPeriodForm.grade === '' ? null : Number(editPeriodForm.grade),
         categoryIds: editPeriodForm.categoryIds,
       });
       toast.success('Evrak talebi ayarları başarıyla güncellendi.');
@@ -342,14 +335,13 @@ export default function PeriodsPage() {
         academicYear: existingPeriod?.academicYear || '',
         startDate: addPeriodForm.startDate ? new Date(addPeriodForm.startDate).toISOString() : null,
         endDate: addPeriodForm.endDate ? new Date(addPeriodForm.endDate).toISOString() : null,
-        grade: addPeriodForm.grade === '' ? null : Number(addPeriodForm.grade),
         categoryIds: addPeriodForm.categoryIds,
         isOpen: true,
       });
 
       toast.success('Yeni evrak talebi başarıyla eklendi.');
       setShowAddPeriod(false);
-      setAddPeriodForm({ type: '', startDate: '', endDate: '', grade: '', categoryIds: [] });
+      setAddPeriodForm({ type: '', startDate: '', endDate: '', categoryIds: [] });
       await load();
     } catch {
       toast.error('Talep oluşturulurken bir hata oluştu.');
@@ -512,7 +504,7 @@ export default function PeriodsPage() {
                           <p className="text-xs text-gray-500 max-w-xs mx-auto mb-4">Bu eğitim dönemi için öğrencilerden henüz hiçbir belge talep edilmedi.</p>
                           <button
                             onClick={() => {
-                              setAddPeriodForm({ type: '', startDate: '', endDate: '', grade: '', categoryIds: [] });
+                              setAddPeriodForm({ type: '', startDate: '', endDate: '', categoryIds: [] });
                               setShowAddPeriod(true);
                             }}
                             className="btn-primary btn-sm px-4"
@@ -577,9 +569,7 @@ export default function PeriodsPage() {
                                       {period.endDate && (
                                         <span className="border-l border-gray-200 pl-3">Bitiş: <strong className="text-gray-700">{new Date(period.endDate).toLocaleDateString('tr-TR')}</strong></span>
                                       )}
-                                      {period.grade && (
-                                        <span className="border-l border-gray-200 pl-3">Sınıf: <strong className="text-gray-700">{period.grade}. Sınıf</strong></span>
-                                      )}
+
                                     </div>
 
                                     {/* Categories Limit indicator */}
@@ -642,7 +632,7 @@ export default function PeriodsPage() {
                           {/* Add New Request Button inside Semester */}
                           <button
                             onClick={() => {
-                              setAddPeriodForm({ type: '', startDate: '', endDate: '', grade: '', categoryIds: [] });
+                              setAddPeriodForm({ type: '', startDate: '', endDate: '', categoryIds: [] });
                               setShowAddPeriod(true);
                             }}
                             className="w-full py-4 border-2 border-dashed border-gray-200 hover:border-primary-400 hover:bg-primary-50/20 rounded-2xl text-sm font-semibold text-gray-600 hover:text-primary-600 transition-all flex items-center justify-center gap-1.5 mt-2"
@@ -770,14 +760,11 @@ export default function PeriodsPage() {
                   <label className="form-label mb-1">Bitiş Tarihi</label>
                   <input type="datetime-local" className="form-input text-sm p-2" value={semesterForm.endDate} onChange={e => setSemesterForm(f => ({...f, endDate: e.target.value}))} />
                 </div>
-                <div className="col-span-2">
-                  <label className="form-label mb-1">Sınıf Kısıtlaması (Boş bırakılırsa tüm sınıflar)</label>
-                  <input type="number" min="1" max="6" className="form-input text-sm p-2" value={semesterForm.grade} onChange={e => setSemesterForm(f => ({...f, grade: e.target.value === '' ? '' : Number(e.target.value)}))} placeholder="Örn: 1" />
-                </div>
+
               </div>
 
               <div>
-                <label className="form-label mb-1.5 mt-2">Bursiyer Kategorileri Kısıtlaması (Toplu Uygulanır)</label>
+                <label className="form-label mb-1.5 mt-2">Kimlere Açık Olsun? (Toplu Uygulanır)</label>
                 <p className="text-[11px] text-gray-500 mb-2">
                   Hiçbiri seçilmezse tüm evraklar <strong>tüm kategorilere</strong> açık olur.
                 </p>
@@ -923,14 +910,11 @@ export default function PeriodsPage() {
                   <label className="form-label mb-1">Bitiş Tarihi</label>
                   <input type="datetime-local" className="form-input text-sm p-2" value={editPeriodForm.endDate} onChange={e => setEditPeriodForm(f => ({...f, endDate: e.target.value}))} />
                 </div>
-                <div className="col-span-2">
-                  <label className="form-label mb-1">Sınıf Kısıtlaması (Boş bırakılırsa tüm sınıflar)</label>
-                  <input type="number" min="1" max="6" className="form-input text-sm p-2" value={editPeriodForm.grade} onChange={e => setEditPeriodForm(f => ({...f, grade: e.target.value === '' ? '' : Number(e.target.value)}))} placeholder="Örn: 1" />
-                </div>
+
               </div>
 
               <div>
-                <label className="form-label mb-1.5 mt-2">Bursiyer Kategorileri Kısıtlaması</label>
+                <label className="form-label mb-1.5 mt-2">Kimlere Açık Olsun?</label>
                 <p className="text-[11px] text-gray-500 mb-2">
                   Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse tüm kategorilerden istenir.
                 </p>
@@ -1049,14 +1033,11 @@ export default function PeriodsPage() {
                   <label className="form-label mb-1">Bitiş Tarihi (Opsiyonel)</label>
                   <input type="datetime-local" className="form-input text-sm p-2" value={addPeriodForm.endDate} onChange={e => setAddPeriodForm(f => ({...f, endDate: e.target.value}))} />
                 </div>
-                <div className="col-span-2">
-                  <label className="form-label mb-1">Sınıf Kısıtlaması (Boş bırakılırsa tüm sınıflar)</label>
-                  <input type="number" min="1" max="6" className="form-input text-sm p-2" value={addPeriodForm.grade} onChange={e => setAddPeriodForm(f => ({...f, grade: e.target.value === '' ? '' : Number(e.target.value)}))} placeholder="Örn: 1" />
-                </div>
+
               </div>
 
               <div>
-                <label className="form-label mb-1.5 mt-2">Bursiyer Kategorileri Kısıtlaması</label>
+                <label className="form-label mb-1.5 mt-2">Kimlere Açık Olsun?</label>
                 <p className="text-[11px] text-gray-500 mb-2">
                   Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse tüm kategorilerden istenir.
                 </p>

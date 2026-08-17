@@ -169,7 +169,8 @@ model DocumentPeriod {
   label       String             // e.g. "2025-2026 Güz Dönemi"
   semester    String?            // GUZ, BAHAR
   academicYear String?           // e.g. "2025-2026"
-  grade       Int?               // Which grade this applies to (null = all)
+  grade       Int?               // Deprecated
+  grades      String?            // JSON array of grades, e.g. "[0, 1, 2]" where 0 is Hazırlık
   isOpen      Boolean            @default(false)
   categoryIds String?            // JSON array of scholarship category IDs (null = all categories)
   startDate   DateTime?

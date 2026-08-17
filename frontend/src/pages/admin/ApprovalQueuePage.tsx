@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { Link, useSearchParams } from 'react-router-dom';
+import EmptyState from '../../components/EmptyState';
 
 const documentTypeLabels: Record<string, string> = {
   TRANSCRIPT: 'Transkript',
@@ -200,10 +201,10 @@ export default function ApprovalQueuePage() {
             <span className="spinner border-gray-300 border-t-primary-500 w-7 h-7" />
           </div>
         ) : !result?.data.length ? (
-          <div className="empty-state py-12">
-            <p className="empty-state-title">Bekleyen öğe yok</p>
-            <p className="empty-state-desc">Tüm değişiklikler işlendi.</p>
-          </div>
+          <EmptyState 
+            title="Bekleyen öğe yok" 
+            description="Tüm değişiklikler işlendi." 
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="data-table">

@@ -139,6 +139,7 @@ export interface DocumentPeriod {
   semester: string;
   academicYear: string;
   grade?: number | null;
+  grades?: string | null; // JSON array of numbers
   startDate?: string | null;
   endDate?: string | null;
   isOpen: boolean;

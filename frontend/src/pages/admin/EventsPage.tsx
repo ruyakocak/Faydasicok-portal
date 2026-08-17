@@ -4,6 +4,7 @@ import type { Event, ScholarshipCategory } from '../../types';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import PageHeader from '../../components/PageHeader';
 
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
@@ -143,16 +144,15 @@ export default function EventsPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="page-header flex items-start justify-between">
-        <div>
-          <h1 className="page-title">Eğitim ve Etkinlik Yönetimi</h1>
-          <p className="page-subtitle">Bursiyerler için yaklaşan eğitim ve etkinlikleri düzenleyin</p>
-        </div>
+      <PageHeader 
+        title="Eğitim ve Etkinlik Yönetimi" 
+        description="Bursiyerler için yaklaşan eğitim ve etkinlikleri düzenleyin"
+      >
         <button onClick={() => { resetForm(); setShowCreate(true); }} className="btn-primary flex items-center gap-1.5">
           <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Yeni Eğitim/Etkinlik Ekle
         </button>
-      </div>
+      </PageHeader>
 
       {loading ? (
         <div className="flex items-center justify-center py-20">

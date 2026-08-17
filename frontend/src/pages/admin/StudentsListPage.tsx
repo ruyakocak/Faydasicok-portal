@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import EmptyState from '../../components/EmptyState';
+import CategoryManagerModal from '../../components/CategoryManagerModal';
 import { adminApi } from '../../api';
 import type { StudentProfile, PaginatedResponse } from '../../types';
 import toast from 'react-hot-toast';
@@ -39,6 +41,7 @@ export default function StudentsListPage() {
   const [assigningMentor, setAssigningMentor] = useState(false);
 
   const [categories, setCategories] = useState<import('../../types').ScholarshipCategory[]>([]);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
   // Load mentors and categories once
   useEffect(() => {
@@ -181,6 +184,10 @@ export default function StudentsListPage() {
             )}
             Excel İndir
           </button>
+          <button onClick={() => setIsCategoryModalOpen(true)} className="btn-secondary btn-sm text-gray-700">
+            <svg viewBox="0 0 24 24" className="w-4 h-4 mr-1" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+            Kategoriler
+          </button>
           <button onClick={() => { setCreateModalOpen(true); setCreateResult(null); setNewStudentForm({ tcKimlikNo: '', firstName: '', lastName: '', scholarshipCategoryId: '' }); }} className="btn-primary btn-sm">
             <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
             Bursiyer Ekle
@@ -236,10 +243,10 @@ export default function StudentsListPage() {
             <span className="spinner border-gray-300 border-t-primary-500 w-7 h-7" />
           </div>
         ) : !result?.data.length ? (
-          <div className="empty-state">
-            <p className="empty-state-title">Bursiyer bulunamadı</p>
-            <p className="empty-state-desc">Arama kriterlerinizi değiştirin veya yeni bursiyer ekleyin.</p>
-          </div>
+          <EmptyState 
+            title="Bursiyer bulunamadı" 
+            description="Arama kriterlerinizi değiştirin veya yeni bursiyer ekleyin." 
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="data-table">
@@ -572,6 +579,12 @@ export default function StudentsListPage() {
           </div>
         </div>
       )}
+
+      <CategoryManagerModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        onCategoriesChanged={() => adminApi.listScholarshipCategories().then(setCategories).catch(console.error)}
+      />
     </div>
   );
 }

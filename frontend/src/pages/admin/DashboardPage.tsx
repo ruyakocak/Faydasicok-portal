@@ -6,29 +6,41 @@ import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { generateActionSummary, moduleLabels } from '../../utils/audit';
 
-function StatCard({ title, value, color, icon, to }: { title: string; value: number; color: string; icon: React.ReactNode; to?: string }) {
+function StatCard({ title, value, icon, to, trend }: { title: string; value: number; icon: React.ReactNode; to?: string; trend?: { value: string; positive: boolean } }) {
   const content = (
-    <div className="card-body flex items-center gap-4">
-      <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${color}`}>
-        {icon}
+    <div className="p-5 flex flex-col justify-between h-full">
+      <div className="flex items-start justify-between mb-4">
+        <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center text-gray-700 border border-gray-200 shadow-sm">
+          {icon}
+        </div>
+        {trend && (
+          <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${trend.positive ? 'text-green-700 bg-green-50 border border-green-100' : 'text-gray-600 bg-gray-100 border border-gray-200'}`}>
+            {trend.positive ? (
+              <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            )}
+            {trend.value}
+          </div>
+        )}
       </div>
       <div>
-        <div className="text-2xl font-bold text-gray-900">{value.toLocaleString('tr-TR')}</div>
-        <div className="text-sm text-gray-500">{title}</div>
+        <div className="text-3xl font-bold text-gray-900 tracking-tight">{value.toLocaleString('tr-TR')}</div>
+        <div className="text-sm font-medium text-gray-500 mt-1">{title}</div>
       </div>
     </div>
   );
 
   if (to) {
     return (
-      <Link to={to} className="card hover:shadow-card-hover transition-shadow block group">
+      <Link to={to} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-primary-300 hover:shadow-card-hover transition-all block group">
         {content}
       </Link>
     );
   }
 
   return (
-    <div className="card">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200">
       {content}
     </div>
   );
@@ -65,58 +77,47 @@ export default function DashboardPage() {
         <StatCard
           title="Toplam Bursiyer"
           value={stats?.totalStudents ?? 0}
-          color="bg-blue-50 text-blue-600"
-          icon={<svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>}
+          icon={<svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>}
           to="/admin/students"
         />
         <StatCard
           title="Onay Bekleyen"
           value={stats?.pendingChanges ?? 0}
-          color="bg-status-pending-bg text-status-pending"
-          icon={<svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
+          icon={<svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
           to="/admin/approvals"
         />
         <StatCard
           title="Aktif Dönem"
           value={stats?.activePeriods ?? 0}
-          color="bg-status-approved-bg text-status-approved"
-          icon={<svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
+          icon={<svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
           to="/admin/periods"
         />
         <StatCard
           title="Bu Ay Yükleme"
           value={stats?.thisMonthDocs ?? 0}
-          color="bg-purple-50 text-purple-600"
-          icon={<svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>}
+          icon={<svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>}
           to="/admin/approvals"
         />
       </div>
 
       {/* Quick actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        <Link to="/admin/approvals" className="card hover:shadow-card-hover transition-shadow block group">
-          <div className="card-body flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-primary-50 text-primary-500 flex items-center justify-center group-hover:bg-primary-100 transition-colors">
-              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-            </div>
-            <div>
-              <div className="font-medium text-gray-900">Onay Kuyruğu</div>
-              <div className="text-sm text-gray-500">
-                {stats?.pendingChanges ? `${stats.pendingChanges} öğe onay bekliyor` : 'Bekleyen onay yok'}
-              </div>
-            </div>
+        <Link to="/admin/approvals" className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex items-center gap-4 hover:border-primary-300 hover:shadow-card-hover transition-all group">
+          <div className="w-10 h-10 rounded-lg bg-gray-100 text-gray-700 flex items-center justify-center group-hover:bg-primary-50 group-hover:text-primary-600 transition-colors border border-gray-200 group-hover:border-primary-200">
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 tracking-tight group-hover:text-primary-600 transition-colors">Onay Kuyruğunu İncele</h3>
+            <p className="text-sm text-gray-500 mt-0.5">Bekleyen evrak yüklemelerini incele ve onayla.</p>
           </div>
         </Link>
-
-        <Link to="/admin/students" className="card hover:shadow-card-hover transition-shadow block group">
-          <div className="card-body flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            </div>
-            <div>
-              <div className="font-medium text-gray-900">Bursiyer Listesi</div>
-              <div className="text-sm text-gray-500">Tüm bursiyerleri görüntüle ve yönet</div>
-            </div>
+        <Link to="/admin/periods" className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex items-center gap-4 hover:border-primary-300 hover:shadow-card-hover transition-all group">
+          <div className="w-10 h-10 rounded-lg bg-gray-100 text-gray-700 flex items-center justify-center group-hover:bg-primary-50 group-hover:text-primary-600 transition-colors border border-gray-200 group-hover:border-primary-200">
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 tracking-tight group-hover:text-primary-600 transition-colors">Yeni Dönem Başlat</h3>
+            <p className="text-sm text-gray-500 mt-0.5">Bursiyerler için yeni evrak yükleme dönemi aç.</p>
           </div>
         </Link>
       </div>

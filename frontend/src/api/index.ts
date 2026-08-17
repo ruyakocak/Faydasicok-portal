@@ -51,9 +51,7 @@ export const studentApi = {
   uploadPhoto: (profileId: string, file: File) => {
     const fd = new FormData();
     fd.append('photo', file);
-    return api.post(`/students/${profileId}/photo`, fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }).then((r) => r.data);
+    return api.post(`/students/${profileId}/photo`, fd).then((r) => r.data);
   },
 };
 
@@ -70,7 +68,7 @@ export const documentApi = {
     fd.append('profileId', profileId);
     fd.append('type', type);
     fd.append('file', file);
-    return api.post('/documents/static', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+    return api.post('/documents/static', fd).then((r) => r.data);
   },
 
   uploadTranscript: (profileId: string, data: Record<string, string>, file: File) => {
@@ -78,7 +76,7 @@ export const documentApi = {
     fd.append('profileId', profileId);
     Object.entries(data).forEach(([k, v]) => fd.append(k, v));
     fd.append('file', file);
-    return api.post('/documents/transcript', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+    return api.post('/documents/transcript', fd).then((r) => r.data);
   },
 
   uploadStudentCertificate: (profileId: string, data: Record<string, string>, file: File) => {
@@ -86,7 +84,7 @@ export const documentApi = {
     fd.append('profileId', profileId);
     Object.entries(data).forEach(([k, v]) => fd.append(k, v));
     fd.append('file', file);
-    return api.post('/documents/student-certificate', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+    return api.post('/documents/student-certificate', fd).then((r) => r.data);
   },
 
   uploadVolunteerReport: (profileId: string, data: Record<string, string>, file: File) => {
@@ -94,7 +92,7 @@ export const documentApi = {
     fd.append('profileId', profileId);
     Object.entries(data).forEach(([k, v]) => fd.append(k, v));
     fd.append('file', file);
-    return api.post('/documents/volunteer-report', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+    return api.post('/documents/volunteer-report', fd).then((r) => r.data);
   },
 
   uploadDynamicDocument: (profileId: string, periodId: string, type: string, dynamicFields: any, file: File) => {
@@ -106,7 +104,7 @@ export const documentApi = {
       fd.append('dynamicFields', JSON.stringify(dynamicFields));
     }
     fd.append('file', file);
-    return api.post('/documents/dynamic', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+    return api.post('/documents/dynamic', fd).then((r) => r.data);
   },
 };
 
@@ -140,11 +138,9 @@ export const adminApi = {
     api.patch(`/admin/students/${id}`, data).then((r) => r.data),
 
   uploadStudentPhoto: (id: string, file: File): Promise<{ photoPath: string }> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    return api.post(`/admin/students/${id}/photo`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }).then((r) => r.data);
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post(`/admin/students/${id}/photo`, fd).then((r) => r.data);
   },
 
   getCsvTemplate: () =>
@@ -154,7 +150,6 @@ export const adminApi = {
     const fd = new FormData();
     fd.append('file', file);
     return api.post('/admin/students/bulk-create', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
       responseType: 'blob',
     }).then((r) => r.data);
   },
@@ -171,16 +166,16 @@ export const adminApi = {
   listPeriods: (): Promise<DocumentPeriod[]> =>
     api.get('/admin/periods').then((r) => r.data),
 
-  createPeriod: (data: Omit<Partial<DocumentPeriod>, 'categoryIds'> & { categoryIds?: string[] }) =>
-    api.post('/admin/periods', data).then((r) => r.data),
+  createPeriod: (data: Omit<Partial<DocumentPeriod>, 'categoryIds' | 'grades'> & { categoryIds?: string[]; grades?: number[] }) =>
+    api.post<DocumentPeriod>('/admin/periods', data).then(res => res.data),
 
-  updatePeriod: (id: string, data: Omit<Partial<DocumentPeriod>, 'categoryIds'> & { categoryIds?: string[] }) =>
+  updatePeriod: (id: string, data: Omit<Partial<DocumentPeriod>, 'categoryIds' | 'grades'> & { categoryIds?: string[]; grades?: number[] }) =>
     api.patch(`/admin/periods/${id}`, data).then((r) => r.data),
 
   deletePeriod: (id: string) =>
     api.delete(`/admin/periods/${id}`).then((r) => r.data),
 
-  updateSemester: (data: { oldLabel: string; label?: string; semester?: string; academicYear?: string; startDate?: string | null; endDate?: string | null; grade?: number | null; categoryIds?: string[] }) =>
+  updateSemester: (data: { oldLabel: string; label?: string; semester?: string; academicYear?: string; startDate?: string | null; endDate?: string | null; grades?: number[]; categoryIds?: string[] }) =>
     api.patch('/admin/semesters', data).then((r) => r.data),
 
   deleteSemester: (label: string) =>
@@ -218,10 +213,10 @@ export const adminApi = {
     api.get('/admin/mentors').then((r) => r.data),
 
   createMentor: (formData: FormData) =>
-    api.post('/admin/mentors', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+    api.post('/admin/mentors', formData).then((r) => r.data),
 
   updateMentor: (id: string, formData: FormData) =>
-    api.patch(`/admin/mentors/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+    api.patch(`/admin/mentors/${id}`, formData).then((r) => r.data),
 
   deleteMentor: (id: string) =>
     api.delete(`/admin/mentors/${id}`).then((r) => r.data),

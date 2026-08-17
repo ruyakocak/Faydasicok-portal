@@ -5,6 +5,8 @@ import { tr } from 'date-fns/locale';
 import { announcementApi, adminApi } from '../../api';
 import type { Announcement, ScholarshipCategory } from '../../types';
 
+import PageHeader from '../../components/PageHeader';
+
 export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [categories, setCategories] = useState<ScholarshipCategory[]>([]);
@@ -123,18 +125,15 @@ export default function AnnouncementsPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Duyurular</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Öğrencilerinize özel veya genel duyurular oluşturun ve yönetin.
-          </p>
-        </div>
+      <PageHeader 
+        title="Duyurular" 
+        description="Öğrencilerinize özel veya genel duyurular oluşturun ve yönetin."
+      >
         <button onClick={() => openModal()} className="btn-primary py-2.5 px-4 shadow-sm flex items-center gap-2">
           <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Yeni Duyuru Ekle
         </button>
-      </div>
+      </PageHeader>
 
       <div className="card overflow-hidden">
         {announcements.length === 0 ? (
@@ -179,18 +178,21 @@ export default function AnnouncementsPage() {
                           {catNames}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
-                        {ann.isActive ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                            Aktif
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-                            Pasif
-                          </span>
-                        )}
+                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          onClick={async () => {
+                            try {
+                              await announcementApi.updateAnnouncement(ann.id, { isActive: !ann.isActive });
+                              toast.success(`Duyuru ${!ann.isActive ? 'aktif' : 'pasif'} yapıldı.`);
+                              loadData();
+                            } catch (err) {
+                              toast.error('Durum güncellenirken hata oluştu.');
+                            }
+                          }}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${ann.isActive ? 'bg-green-500' : 'bg-gray-300'}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${ann.isActive ? 'translate-x-4.5' : 'translate-x-1'}`} />
+                        </button>
                       </td>
                       <td className="px-6 py-4 text-gray-500 whitespace-nowrap">
                         {format(new Date(ann.createdAt), 'dd MMM yyyy', { locale: tr })}
@@ -267,19 +269,7 @@ export default function AnnouncementsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-xl border border-gray-150">
-                  <input
-                    type="checkbox"
-                    id="isActive"
-                    className="w-4 h-4 text-green-600 rounded border-gray-300 focus:ring-green-500 cursor-pointer"
-                    checked={isActive}
-                    onChange={(e) => setIsActive(e.target.checked)}
-                  />
-                  <div>
-                    <label htmlFor="isActive" className="text-sm font-bold text-gray-800 cursor-pointer">Duyuru Aktif Mi?</label>
-                    <p className="text-xs text-gray-500">Kapalı olduğunda öğrencilere gösterilmez.</p>
-                  </div>
-                </div>
+
               </form>
             </div>
             <div className="p-5 border-t border-gray-150 bg-gray-50 flex justify-between gap-3">

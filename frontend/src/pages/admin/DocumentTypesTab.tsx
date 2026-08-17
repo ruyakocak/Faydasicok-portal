@@ -79,31 +79,7 @@ export default function DocumentTypesTab() {
     setShowModal(true);
   }
 
-  function addField() {
-    setForm(prev => ({
-      ...prev,
-      customFields: [
-        ...prev.customFields,
-        { id: Math.random().toString(36).substring(7), label: '', type: 'text', required: false }
-      ]
-    }));
-  }
 
-  function removeField(index: number) {
-    setForm(prev => {
-      const newFields = [...prev.customFields];
-      newFields.splice(index, 1);
-      return { ...prev, customFields: newFields };
-    });
-  }
-
-  function updateField(index: number, key: keyof CustomField, value: any) {
-    setForm(prev => {
-      const newFields = [...prev.customFields];
-      newFields[index] = { ...newFields[index], [key]: value };
-      return { ...prev, customFields: newFields };
-    });
-  }
 
   function generateCode(name: string) {
     return name
@@ -179,9 +155,6 @@ export default function DocumentTypesTab() {
             <div key={t.id} className="card p-5 border-l-4" style={{ borderLeftColor: t.isActive ? '#10b981' : '#9ca3af' }}>
               <div className="flex items-start justify-between mb-2">
                 <h3 className="font-semibold text-gray-900">{t.name}</h3>
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${t.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                  {t.isActive ? 'Aktif' : 'Pasif'}
-                </span>
               </div>
               <p className="text-sm text-gray-600 mb-2 h-10 line-clamp-2">{t.description}</p>
               
@@ -264,57 +237,6 @@ export default function DocumentTypesTab() {
                     </span>
                   )}
                 </div>
-                <div className="col-span-2 flex items-center gap-2 mt-2">
-                  <input type="checkbox" id="isActive" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500" />
-                  <label htmlFor="isActive" className="text-sm font-medium text-gray-700">Aktif (Yeni açılan dönemlerde otomatik eklensin mi?)</label>
-                </div>
-              </div>
-
-              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-medium text-gray-900 text-sm flex items-center gap-2">
-                    <svg viewBox="0 0 24 24" className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="14 2 18 6 7 17 3 17 3 13 14 2"/><line x1="3" y1="22" x2="21" y2="22"/></svg>
-                    Dinamik Sorular (Form Alanları)
-                  </h4>
-                  <button type="button" onClick={addField} className="btn-secondary btn-sm flex items-center gap-1 bg-white">
-                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    Soru Ekle
-                  </button>
-                </div>
-
-                {form.customFields.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-4 italic">Ekstra soru eklenmedi. Sadece dosya yükleme alanı çıkacak.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {form.customFields.map((field, idx) => (
-                      <div key={idx} className="flex gap-2 items-start bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
-                        <div className="flex-1 grid grid-cols-12 gap-2">
-                          <div className="col-span-5">
-                            <label className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1 block">Soru Etiketi</label>
-                            <input className="form-input py-1.5 text-sm" value={field.label} onChange={e => updateField(idx, 'label', e.target.value)} placeholder="Örn: Gönüllü Kurum Adı" required />
-                          </div>
-                          <div className="col-span-4">
-                            <label className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mb-1 block">Soru Tipi</label>
-                            <select className="form-select py-1.5 text-sm" value={field.type} onChange={e => updateField(idx, 'type', e.target.value)}>
-                              <option value="text">Kısa Metin</option>
-                              <option value="number">Sayı (Örn: Sınıf)</option>
-                              <option value="textarea">Uzun Metin (Not)</option>
-                            </select>
-                          </div>
-                          <div className="col-span-3 flex items-center justify-center pt-5">
-                            <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
-                              <input type="checkbox" checked={field.required} onChange={e => updateField(idx, 'required', e.target.checked)} className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                              Zorunlu
-                            </label>
-                          </div>
-                        </div>
-                        <button type="button" onClick={() => removeField(idx)} className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded mt-5">
-                          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">

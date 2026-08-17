@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { studentApi, documentApi, eventApi } from '../../api';
-import type { StudentProfile, Document as DocFile, DocumentPeriod, Event } from '../../types';
+import { studentApi, documentApi, eventApi, announcementApi } from '../../api';
+import type { StudentProfile, Document as DocFile, DocumentPeriod, Event, Announcement } from '../../types';
 import { PersonalTab, EducationTab, DocumentsTab } from '../../components/ProfileTabs';
-import { format, isToday } from 'date-fns';
+import { format, isToday, differenceInDays } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 const TABS = ['Kişisel Bilgiler', 'Eğitim Bilgileri', 'Dokümanlar'];
@@ -17,15 +17,8 @@ export default function StudentProfilePage() {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
   const [docTypes, setDocTypes] = useState<any[]>([]);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [readPeriodIds, setReadPeriodIds] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('read_periods');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+
 
   // Slider & Calendar states
   const [slideIndex, setSlideIndex] = useState(0);
@@ -37,18 +30,20 @@ export default function StudentProfilePage() {
   async function loadAll() {
     if (!profileId) return;
     try {
-      const [p, d, periods, evs, types] = await Promise.all([
+      const [p, d, periods, evs, types, anns] = await Promise.all([
         studentApi.getProfile(profileId),
         studentApi.getDocuments(profileId),
         documentApi.getPeriods(),
         eventApi.listEvents(),
         documentApi.getActiveTypes().catch(() => []),
+        announcementApi.getStudentAnnouncements(profileId).catch(() => []),
       ]);
       setProfile(p);
       setDocuments(d);
       setPeriods(periods);
       setEvents(evs);
       setDocTypes(types);
+      setAnnouncements(anns);
     } finally {
       setLoading(false);
     }
@@ -100,14 +95,15 @@ export default function StudentProfilePage() {
     return !isUploaded;
   });
 
-  const unreadDeadlines = activeDeadlines.filter(p => !readPeriodIds.includes(p.id));
+
 
   return (
     <div className="animate-fade-in">
       {/* Top Banner (removed for current scholars) */}
       {/* Events & Calendar Widget */}
       {(() => {
-        const eventsToday = events.filter(e => isToday(new Date(e.date)));
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const eventsToday = events.filter(e => isToday(new Date(e.date)) && new Date(e.date) >= oneHourAgo);
 
         if (eventsToday.length === 0) {
           return null;
@@ -371,83 +367,7 @@ export default function StudentProfilePage() {
                     </span>
                   )}
                   
-                  {/* Notifications Bell */}
-                  <div className="relative">
-                    <button 
-                      onClick={() => {
-                        const nextState = !isNotificationsOpen;
-                        setIsNotificationsOpen(nextState);
-                        if (nextState) {
-                          const newReadIds = activeDeadlines.map(p => p.id);
-                          const merged = Array.from(new Set([...readPeriodIds, ...newReadIds]));
-                          setReadPeriodIds(merged);
-                          localStorage.setItem('read_periods', JSON.stringify(merged));
-                        }
-                      }} 
-                      className="p-2 rounded-full hover:bg-gray-100 transition-colors relative text-gray-600 hover:text-gray-900"
-                    >
-                      <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                      </svg>
-                      {unreadDeadlines.length > 0 && (
-                        <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center font-bold border-2 border-white animate-pulse">
-                          {unreadDeadlines.length}
-                        </span>
-                      )}
-                    </button>
-
-                    {isNotificationsOpen && (
-                      <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-100 rounded-xl shadow-lg z-50 overflow-hidden animate-fade-in">
-                        <div className="p-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                          <h3 className="font-semibold text-gray-800 text-sm">Bildirimler</h3>
-                          <span className="text-xs text-gray-500">{activeDeadlines.length} aktif süreç</span>
-                        </div>
-                        <div className="max-h-80 overflow-y-auto">
-                          {activeDeadlines.length === 0 ? (
-                            <div className="p-6 text-center text-gray-500 text-sm">
-                              Yeni bildiriminiz yok.
-                            </div>
-                          ) : (
-                            <div className="flex flex-col">
-                              {activeDeadlines.map(period => {
-                                const docTypeObj = docTypes.find(dt => dt.code === period.type);
-                                let labelText = docTypeObj ? docTypeObj.name : period.type;
-                                if (!docTypeObj) {
-                                  if (period.type === 'TRANSCRIPT') labelText = 'Transkripti';
-                                  else if (period.type === 'STUDENT_CERTIFICATE') labelText = 'Öğrenci Belgesi';
-                                  else if (period.type === 'VOLUNTEER_REPORT') labelText = 'STK Gönüllülük Raporu';
-                                }
-
-                                return (
-                                  <div key={period.id} className="p-3 border-b border-gray-100 hover:bg-gray-50 transition-colors flex items-start gap-3">
-                                    <div className="mt-0.5 flex-shrink-0 w-2 h-2 bg-primary-500 rounded-full" />
-                                    <div>
-                                      <p className="text-sm text-gray-800 font-medium">
-                                        <span className="font-bold text-primary-600">{labelText}</span> yüklemeye açıldı!
-                                      </p>
-                                      <p className="text-xs text-gray-500 mt-1">
-                                        Lütfen {period.label} dönemi için belgenizi yükleyiniz.
-                                      </p>
-                                      <button
-                                        onClick={() => {
-                                          setIsNotificationsOpen(false);
-                                          setActiveTab(2);
-                                        }}
-                                        className="text-xs font-semibold text-primary-600 hover:text-primary-700 mt-2 flex items-center gap-1"
-                                      >
-                                        Hemen Yükle
-                                        <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  {/* Removed Notifications Bell */}
                 </div>
               </div>
 
@@ -529,8 +449,38 @@ export default function StudentProfilePage() {
           </div>
         </div>
 
-        {/* Right Side: Mentor Card (1/3 width) */}
-        <div className="lg:col-span-1">
+        {/* Right Side: Announcements & Mentor Card (1/3 width) */}
+        <div className="lg:col-span-1 space-y-6">
+          {/* Document Deadlines Card */}
+          {activeDeadlines.length > 0 && (
+            <div className="card shadow-sm border border-orange-150 overflow-hidden mb-6 bg-white">
+              <div className="card-header bg-orange-500 py-3.5 px-4 flex items-center gap-2">
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h2 className="text-sm font-semibold text-white">Bekleyen Evraklar</h2>
+              </div>
+              <div className="card-body p-0">
+                <div className="divide-y divide-gray-100">
+                  {activeDeadlines.map((period) => {
+                    const type = docTypes.find(t => t.code === period.type)?.name || period.type;
+                    const daysLeft = period.endDate ? differenceInDays(new Date(period.endDate), new Date()) : null;
+                    
+                    return (
+                      <div key={period.id} className="p-4 hover:bg-orange-50/50 transition-colors">
+                        <h3 className="font-bold text-gray-900 text-sm mb-1">{period.label} {type}</h3>
+                        <p className="text-sm text-gray-600">
+                          Bu belgeyi yüklemeniz için {daysLeft !== null ? <strong className="text-orange-600">son {daysLeft} gün</strong> : 'süreniz devam ediyor'}.
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Mentor Card */}
           <div className="card shadow-sm border border-gray-150 overflow-hidden">
             <div className="card-header bg-gray-50/50 py-3.5 px-4 border-b border-gray-150 flex items-center gap-2">
               <svg className="w-5 h-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -588,6 +538,35 @@ export default function StudentProfilePage() {
               )}
             </div>
           </div>
+
+          {/* Announcements Card */}
+          {announcements.length > 0 && (
+            <div className="card shadow-sm border border-gray-150 overflow-hidden bg-white mt-6">
+              <div className="card-header bg-[#DF221E] py-3.5 px-4 flex items-center gap-2">
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                </svg>
+                <h2 className="text-sm font-semibold text-white">Duyurular</h2>
+              </div>
+              <div className="card-body p-0">
+                <div className="divide-y divide-gray-100">
+                  {announcements.slice(0, 5).map((ann) => (
+                    <div key={ann.id} className="p-4 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <h3 className="font-bold text-gray-900 text-sm leading-snug">{ann.title}</h3>
+                        <span className="text-[10px] font-semibold text-gray-400 whitespace-nowrap bg-gray-100 px-1.5 py-0.5 rounded">
+                          {format(new Date(ann.createdAt), 'dd MMM', { locale: tr })}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 line-clamp-3 leading-relaxed">
+                        {ann.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
