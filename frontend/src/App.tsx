@@ -11,6 +11,7 @@ import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import StudentLayout from './layouts/StudentLayout';
 import StudentProfilePage from './pages/student/StudentProfilePage';
 import StudentAnnouncementsPage from './pages/student/StudentAnnouncementsPage';
+import VolunteerFormPage from './pages/student/VolunteerFormPage';
 
 // Admin pages
 import AdminLayout from './layouts/AdminLayout';
@@ -25,6 +26,7 @@ import UsersPage from './pages/admin/UsersPage';
 import EventsPage from './pages/admin/EventsPage';
 import SettingsPage from './pages/admin/SettingsPage';
 import AnnouncementsPage from './pages/admin/AnnouncementsPage';
+import VolunteerFormsAdminPage from './pages/admin/VolunteerFormsAdminPage';
 
 function PrivateRoute({ children, roles }: { children: React.ReactNode; roles?: string[] }) {
   const { user } = useAuth();
@@ -65,6 +67,7 @@ export default function App() {
         >
           <Route path="profile" element={<StudentProfilePage />} />
           <Route path="announcements" element={<StudentAnnouncementsPage />} />
+          <Route path="volunteer-form" element={<VolunteerFormPage />} />
           <Route index element={<Navigate to="profile" replace />} />
         </Route>
 
@@ -88,6 +91,7 @@ export default function App() {
           <Route path="users" element={<UsersPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="announcements" element={<AnnouncementsPage />} />
+          <Route path="volunteer-forms" element={<VolunteerFormsAdminPage />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 

@@ -490,7 +490,7 @@ export async function listPeriods(req: Request, res: Response, next: NextFunctio
 // ── Create Period ─────────────────────────────────────────────────────
 export async function createPeriod(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { type, label, semester, academicYear, grade, grades, isOpen, startDate, endDate, categoryIds } = req.body;
+    const { type, label, semester, academicYear, grade, grades, isOpen, isVolunteerFormOpen, startDate, endDate, categoryIds } = req.body;
     if (!type || !label) throw new AppError(400, 'Tür ve etiket zorunludur.');
 
     // categoryIds: string[] | null → store as JSON string
@@ -503,7 +503,7 @@ export async function createPeriod(req: Request, res: Response, next: NextFuncti
       : null;
 
     const period = await prisma.documentPeriod.create({
-      data: { type, label, semester, academicYear, grade, grades: gradesStr, isOpen: isOpen ?? false, startDate, endDate, categoryIds: categoryIdsStr },
+      data: { type, label, semester, academicYear, grade, grades: gradesStr, isOpen: isOpen ?? false, isVolunteerFormOpen: isVolunteerFormOpen ?? false, startDate, endDate, categoryIds: categoryIdsStr },
     });
 
     // Schedule email notifications if period is open
@@ -521,7 +521,7 @@ export async function createPeriod(req: Request, res: Response, next: NextFuncti
 export async function updatePeriod(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
-    const { isOpen, label, startDate, endDate, grade, grades, semester, academicYear, categoryIds } = req.body;
+    const { isOpen, isVolunteerFormOpen, label, startDate, endDate, grade, grades, semester, academicYear, categoryIds } = req.body;
 
     const previousPeriod = await prisma.documentPeriod.findUnique({ where: { id } });
 
@@ -530,6 +530,10 @@ export async function updatePeriod(req: Request, res: Response, next: NextFuncti
 
     // Build update data, including categoryIds if provided
     const updateData: any = { isOpen, label, startDate, endDate, grade, semester, academicYear };
+    
+    if (isVolunteerFormOpen !== undefined) {
+      updateData.isVolunteerFormOpen = isVolunteerFormOpen;
+    }
     
     if (grades !== undefined) {
       updateData.grades = Array.isArray(grades) && grades.length > 0
@@ -555,7 +559,7 @@ export async function updatePeriod(req: Request, res: Response, next: NextFuncti
         module: 'DocumentPeriod',
         entityId: period.id,
         entityType: 'DocumentPeriod',
-        newValue: JSON.stringify({ isOpen, label }),
+        newValue: JSON.stringify({ isOpen, isVolunteerFormOpen, label }),
       },
     });
 
@@ -617,7 +621,7 @@ export async function deleteSemester(req: Request, res: Response, next: NextFunc
 
 export async function updateSemester(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { oldLabel, label, semester, academicYear, startDate, endDate, grade, grades, categoryIds } = req.body;
+    const { oldLabel, label, semester, academicYear, startDate, endDate, grade, grades, categoryIds, isVolunteerFormOpen } = req.body;
     if (!oldLabel) throw new AppError(400, 'Güncellenecek dönemin adı (oldLabel) gerekli.');
 
     // If changing label, ensure new label is not conflicting if it's different
@@ -636,6 +640,7 @@ export async function updateSemester(req: Request, res: Response, next: NextFunc
     if (endDate !== undefined) dataToUpdate.endDate = endDate;
     if (grade !== undefined) dataToUpdate.grade = grade;
     if (grades !== undefined) dataToUpdate.grades = grades;
+    if (isVolunteerFormOpen !== undefined) dataToUpdate.isVolunteerFormOpen = isVolunteerFormOpen;
 
     let updatedCount = 0;
 

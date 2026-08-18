@@ -175,7 +175,7 @@ export const adminApi = {
   deletePeriod: (id: string) =>
     api.delete(`/admin/periods/${id}`).then((r) => r.data),
 
-  updateSemester: (data: { oldLabel: string; label?: string; semester?: string; academicYear?: string; startDate?: string | null; endDate?: string | null; grades?: number[]; categoryIds?: string[] }) =>
+  updateSemester: (data: { oldLabel: string; label?: string; semester?: string; academicYear?: string; startDate?: string | null; endDate?: string | null; grades?: number[]; categoryIds?: string[]; isVolunteerFormOpen?: boolean }) =>
     api.patch('/admin/semesters', data).then((r) => r.data),
 
   deleteSemester: (label: string) =>
@@ -298,4 +298,27 @@ export const announcementApi = {
 
   getStudentAnnouncements: (profileId: string): Promise<import('../types').Announcement[]> =>
     api.get(`/students/${profileId}/announcements`).then((r) => r.data),
+};
+
+// ── Volunteer Forms ───────────────────────────────────────────────────
+export const volunteerApi = {
+  // Student
+  submit: (formData: FormData) =>
+    api.post('/volunteer-forms', formData).then((r) => r.data),
+
+  getMyForms: () =>
+    api.get('/volunteer-forms/my').then((r) => r.data),
+
+  // Admin
+  adminList: (params?: Record<string, string>) =>
+    api.get('/volunteer-forms', { params }).then((r) => r.data),
+
+  adminGet: (id: string) =>
+    api.get(`/volunteer-forms/${id}`).then((r) => r.data),
+
+  adminUpdate: (id: string, data: Record<string, any>) =>
+    api.patch(`/volunteer-forms/${id}`, data).then((r) => r.data),
+
+  adminDelete: (id: string) =>
+    api.delete(`/volunteer-forms/${id}`).then((r) => r.data),
 };

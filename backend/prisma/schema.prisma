@@ -138,6 +138,7 @@ model StudentProfile {
   documents         Document[]
   approvableChanges ApprovableChange[]
   notes             Note[]
+  volunteerForms    VolunteerForm[]
 
   @@map("student_profiles")
 }
@@ -155,6 +156,7 @@ model ScholarshipCategory {
   updatedAt   DateTime @updatedAt
 
   students    StudentProfile[]
+  volunteerForms VolunteerForm[]
 
   @@map("scholarship_categories")
 }
@@ -172,6 +174,7 @@ model DocumentPeriod {
   grade       Int?               // Deprecated
   grades      String?            // JSON array of grades, e.g. "[0, 1, 2]" where 0 is Hazırlık
   isOpen      Boolean            @default(false)
+  isVolunteerFormOpen Boolean    @default(false)
   categoryIds String?            // JSON array of scholarship category IDs (null = all categories)
   startDate   DateTime?
   endDate     DateTime?          // Auto-close date
@@ -179,6 +182,7 @@ model DocumentPeriod {
   updatedAt   DateTime           @updatedAt
 
   documents Document[]
+  volunteerForms VolunteerForm[]
 
   @@map("document_periods")
 }
@@ -390,4 +394,45 @@ model Announcement {
   updatedAt   DateTime @updatedAt
 
   @@map("announcements")
+}
+
+// ─────────────────────────────────────────────
+// VOLUNTEER FORMS (Gönüllülük - STK Çalışmaları)
+// ─────────────────────────────────────────────
+
+model VolunteerForm {
+  id                       String   @id @default(cuid())
+  studentProfileId         String
+  studentProfile           StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+
+  fullName                 String
+  email                    String
+  
+  // İlişkiler
+  scholarshipCategoryId    String?
+  scholarshipCategory      ScholarshipCategory? @relation(fields: [scholarshipCategoryId], references: [id])
+  
+  periodId                 String?
+  period                   DocumentPeriod? @relation(fields: [periodId], references: [id])
+
+  schoolAndDepartment      String
+  ngoOrProjectName         String
+  projectDescription       String
+  targetGroup              String
+  targetGroupOther         String?
+  totalHours               Int
+  personalImpactEvaluation String
+
+  // Dosya yolları (1 zorunlu, 2 opsiyonel)
+  document1Path            String
+  document1OriginalName    String
+  document2Path            String?
+  document2OriginalName    String?
+  document3Path            String?
+  document3OriginalName    String?
+
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@map("volunteer_forms")
 }

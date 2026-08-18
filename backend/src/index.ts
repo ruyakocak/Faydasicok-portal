@@ -14,6 +14,7 @@ import { adminRouter } from './routes/admin.routes';
 import { auditRouter } from './routes/audit.routes';
 import { eventRouter } from './routes/event.routes';
 import { mentorshipRouter } from './routes/mentorship.routes';
+import { volunteerRouter } from './routes/volunteer.routes';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -41,6 +42,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/audit-logs', auditRouter);
 app.use('/api/events', eventRouter);
 app.use('/api/mentorship', mentorshipRouter);
+app.use('/api/volunteer-forms', volunteerRouter);
 
 // ── Root redirect & Health check ─────────────────────────────────────
 app.get('/', (_req, res) => {

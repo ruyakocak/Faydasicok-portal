@@ -12,6 +12,16 @@ const transporter = nodemailer.createTransport({
 });
 
 const FROM = process.env.EMAIL_FROM || 'Faydasıçok Vakfı <ruyakocak11@gmail.com>';
+export const ADMIN_NOTIFICATION_EMAIL = process.env.ADMIN_NOTIFICATION_EMAIL || 'ruyakocak11@gmail.com';
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // ── Base HTML Template ───────────────────────────────────────────────────
 function baseTemplate(title: string, content: string): string {
@@ -60,9 +70,9 @@ function baseTemplate(title: string, content: string): string {
 }
 
 // ── Send helper ──────────────────────────────────────────────────────────
-async function sendMail(to: string | string[], subject: string, html: string) {
+async function sendMail(to: string | string[], subject: string, html: string, text?: string) {
   try {
-    await transporter.sendMail({ from: FROM, to, subject, html });
+    await transporter.sendMail({ from: FROM, to, subject, html, text });
   } catch (err) {
     // Log but never throw – email failure should never break the main flow
     console.error('[EmailService] Failed to send email:', err);
@@ -320,3 +330,280 @@ export async function sendPasswordResetEmail(opts: {
 
   await sendMail(to, 'Faydasıçok Vakfı — Şifre Sıfırlama Talebi', baseTemplate('Şifre Sıfırlama', content));
 }
+
+// 8. Öğrenci İletişim Bilgisi Güncellendi (Admin Bildirimi)
+export interface ContactChangeItem {
+  field: string;
+  label: string;
+  oldValue: string | null;
+  newValue: string;
+  isFirstEntry: boolean;
+}
+
+export interface SendStudentContactUpdatedEmailOpts {
+  studentName: string;
+  studentIdentifier?: string | null;
+  profileId?: string;
+  changes: ContactChangeItem[];
+  updatedAt?: Date;
+  to?: string;
+}
+
+export async function sendStudentContactUpdatedEmail(opts: SendStudentContactUpdatedEmailOpts): Promise<void> {
+  const {
+    studentName,
+    studentIdentifier,
+    profileId,
+    changes,
+    updatedAt = new Date(),
+    to = ADMIN_NOTIFICATION_EMAIL,
+  } = opts;
+
+  if (!changes || changes.length === 0) return;
+
+  const formattedDate = format(updatedAt, "dd MMMM yyyy 'saat' HH:mm", { locale: tr });
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const profileUrl = profileId ? `${frontendUrl}/admin/students/${profileId}` : `${frontendUrl}/admin/students`;
+
+  // ── HTML Rows for Changes ────────────────────────────────────────────────
+  const changesHtmlRows = changes.map(ch => {
+    if (ch.isFirstEntry || !ch.oldValue) {
+      return `
+        <tr>
+          <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;">
+            <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">${escapeHtml(ch.label)}</div>
+            <div style="font-size:14px;color:#0f172a;display:inline-block;padding:5px 12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;">
+              <strong style="color:#065f46;">${escapeHtml(ch.newValue)}</strong>
+              <span style="display:inline-block;margin-left:8px;background:#10b981;color:#ffffff;font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;">İlk kayıt</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    } else {
+      return `
+        <tr>
+          <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;">
+            <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">${escapeHtml(ch.label)}</div>
+            <table cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+              <tr>
+                <td style="padding:4px 10px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;color:#991b1b;text-decoration:line-through;font-size:14px;">
+                  ${escapeHtml(ch.oldValue)}
+                </td>
+                <td style="padding:0 10px;color:#64748b;font-size:16px;font-weight:bold;">➔</td>
+                <td style="padding:4px 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;color:#166534;font-weight:700;font-size:14px;">
+                  ${escapeHtml(ch.newValue)}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      `;
+    }
+  }).join('');
+
+  // ── HTML Body Content ────────────────────────────────────────────────────
+  const content = `
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 20px;">
+      Bir öğrenci portal üzerinden iletişim bilgilerini güncellemiştir. Güncellenen bilgilerin özeti aşağıda yer almaktadır:
+    </p>
+
+    <!-- Öğrenci Bilgileri Kartı -->
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;margin-bottom:24px;">
+      <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">
+        <tr>
+          <td style="padding:6px 0;color:#64748b;font-size:13px;font-weight:600;width:140px;">👤 Öğrenci:</td>
+          <td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:700;">${escapeHtml(studentName)}</td>
+        </tr>
+        ${studentIdentifier ? `
+        <tr>
+          <td style="padding:6px 0;color:#64748b;font-size:13px;font-weight:600;">🆔 TC / Öğrenci No:</td>
+          <td style="padding:6px 0;color:#334155;font-size:14px;font-weight:600;">${escapeHtml(studentIdentifier)}</td>
+        </tr>` : ''}
+        <tr>
+          <td style="padding:6px 0;color:#64748b;font-size:13px;font-weight:600;">🕒 Güncelleme Tarihi:</td>
+          <td style="padding:6px 0;color:#334155;font-size:14px;">${formattedDate}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Güncellenen Bilgiler Başlığı -->
+    <p style="margin:0 0 12px 0;color:#1e293b;font-size:15px;font-weight:700;">
+      📋 Güncellenen Bilgiler:
+    </p>
+
+    <!-- Değişiklikler Tablosu -->
+    <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;border-spacing:0 8px;margin-bottom:24px;">
+      ${changesHtmlRows}
+    </table>
+
+    <div style="text-align:center;margin:28px 0 12px;">
+      <a href="${profileUrl}" target="_blank"
+         style="display:inline-block;background:linear-gradient(135deg,#C62828 0%,#8B0000 100%);color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 28px;border-radius:8px;box-shadow:0 2px 8px rgba(198,40,40,0.25);">
+        🔍 Öğrenci Profilini Görüntüle
+      </a>
+    </div>`;
+
+  // ── Plain Text Fallback ──────────────────────────────────────────────────
+  const plainChanges = changes.map(ch => {
+    if (ch.isFirstEntry || !ch.oldValue) {
+      return `  * ${ch.label}: [${ch.newValue}] (İlk kayıt)`;
+    } else {
+      return `  * ${ch.label}: [${ch.oldValue}] ➔ [${ch.newValue}]`;
+    }
+  }).join('\n');
+
+  const text = `
+[SİSTEM BİLDİRİMİ] ÖĞRENCİ İLETİŞİM BİLGİSİ GÜNCELLEMESİ
+============================================================
+
+Öğrenci Bilgileri:
+- Adı Soyadı: ${studentName}
+${studentIdentifier ? `- TC / ID: ${studentIdentifier}\n` : ''}- Güncelleme Tarihi: ${formattedDate}
+
+Güncellenen Alanlar:
+------------------------------------------------------------
+${plainChanges}
+------------------------------------------------------------
+
+Yönetim Paneli: ${profileUrl}
+
+Bu e-posta Faydasıçok Vakfı Burs Portalı tarafından otomatik olarak gönderilmiştir.
+`.trim();
+
+  const subject = `[Sistem Bildirimi] Öğrenci İletişim Bilgisi Güncellemesi - ${studentName}`;
+  await sendMail(to, subject, baseTemplate('İletişim Bilgisi Güncellemesi', content), text);
+}
+
+// 9. Yeni Banka / IBAN Onay Talebi (Admin Bildirimi)
+export interface SendBankInfoChangeRequestEmailOpts {
+  studentName: string;
+  studentIdentifier?: string | null;
+  profileId?: string;
+  oldBankName?: string | null;
+  oldIban?: string | null;
+  newBankName: string;
+  newIban: string;
+  requestedAt?: Date;
+  to?: string;
+}
+
+export async function sendBankInfoChangeRequestEmail(opts: SendBankInfoChangeRequestEmailOpts): Promise<void> {
+  const {
+    studentName,
+    studentIdentifier,
+    profileId,
+    oldBankName,
+    oldIban,
+    newBankName,
+    newIban,
+    requestedAt = new Date(),
+    to = ADMIN_NOTIFICATION_EMAIL,
+  } = opts;
+
+  const formattedDate = format(requestedAt, "dd MMMM yyyy 'saat' HH:mm", { locale: tr });
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const approvalUrl = `${frontendUrl}/admin/approvals`;
+
+  const formatIbanDisplay = (raw?: string | null) => {
+    if (!raw) return '—';
+    const clean = raw.replace(/\s+/g, '').toUpperCase();
+    const parts = [];
+    for (let i = 0; i < clean.length; i += 4) {
+      parts.push(clean.slice(i, i + 4));
+    }
+    return parts.join(' ');
+  };
+
+  const oldIbanFormatted = oldIban ? formatIbanDisplay(oldIban) : null;
+  const newIbanFormatted = formatIbanDisplay(newIban);
+
+  const hasOldBank = Boolean(oldBankName || oldIban);
+
+  const content = `
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 20px;">
+      Bir öğrenci burs ödemeleri için <strong>yeni banka / IBAN bilgisi güncelleme talebi</strong> oluşturmuştur. Onayınız beklenmektedir:
+    </p>
+
+    <!-- Öğrenci Bilgileri Kartı -->
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;margin-bottom:24px;">
+      <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">
+        <tr>
+          <td style="padding:6px 0;color:#64748b;font-size:13px;font-weight:600;width:140px;">👤 Öğrenci:</td>
+          <td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:700;">${escapeHtml(studentName)}</td>
+        </tr>
+        ${studentIdentifier ? `
+        <tr>
+          <td style="padding:6px 0;color:#64748b;font-size:13px;font-weight:600;">🆔 TC / Öğrenci No:</td>
+          <td style="padding:6px 0;color:#334155;font-size:14px;font-weight:600;">${escapeHtml(studentIdentifier)}</td>
+        </tr>` : ''}
+        <tr>
+          <td style="padding:6px 0;color:#64748b;font-size:13px;font-weight:600;">🕒 Talep Tarihi:</td>
+          <td style="padding:6px 0;color:#334155;font-size:14px;">${formattedDate}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Banka & IBAN Karşılaştırma Kartı -->
+    <div style="background:#fffbeb;border:1px solid #fef3c7;border-radius:12px;padding:20px;margin-bottom:24px;">
+      <p style="margin:0 0 14px;color:#b45309;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">
+        🏦 Banka Bilgisi Değişiklik Özeti
+      </p>
+      
+      <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">
+        ${hasOldBank ? `
+        <tr>
+          <td style="padding:8px 0;color:#6b7280;font-size:13px;font-weight:600;width:120px;vertical-align:top;">Eski Bilgi:</td>
+          <td style="padding:8px 0;color:#374151;font-size:14px;">
+            <div style="text-decoration:line-through;color:#991b1b;margin-bottom:2px;">${escapeHtml(oldBankName || 'Banka Belirtilmemiş')}</div>
+            <div style="font-family:monospace;font-size:13px;color:#6b7280;">${escapeHtml(oldIbanFormatted || 'IBAN Yok')}</div>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="2" style="padding:4px 0;"><hr style="border:none;border-top:1px dashed #fde68a;margin:6px 0;"/></td>
+        </tr>` : ''}
+        <tr>
+          <td style="padding:8px 0;color:#15803d;font-size:13px;font-weight:700;width:120px;vertical-align:top;">
+            ${hasOldBank ? 'Yeni Bilgi:' : 'Talep Edilen Bilgi:'}
+          </td>
+          <td style="padding:8px 0;color:#0f172a;font-size:14px;">
+            <div style="font-weight:700;color:#166534;margin-bottom:2px;">
+              ${escapeHtml(newBankName)} ${!hasOldBank ? '<span style="font-size:11px;background:#10b981;color:white;padding:2px 8px;border-radius:12px;margin-left:6px;font-weight:600;">İlk Kayıt</span>' : ''}
+            </div>
+            <div style="font-family:monospace;font-size:14px;font-weight:700;color:#1e293b;">
+              ${escapeHtml(newIbanFormatted)}
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="text-align:center;margin:28px 0 12px;">
+      <a href="${approvalUrl}" target="_blank"
+         style="display:inline-block;background:linear-gradient(135deg,#C62828 0%,#8B0000 100%);color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 28px;border-radius:8px;box-shadow:0 2px 8px rgba(198,40,40,0.25);">
+        ⏳ Onay Bekleyen Taleplere Git
+      </a>
+    </div>`;
+
+  const text = `
+[SİSTEM BİLDİRİMİ] YENİ BANKA / IBAN ONAY TALEBİ
+============================================================
+
+Öğrenci Bilgileri:
+- Adı Soyadı: ${studentName}
+${studentIdentifier ? `- TC / ID: ${studentIdentifier}\n` : ''}- Talep Tarihi: ${formattedDate}
+
+Talep Edilen Değişiklik:
+------------------------------------------------------------
+${hasOldBank ? `Mevcut: ${oldBankName || '—'} / ${oldIbanFormatted || '—'}\n` : ''}Yeni: ${newBankName} / ${newIbanFormatted}
+------------------------------------------------------------
+
+Onay Taleplerini İncelemek İçin: ${approvalUrl}
+
+Bu e-posta Faydasıçok Vakfı Burs Portalı tarafından otomatik olarak gönderilmiştir.
+`.trim();
+
+  const subject = `[Sistem Bildirimi] Yeni Banka/IBAN Onay Talebi - ${studentName}`;
+  await sendMail(to, subject, baseTemplate('Banka / IBAN Onay Talebi', content), text);
+}
+
+

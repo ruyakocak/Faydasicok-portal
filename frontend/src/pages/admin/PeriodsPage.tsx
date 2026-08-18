@@ -40,7 +40,8 @@ export default function PeriodsPage() {
     startDate: string;
     endDate: string;
     categoryIds: string[];
-  }>({ label: '', semester: '', academicYear: '', startDate: '', endDate: '', categoryIds: [] });
+    isVolunteerFormOpen: boolean;
+  }>({ label: '', semester: '', academicYear: '', startDate: '', endDate: '', categoryIds: [], isVolunteerFormOpen: false });
   const [savingSemester, setSavingSemester] = useState(false);
 
   // Semester delete confirmation modal state
@@ -188,6 +189,7 @@ export default function PeriodsPage() {
       startDate: existingPeriod.startDate ? new Date(existingPeriod.startDate).toISOString().slice(0, 16) : '',
       endDate: existingPeriod.endDate ? new Date(existingPeriod.endDate).toISOString().slice(0, 16) : '',
       categoryIds: Array.from(allCatIds),
+      isVolunteerFormOpen: existingPeriod.isVolunteerFormOpen || false,
     });
   }
 
@@ -213,6 +215,7 @@ export default function PeriodsPage() {
         startDate: semesterForm.startDate ? new Date(semesterForm.startDate).toISOString() : null,
         endDate: semesterForm.endDate ? new Date(semesterForm.endDate).toISOString() : null,
         categoryIds: semesterForm.categoryIds,
+        isVolunteerFormOpen: semesterForm.isVolunteerFormOpen,
       };
 
       await adminApi.updateSemester(payload);
@@ -761,6 +764,22 @@ export default function PeriodsPage() {
                   <input type="datetime-local" className="form-input text-sm p-2" value={semesterForm.endDate} onChange={e => setSemesterForm(f => ({...f, endDate: e.target.value}))} />
                 </div>
 
+              </div>
+
+              <div className="mt-4 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-medium text-indigo-900">Gönüllülük Formu Erişimi</h4>
+                  <p className="text-[11px] text-indigo-700/80 mt-0.5">Öğrencilerin bu dönemde STK/Gönüllülük formu doldurmasına izin ver.</p>
+                </div>
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={semesterForm.isVolunteerFormOpen}
+                    onChange={(e) => setSemesterForm(f => ({ ...f, isVolunteerFormOpen: e.target.checked }))}
+                  />
+                  <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300"></div>
+                </label>
               </div>
 
               <div>

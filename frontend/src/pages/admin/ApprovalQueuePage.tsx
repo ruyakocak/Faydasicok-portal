@@ -21,6 +21,40 @@ const entityTypeLabels: Record<string, string> = {
   EDUCATION_INFO: 'Eğitim Bilgisi',
 };
 
+function formatIbanDisplay(iban?: string | null): string {
+  if (!iban) return '—';
+  const clean = iban.replace(/\s+/g, '').toUpperCase();
+  const parts = [];
+  for (let i = 0; i < clean.length; i += 4) {
+    parts.push(clean.slice(i, i + 4));
+  }
+  return parts.join(' ');
+}
+
+function renderBankInfo(val?: string | null) {
+  if (!val) return <span className="text-gray-400">—</span>;
+  try {
+    const parsed = JSON.parse(val);
+    if (parsed && typeof parsed === 'object') {
+      return (
+        <div className="space-y-0.5 text-xs">
+          <div>
+            <span className="text-gray-500 font-medium">Banka:</span>{' '}
+            <span className="font-semibold text-gray-900">{parsed.bankName || '—'}</span>
+          </div>
+          <div>
+            <span className="text-gray-500 font-medium">IBAN:</span>{' '}
+            <span className="font-mono font-medium text-gray-900 tracking-wider">{formatIbanDisplay(parsed.iban)}</span>
+          </div>
+        </div>
+      );
+    }
+  } catch {
+    // Fallback for legacy strings
+  }
+  return <span className="text-gray-700 text-xs font-medium">{val}</span>;
+}
+
 export default function ApprovalQueuePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [result, setResult] = useState<PaginatedResponse<ApprovableChange> | null>(null);
@@ -255,17 +289,23 @@ export default function ApprovalQueuePage() {
                       <span className="text-sm text-gray-800 font-medium">
                         {change.entityType === 'DOCUMENT' 
                           ? (docTypes.find(d => d.code === change.document?.type)?.name || documentTypeLabels[change.document?.type || ''] || change.document?.type || '—') 
-                          : change.fieldName || '—'}
+                          : (change.fieldName === 'bankInfo' ? 'Banka & IBAN' : change.fieldName || '—')}
                       </span>
                     </td>
-                    <td className="text-sm text-gray-500 max-w-32 truncate">
-                      {change.oldValue || '—'}
+                    <td className="text-sm">
+                      {change.entityType === 'BANK_INFO' ? (
+                        renderBankInfo(change.oldValue)
+                      ) : (
+                        <span className="text-sm text-gray-500 max-w-32 truncate">{change.oldValue || '—'}</span>
+                      )}
                     </td>
                     <td className="text-sm">
                       {change.entityType === 'DOCUMENT' && change.document?.filePath ? (
                         <a href={`/${change.document.filePath}`} target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline text-xs">
                           {change.document.originalFileName}
                         </a>
+                      ) : change.entityType === 'BANK_INFO' ? (
+                        renderBankInfo(change.newValue)
                       ) : (
                         <span className="font-medium">{change.newValue || '—'}</span>
                       )}

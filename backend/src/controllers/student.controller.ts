@@ -3,6 +3,45 @@ import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { storageService } from '../lib/storage';
 import { ApprovableEntityType, AuditAction, Role } from '../types/enums';
+import { sendStudentContactUpdatedEmail, sendBankInfoChangeRequestEmail, ContactChangeItem } from '../lib/email.service';
+
+const CONTACT_FIELD_LABELS: Record<string, string> = {
+  phone: 'Telefon Numarası',
+  email: 'E-posta Adresi',
+  address: 'İkamet Adresi',
+};
+
+function getContactChanges(
+  oldData: { phone?: string | null; email?: string | null; address?: string | null },
+  newData: { phone?: any; email?: any; address?: any }
+): ContactChangeItem[] {
+  const changes: ContactChangeItem[] = [];
+  const fields = ['phone', 'email', 'address'] as const;
+
+  for (const field of fields) {
+    if (newData[field] === undefined) continue;
+
+    const oldRaw = oldData[field];
+    const newRaw = newData[field];
+
+    const oldTrimmed = oldRaw !== null && oldRaw !== undefined ? String(oldRaw).trim() : '';
+    const newTrimmed = newRaw !== null && newRaw !== undefined ? String(newRaw).trim() : '';
+
+    if (oldTrimmed !== newTrimmed) {
+      const hadOldValue = Boolean(oldTrimmed);
+      const isFirstEntry = !hadOldValue && Boolean(newTrimmed);
+      changes.push({
+        field,
+        label: CONTACT_FIELD_LABELS[field] || field,
+        oldValue: hadOldValue ? oldTrimmed : null,
+        newValue: newTrimmed || '(Boşaltıldı)',
+        isFirstEntry,
+      });
+    }
+  }
+
+  return changes;
+}
 
 // Helper: check if user can access the student profile
 function canAccessProfile(req: Request, profileId: string, profileUserId: string): boolean {
@@ -24,7 +63,7 @@ export async function getStudentProfile(req: Request, res: Response, next: NextF
         scholarshipCategory: true,
         approvableChanges: {
           where: { status: 'PENDING' },
-          select: { id: true, entityType: true, fieldName: true, createdAt: true },
+          select: { id: true, entityType: true, fieldName: true, oldValue: true, newValue: true, createdAt: true },
         },
       },
     });
@@ -100,12 +139,21 @@ async function createApprovableChange(
 export async function updateContactInfo(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
-    const profile = await prisma.studentProfile.findUnique({ where: { id } });
+    const profile = await prisma.studentProfile.findUnique({
+      where: { id },
+      include: { user: true },
+    });
     if (!profile) throw new AppError(404, 'Profil bulunamadı.');
     if (!canAccessProfile(req, id, profile.userId)) throw new AppError(403, 'Erişim reddedildi.');
 
     const { phone, email, address } = req.body;
     
+    // Detect contact changes before saving
+    const changes = getContactChanges(
+      { phone: profile.phone, email: profile.email || profile.user?.email, address: profile.address },
+      { phone, email, address }
+    );
+
     // Update StudentProfile
     const updated = await prisma.studentProfile.update({
       where: { id },
@@ -125,6 +173,22 @@ export async function updateContactInfo(req: Request, res: Response, next: NextF
       }
     }
 
+    // Trigger admin email notification if any contact field has changed
+    if (changes.length > 0) {
+      const studentName = `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'Öğrenci';
+      const studentIdentifier = profile.user?.tcKimlikNo ? `TC: ${profile.user.tcKimlikNo}` : `ID: ${profile.id}`;
+
+      sendStudentContactUpdatedEmail({
+        studentName,
+        studentIdentifier,
+        profileId: profile.id,
+        changes,
+        updatedAt: new Date(),
+      }).catch(err => {
+        console.error('[StudentController] Failed to send contact update email:', err);
+      });
+    }
+
     res.json({ message: 'İletişim bilgileri güncellendi.', profile: updated });
   } catch (err) {
     next(err);
@@ -135,7 +199,10 @@ export async function updateContactInfo(req: Request, res: Response, next: NextF
 export async function updatePersonalInfo(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
-    const profile = await prisma.studentProfile.findUnique({ where: { id } });
+    const profile = await prisma.studentProfile.findUnique({
+      where: { id },
+      include: { user: true },
+    });
     if (!profile) throw new AppError(404, 'Profil bulunamadı.');
     if (!canAccessProfile(req, id, profile.userId)) throw new AppError(403, 'Erişim reddedildi.');
 
@@ -188,6 +255,29 @@ export async function updatePersonalInfo(req: Request, res: Response, next: Next
           await prisma.user.update({
             where: { id: profile.userId },
             data: { email: updateData.email || null }
+          });
+        }
+      }
+
+      // Check if student updated contact fields (phone, email, address)
+      if (req.user?.role !== Role.ADMIN && req.user?.role !== Role.REVIEWER) {
+        const contactChanges = getContactChanges(
+          { phone: profile.phone, email: profile.email || profile.user?.email, address: profile.address },
+          { phone: updateData.phone, email: updateData.email, address: updateData.address }
+        );
+
+        if (contactChanges.length > 0) {
+          const studentName = `${updateData.firstName || profile.firstName || ''} ${updateData.lastName || profile.lastName || ''}`.trim() || 'Öğrenci';
+          const studentIdentifier = profile.user?.tcKimlikNo ? `TC: ${profile.user.tcKimlikNo}` : `ID: ${profile.id}`;
+
+          sendStudentContactUpdatedEmail({
+            studentName,
+            studentIdentifier,
+            profileId: profile.id,
+            changes: contactChanges,
+            updatedAt: new Date(),
+          }).catch(err => {
+            console.error('[StudentController] Failed to send contact update email:', err);
           });
         }
       }
@@ -316,33 +406,90 @@ export async function updateEducationInfo(req: Request, res: Response, next: Nex
 export async function updateBankInfo(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
-    const profile = await prisma.studentProfile.findUnique({ where: { id } });
+    const profile = await prisma.studentProfile.findUnique({
+      where: { id },
+      include: { user: true },
+    });
     if (!profile) throw new AppError(404, 'Profil bulunamadı.');
     if (!canAccessProfile(req, id, profile.userId)) throw new AppError(403, 'Erişim reddedildi.');
 
     const { iban, bankName } = req.body;
-    if (!iban || !bankName) throw new AppError(400, 'IBAN ve banka adı zorunludur.');
+    const cleanBankName = (bankName || '').trim();
+    const cleanIban = (iban || '').replace(/\s+/g, '').toUpperCase();
 
-    // Mask IBAN in the change value for display (last 4 visible)
-    const maskedIban = iban.replace(/(.{4})(?=.{4})/g, '*'.repeat(4));
+    if (!cleanBankName) {
+      throw new AppError(400, 'Banka adı zorunludur.');
+    }
 
-    const changes = [
-      createApprovableChange(id, req.user!.userId, ApprovableEntityType.BANK_INFO, 'iban', profile.iban ? '***' + profile.iban.slice(-4) : null, maskedIban),
-      createApprovableChange(id, req.user!.userId, ApprovableEntityType.BANK_INFO, 'bankName', profile.bankName, bankName),
-    ];
+    // IBAN format validation: must start with TR and contain exactly 24 digits
+    if (!cleanIban.startsWith('TR') || !/^TR\d{24}$/.test(cleanIban)) {
+      throw new AppError(
+        400,
+        'Geçerli bir Türkiye IBAN numarası giriniz. IBAN "TR" ile başlamalı ve ardından 24 haneli rakam içermelidir (Örn: TR00 0000 0000 0000 0000 0000 00).'
+      );
+    }
 
-    // Store the actual IBAN in a pending state (we store actual value, display masked)
-    await prisma.approvableChange.updateMany({
+    // Remove any existing PENDING bank info approval changes for this student
+    await prisma.approvableChange.deleteMany({
       where: {
         studentProfileId: id,
         entityType: ApprovableEntityType.BANK_INFO,
-        fieldName: 'iban',
         status: 'PENDING',
       },
-      data: { newValue: iban }, // Overwrite with actual IBAN
     });
 
-    await Promise.all(changes);
+    // Format display / JSON values (unmasked full IBAN)
+    const oldPayload = JSON.stringify({
+      bankName: profile.bankName || null,
+      iban: profile.iban || null,
+    });
+
+    const changePayload = JSON.stringify({
+      bankName: cleanBankName,
+      iban: cleanIban,
+    });
+
+    // Create a single unified approvable change record
+    await prisma.approvableChange.create({
+      data: {
+        entityType: ApprovableEntityType.BANK_INFO,
+        studentProfileId: id,
+        fieldName: 'bankInfo',
+        oldValue: oldPayload,
+        newValue: changePayload,
+        changedById: req.user!.userId,
+        status: 'PENDING',
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.UPDATE,
+        module: ApprovableEntityType.BANK_INFO,
+        entityId: id,
+        entityType: 'StudentProfile',
+        oldValue: oldPayload,
+        newValue: changePayload,
+      },
+    });
+
+    // Trigger admin notification email
+    const studentName = `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'Öğrenci';
+    const studentIdentifier = profile.user?.tcKimlikNo ? `TC: ${profile.user.tcKimlikNo}` : `ID: ${profile.id}`;
+
+    sendBankInfoChangeRequestEmail({
+      studentName,
+      studentIdentifier,
+      profileId: profile.id,
+      oldBankName: profile.bankName,
+      oldIban: profile.iban,
+      newBankName: cleanBankName,
+      newIban: cleanIban,
+      requestedAt: new Date(),
+    }).catch(err => {
+      console.error('[StudentController] Error sending bank info approval email to admin:', err);
+    });
 
     res.json({ message: 'Banka bilgisi güncelleme talebi oluşturuldu. Admin onayından sonra aktif olacak.' });
   } catch (err) {

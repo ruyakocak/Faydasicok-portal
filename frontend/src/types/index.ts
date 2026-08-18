@@ -143,6 +143,7 @@ export interface DocumentPeriod {
   startDate?: string | null;
   endDate?: string | null;
   isOpen: boolean;
+  isVolunteerFormOpen?: boolean;
   categoryIds?: string | null; // JSON array of scholarship category IDs (null = all)
   createdAt: string;
   updatedAt: string;

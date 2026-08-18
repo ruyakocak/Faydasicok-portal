@@ -22,7 +22,7 @@ export function StatusBadge({ status, note }: { status: string; note?: string | 
 // ── Form field row ─────────────────────────────────────────────────────
 function FieldRow({ label, value, editing, name, onChange, type = 'text', options }: {
   label: string;
-  value: string | number | boolean | null | undefined;
+  value: React.ReactNode;
   editing?: boolean;
   name?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
@@ -34,7 +34,7 @@ function FieldRow({ label, value, editing, name, onChange, type = 'text', option
     return (
       <div className="py-2.5 border-b border-gray-100 last:border-0 grid grid-cols-[180px_1fr] gap-4 items-start">
         <dt className="text-sm text-gray-500">{label}</dt>
-        <dd className="text-sm text-gray-900 font-medium">{String(displayValue)}</dd>
+        <dd className="text-sm text-gray-900 font-medium">{displayValue}</dd>
       </div>
     );
   }
@@ -204,27 +204,91 @@ export function PersonalTab({ profile, onSave, readOnly }: {
       </div>
 
       {/* Bank Info Card */}
-      <div className="mt-6 border border-gray-200 rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="font-medium text-gray-900 flex items-center gap-2">
-            <svg viewBox="0 0 24 24" className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-            </svg>
-            Banka Bilgisi
-          </h4>
-          {!readOnly && !bankFormOpen && (
-            <button onClick={() => setBankFormOpen(true)} className="btn-secondary btn-sm">Banka Bilgisini Güncelle</button>
-          )}
-        </div>
-        {!bankFormOpen ? (
-          <dl>
-            <FieldRow label="Banka" value={profile.bankName} />
-            <FieldRow label="IBAN" value={profile.iban || '—'} />
-          </dl>
-        ) : (
-          <BankInfoForm profile={profile} onClose={() => setBankFormOpen(false)} />
-        )}
-      </div>
+      {(() => {
+        const pendingBankChange = profile.approvableChanges?.find(c => c.entityType === 'BANK_INFO');
+        let pendingBankData: { bankName?: string; iban?: string } | null = null;
+        if (pendingBankChange?.newValue) {
+          try {
+            pendingBankData = JSON.parse(pendingBankChange.newValue);
+          } catch {
+            if (pendingBankChange.fieldName === 'iban') {
+              pendingBankData = { iban: pendingBankChange.newValue, bankName: profile.bankName };
+            } else if (pendingBankChange.fieldName === 'bankName') {
+              pendingBankData = { bankName: pendingBankChange.newValue, iban: profile.iban };
+            }
+          }
+        }
+
+        const effectiveBankName = pendingBankData?.bankName ?? profile.bankName;
+        const effectiveIban = pendingBankData?.iban ?? profile.iban;
+
+        return (
+          <div className="mt-6 border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                <svg viewBox="0 0 24 24" className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                </svg>
+                Banka Bilgisi
+              </h4>
+              {!readOnly && !bankFormOpen && (
+                <button onClick={() => setBankFormOpen(true)} className="btn-secondary btn-sm">
+                  {pendingBankData ? 'Talebi Düzenle' : 'Banka Bilgisini Güncelle'}
+                </button>
+              )}
+            </div>
+
+            {pendingBankData && !bankFormOpen && (
+              <div className="mb-3 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">⏳</span>
+                  <span>Güncellediğiniz banka/IBAN bilgisi <strong>yönetici onayında beklemektedir</strong>.</span>
+                </div>
+                <span className="px-2 py-0.5 bg-amber-200 text-amber-900 rounded text-[11px] font-semibold tracking-wide">
+                  Onay Bekliyor
+                </span>
+              </div>
+            )}
+
+            {!bankFormOpen ? (
+              <dl>
+                <FieldRow
+                  label="Banka"
+                  value={
+                    pendingBankData ? (
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{effectiveBankName || '—'}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold border border-amber-200">
+                          Onay Bekliyor
+                        </span>
+                      </div>
+                    ) : (
+                      effectiveBankName || '—'
+                    )
+                  }
+                />
+                <FieldRow
+                  label="IBAN"
+                  value={
+                    pendingBankData ? (
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-medium text-gray-900">{formatIban(effectiveIban || '')}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold font-sans border border-amber-200">
+                          Onay Bekliyor
+                        </span>
+                      </div>
+                    ) : (
+                      effectiveIban ? formatIban(effectiveIban) : '—'
+                    )
+                  }
+                />
+              </dl>
+            ) : (
+              <BankInfoForm profile={profile} onClose={() => setBankFormOpen(false)} />
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -277,23 +341,80 @@ function ContactInfoForm({ profile, onClose }: { profile: StudentProfile; onClos
   );
 }
 
+function formatIban(val: string): string {
+  let raw = val.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!raw.startsWith('TR')) {
+    if (raw.startsWith('T')) {
+      // allow typing T
+    } else if (raw.startsWith('R')) {
+      raw = 'TR' + raw.slice(1);
+    } else if (raw.length > 0) {
+      raw = 'TR' + raw;
+    }
+  }
+  if (raw.length > 2) {
+    const prefix = raw.slice(0, 2);
+    const digits = raw.slice(2).replace(/\D/g, '').slice(0, 24);
+    raw = prefix + digits;
+  }
+  const parts = [];
+  for (let i = 0; i < raw.length; i += 4) {
+    parts.push(raw.slice(i, i + 4));
+  }
+  return parts.join(' ');
+}
+
 function BankInfoForm({ profile, onClose }: { profile: StudentProfile; onClose: () => void }) {
-  const [iban, setIban] = useState(profile.iban || '');
-  const [bankName, setBankName] = useState(profile.bankName || '');
+  const pendingBankChange = profile.approvableChanges?.find(c => c.entityType === 'BANK_INFO');
+  let pendingBankData: { bankName?: string; iban?: string } | null = null;
+  if (pendingBankChange?.newValue) {
+    try {
+      pendingBankData = JSON.parse(pendingBankChange.newValue);
+    } catch {
+      if (pendingBankChange.fieldName === 'iban') {
+        pendingBankData = { iban: pendingBankChange.newValue, bankName: profile.bankName };
+      } else if (pendingBankChange.fieldName === 'bankName') {
+        pendingBankData = { bankName: pendingBankChange.newValue, iban: profile.iban };
+      }
+    }
+  }
+
+  const initialIban = pendingBankData?.iban || profile.iban;
+  const initialBankName = pendingBankData?.bankName || profile.bankName;
+
+  const [iban, setIban] = useState(initialIban ? formatIban(initialIban) : 'TR');
+  const [bankName, setBankName] = useState(initialBankName || '');
   const [saving, setSaving] = useState(false);
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'REVIEWER';
 
+  const cleanIban = iban.replace(/\s+/g, '').toUpperCase();
+  const isIbanComplete = cleanIban.startsWith('TR') && cleanIban.length === 26 && /^TR\d{24}$/.test(cleanIban);
+
+  function handleIbanChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const formatted = formatIban(e.target.value);
+    setIban(formatted);
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (!isIbanComplete) {
+      toast.error('Geçerli bir Türkiye IBAN numarası giriniz. (TR ile başlamalı ve 24 haneli rakam içermelidir.)');
+      return;
+    }
+    if (!bankName.trim()) {
+      toast.error('Lütfen banka adını giriniz.');
+      return;
+    }
+
     setSaving(true);
     try {
       if (isAdmin) {
-        await adminApi.updateStudentProfile(profile.id, { iban, bankName });
+        await adminApi.updateStudentProfile(profile.id, { iban: cleanIban, bankName: bankName.trim() });
         toast.success('Banka bilgisi güncellendi.');
         window.location.reload(); 
       } else {
-        await studentApi.updateBankInfo(profile.id, iban, bankName);
+        await studentApi.updateBankInfo(profile.id, cleanIban, bankName.trim());
         toast.success('Banka bilgisi güncelleme talebi gönderildi.');
         onClose();
       }
@@ -305,23 +426,53 @@ function BankInfoForm({ profile, onClose }: { profile: StudentProfile; onClose: 
   return (
     <form onSubmit={handleSave} className="space-y-3">
       {!isAdmin && (
-        <div className="text-xs text-status-pending-text bg-status-pending-bg rounded p-2">
-          Banka bilgisi değişikliği her zaman admin onayına gönderilir.
+        <div className="text-xs text-status-pending-text bg-status-pending-bg rounded p-2.5 flex items-start gap-2">
+          <span className="text-sm">ℹ️</span>
+          <span>Banka ve IBAN bilgisi değişikliği güvenlik nedeniyle her zaman yönetici onayına sunulur.</span>
         </div>
       )}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <label className="form-label">Banka Adı</label>
-          <input className="form-input" value={bankName} onChange={e => setBankName(e.target.value)} required />
+          <label className="form-label font-medium text-xs text-gray-700">Banka Adı</label>
+          <input
+            className="form-input text-sm"
+            placeholder="Örn: Ziraat Bankası, İş Bankası"
+            value={bankName}
+            onChange={e => setBankName(e.target.value)}
+            required
+          />
         </div>
         <div>
-          <label className="form-label">IBAN</label>
-          <input className="form-input font-mono" placeholder="TR00 0000 0000 0000 0000 0000 00" value={iban} onChange={e => setIban(e.target.value)} required />
+          <label className="form-label font-medium text-xs text-gray-700 flex items-center justify-between">
+            <span>IBAN Numarası</span>
+            <span className="text-[11px] text-gray-400 font-mono">
+              {cleanIban.length}/26 karakter
+            </span>
+          </label>
+          <input
+            className={`form-input font-mono text-sm tracking-wide ${cleanIban.length > 2 && !isIbanComplete ? 'border-amber-400 focus:border-amber-500' : ''}`}
+            placeholder="TR00 0000 0000 0000 0000 0000 00"
+            value={iban}
+            onChange={handleIbanChange}
+            maxLength={32}
+            required
+          />
         </div>
       </div>
+
+      {cleanIban.length > 2 && !isIbanComplete && (
+        <p className="text-xs text-amber-600">
+          ⚠️ IBAN 'TR' ile başlamalı ve tam 24 haneli rakam içermelidir. (Kalan: {26 - cleanIban.length} hane)
+        </p>
+      )}
+
       <div className="flex gap-2 pt-2">
-        <button type="button" onClick={onClose} className="btn-secondary btn-sm">İptal</button>
-        <button type="submit" className="btn-primary btn-sm" disabled={saving}>
+        <button type="button" onClick={onClose} className="btn-secondary btn-sm flex-1">İptal</button>
+        <button
+          type="submit"
+          className="btn-primary btn-sm flex-1"
+          disabled={saving || !isIbanComplete || !bankName.trim()}
+        >
           {saving ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Güncelleme Talebi Gönder'}
         </button>
       </div>

@@ -105,6 +105,25 @@ export async function approveChange(req: Request, res: Response, next: NextFunct
           where: { id: change.documentId! },
           data: { status: 'APPROVED' },
         });
+      } else if (change.entityType === ApprovableEntityType.BANK_INFO && change.newValue) {
+        try {
+          const parsed = JSON.parse(change.newValue);
+          await tx.studentProfile.update({
+            where: { id: change.studentProfileId },
+            data: {
+              ...(parsed.bankName ? { bankName: parsed.bankName } : {}),
+              ...(parsed.iban ? { iban: parsed.iban } : {}),
+            },
+          });
+        } catch {
+          // Fallback for legacy single-field records
+          if (change.fieldName) {
+            await tx.studentProfile.update({
+              where: { id: change.studentProfileId },
+              data: { [change.fieldName]: change.newValue },
+            });
+          }
+        }
       } else if (change.fieldName && change.newValue) {
         // Apply field change to student profile
         const fieldName = change.fieldName;
