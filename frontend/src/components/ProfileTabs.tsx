@@ -308,8 +308,8 @@ function ContactInfoForm({ profile, onClose }: { profile: StudentProfile; onClos
         toast.success('İletişim bilgileri güncellendi.');
         window.location.reload();
       } else {
-        await studentApi.updateContact(profile.id, form);
-        toast.success('İletişim bilgileri güncellendi.');
+        const res = await studentApi.updateContact(profile.id, form) as any;
+        toast.success(res.message || 'Güncelleme talebi gönderildi.');
         window.location.reload();
       }
     } finally {

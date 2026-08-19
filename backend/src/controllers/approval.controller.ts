@@ -144,6 +144,17 @@ export async function approveChange(req: Request, res: Response, next: NextFunct
           where: { id: change.studentProfileId },
           data: { [fieldName]: value },
         });
+
+        // Sync email to User table
+        if (fieldName === 'email') {
+          const profile = await tx.studentProfile.findUnique({ where: { id: change.studentProfileId } });
+          if (profile) {
+            await tx.user.update({
+              where: { id: profile.userId },
+              data: { email: value || null },
+            });
+          }
+        }
       }
 
       // Audit log

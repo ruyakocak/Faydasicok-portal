@@ -135,7 +135,7 @@ async function createApprovableChange(
   });
 }
 
-// ── Update Contact Info (direct, no approval) ────────────────────────
+// ── Update Contact Info (requires approval) ────────────────────────
 export async function updateContactInfo(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
@@ -148,33 +148,58 @@ export async function updateContactInfo(req: Request, res: Response, next: NextF
 
     const { phone, email, address } = req.body;
     
-    // Detect contact changes before saving
+    // Detect contact changes
     const changes = getContactChanges(
       { phone: profile.phone, email: profile.email || profile.user?.email, address: profile.address },
       { phone, email, address }
     );
 
-    // Update StudentProfile
-    const updated = await prisma.studentProfile.update({
-      where: { id },
-      data: { phone, email, address },
-    });
+    if (changes.length === 0) {
+      res.json({ message: 'Değişiklik yapılmadı.', profile });
+      return;
+    }
 
-    // Sync email to User table if provided
-    if (email !== undefined) {
-      const existingUserWithEmail = await prisma.user.findFirst({
-        where: { email, id: { not: profile.userId } }
-      });
-      if (!existingUserWithEmail) {
-        await prisma.user.update({
-          where: { id: profile.userId },
-          data: { email: email || null }
-        });
+    // Create ApprovableChange records for each field
+    const approvableChanges = [];
+    const fieldsToUpdate = { phone, email, address };
+    
+    for (const [key, newVal] of Object.entries(fieldsToUpdate)) {
+      if (newVal !== undefined) {
+        let oldVal = null;
+        if (key === 'phone') oldVal = profile.phone;
+        if (key === 'email') oldVal = profile.email || profile.user?.email;
+        if (key === 'address') oldVal = profile.address;
+
+        if (oldVal !== newVal) {
+          // Remove existing pending changes for this field
+          await prisma.approvableChange.deleteMany({
+            where: {
+              studentProfileId: id,
+              entityType: 'PERSONAL_INFO',
+              fieldName: key,
+              status: 'PENDING',
+            },
+          });
+
+          approvableChanges.push({
+            entityType: 'PERSONAL_INFO',
+            studentProfileId: id,
+            fieldName: key,
+            oldValue: oldVal || null,
+            newValue: newVal || null,
+            changedById: req.user!.userId,
+            status: 'PENDING',
+          });
+        }
       }
     }
 
-    // Trigger admin email notification if any contact field has changed
-    if (changes.length > 0) {
+    if (approvableChanges.length > 0) {
+      await prisma.approvableChange.createMany({
+        data: approvableChanges,
+      });
+
+      // Trigger admin email notification
       const studentName = `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'Öğrenci';
       const studentIdentifier = profile.user?.tcKimlikNo ? `TC: ${profile.user.tcKimlikNo}` : `ID: ${profile.id}`;
 
@@ -189,7 +214,7 @@ export async function updateContactInfo(req: Request, res: Response, next: NextF
       });
     }
 
-    res.json({ message: 'İletişim bilgileri güncellendi.', profile: updated });
+    res.json({ message: 'İletişim bilgisi güncelleme talebiniz oluşturuldu. Yönetici onayından sonra aktif olacaktır.' });
   } catch (err) {
     next(err);
   }

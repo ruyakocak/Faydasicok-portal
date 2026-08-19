@@ -119,10 +119,10 @@ function FileDropZone({ label, file, onFile, onRemove, required }: {
 }
 
 // ── Main Component ───────────────────────────────────────────────────
-export default function VolunteerFormPage() {
+export default function VolunteerFormPage({ initialProfile }: { isEmbedded?: boolean; initialProfile?: StudentProfile }) {
   const { user } = useAuth();
-  const [, setProfile] = useState<StudentProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<StudentProfile | null>(initialProfile || null);
+  const [loading, setLoading] = useState(!initialProfile);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -146,6 +146,25 @@ export default function VolunteerFormPage() {
 
   // Load profile to pre-fill name/email
   useEffect(() => {
+    import('../../api/client').then(({ default: api }) => {
+      api.get('/students/scholarship-categories').then(r => {
+        setCategories(r.data);
+      }).catch(console.error);
+    });
+
+    if (initialProfile) {
+      setFullName(`${initialProfile.firstName} ${initialProfile.lastName}`.trim());
+      setEmail(initialProfile.email || initialProfile.user?.email || '');
+      setSchoolAndDepartment(
+        [initialProfile.universityName, initialProfile.department].filter(Boolean).join(' - ')
+      );
+      if (initialProfile.scholarshipCategoryId) {
+        setScholarshipCategoryId(initialProfile.scholarshipCategoryId);
+      }
+      setLoading(false);
+      return;
+    }
+
     if (!user?.profileId) return;
     studentApi.getProfile(user.profileId).then(p => {
       setProfile(p);
@@ -154,13 +173,12 @@ export default function VolunteerFormPage() {
       setSchoolAndDepartment(
         [p.universityName, p.department].filter(Boolean).join(' - ')
       );
+      if (p.scholarshipCategoryId) {
+        setScholarshipCategoryId(p.scholarshipCategoryId);
+      }
     }).finally(() => setLoading(false));
 
-    import('../../api/client').then(({ default: api }) => {
-      api.get('/students/scholarship-categories').then(r => setCategories(r.data)).catch(console.error);
-    });
-
-  }, [user?.profileId]);
+  }, [user?.profileId, initialProfile]);
 
   // Validation state
   const projectDescValid = projectDescription.trim().length >= MIN_PROJECT_DESC;
@@ -340,7 +358,7 @@ export default function VolunteerFormPage() {
                     scholarshipCategoryId === cat.id
                       ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-400'
                       : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                  }`}
+                  } ${(profile?.scholarshipCategoryId && profile.scholarshipCategoryId !== cat.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <input
                     type="radio"
@@ -349,6 +367,7 @@ export default function VolunteerFormPage() {
                     checked={scholarshipCategoryId === cat.id}
                     onChange={e => setScholarshipCategoryId(e.target.value)}
                     className="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
+                    disabled={!!profile?.scholarshipCategoryId}
                   />
                   <span className="text-sm font-medium text-gray-800">{cat.name}</span>
                 </label>

@@ -5,8 +5,9 @@ import type { StudentProfile, Document as DocFile, DocumentPeriod, Event, Announ
 import { PersonalTab, EducationTab, DocumentsTab } from '../../components/ProfileTabs';
 import { format, isToday, differenceInDays } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import VolunteerFormPage from './VolunteerFormPage';
 
-const TABS = ['Kişisel Bilgiler', 'Eğitim Bilgileri', 'Dokümanlar'];
+const TABS = ['Kişisel Bilgiler', 'Eğitim Bilgileri', 'Dokümanlar', 'STK Gönüllülük Formu'];
 
 export default function StudentProfilePage() {
   const { user } = useAuth();
@@ -326,7 +327,7 @@ export default function StudentProfilePage() {
           <div className="flex items-start gap-5">
             {/* Photo */}
             <div className="relative flex-shrink-0">
-              <div className="w-20 h-20 rounded-xl bg-primary-100 flex items-center justify-center text-primary-600 text-2xl font-bold overflow-hidden">
+              <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-xl bg-primary-100 flex items-center justify-center text-primary-600 text-4xl font-bold overflow-hidden">
                 {profile.photoPath ? (
                   <img src={`/${profile.photoPath}`} alt="Profil" className="w-full h-full object-cover" />
                 ) : (
@@ -444,6 +445,9 @@ export default function StudentProfilePage() {
                   onUpload={loadAll}
                   readOnly={false}
                 />
+              )}
+              {activeTab === 3 && (
+                <VolunteerFormPage isEmbedded={true} initialProfile={profile} />
               )}
             </div>
           </div>

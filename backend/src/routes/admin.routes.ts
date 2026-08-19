@@ -37,6 +37,7 @@ import {
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
+  downloadDocumentsZip
 } from '../controllers/admin.controller';
 import { upload } from '../middleware/upload.middleware';
 import multer from 'multer';
@@ -101,3 +102,5 @@ adminRouter.get('/announcements', requireAdminOrReviewer, listAnnouncements);
 adminRouter.post('/announcements', requireAdmin, createAnnouncement);
 adminRouter.patch('/announcements/:id', requireAdmin, updateAnnouncement);
 adminRouter.delete('/announcements/:id', requireAdmin, deleteAnnouncement);
+
+adminRouter.get('/documents/download-zip', requireAdminOrReviewer, downloadDocumentsZip);

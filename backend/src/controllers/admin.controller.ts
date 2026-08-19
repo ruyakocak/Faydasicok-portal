@@ -4,6 +4,9 @@ import { stringify } from 'csv-stringify/sync';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import ExcelJS from 'exceljs';
+import AdmZip from 'adm-zip';
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuditAction, Role, StudentStatus } from '../types/enums';
@@ -1467,6 +1470,56 @@ export async function deleteAnnouncement(req: Request, res: Response, next: Next
     });
 
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function downloadDocumentsZip(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { periodLabel, entity } = req.query;
+    if (!periodLabel || !entity) throw new AppError(400, 'periodLabel and entity are required.');
+
+    const period = await prisma.documentPeriod.findFirst({
+      where: { label: String(periodLabel), type: String(entity) }
+    });
+    
+    if (!period) throw new AppError(404, 'Seçili döneme ait evrak talebi bulunamadı.');
+
+    const documents = await prisma.document.findMany({
+      where: { periodId: period.id },
+      include: { studentProfile: { include: { user: true } }, documentPeriod: true }
+    });
+
+    if (documents.length === 0) {
+      throw new AppError(404, 'Bu döneme ait yüklenmiş belge bulunamadı.');
+    }
+
+    const zip = new AdmZip();
+    let hasFiles = false;
+
+    for (const doc of documents) {
+      const filePath = path.join(__dirname, '../../', doc.filePath);
+      if (fs.existsSync(filePath)) {
+        const studentName = `${doc.studentProfile.firstName}_${doc.studentProfile.lastName}`.replace(/[^a-zA-Z0-9_ğüşöçİĞÜŞÖÇ]/g, '');
+        const tc = doc.studentProfile.user?.tcKimlikNo || 'bilinmeyen-tc';
+        const ext = path.extname(doc.filePath);
+        zip.addLocalFile(filePath, '', `${studentName}_${tc}${ext}`);
+        hasFiles = true;
+      }
+    }
+
+    if (!hasFiles) {
+      throw new AppError(404, 'Dosyalar sunucuda fiziksel olarak bulunamadı.');
+    }
+
+    const zipBuffer = zip.toBuffer();
+    
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition', `attachment; filename="${period.type}_belgeleri.zip"`);
+    res.set('Content-Length', zipBuffer.length.toString());
+    
+    res.send(zipBuffer);
   } catch (err) {
     next(err);
   }

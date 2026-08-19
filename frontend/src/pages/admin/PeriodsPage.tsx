@@ -111,6 +111,17 @@ export default function PeriodsPage() {
     setPeriods(data);
   }
 
+  async function toggleVolunteerForm(label: string, currentValue: boolean) {
+    try {
+      await adminApi.updateSemester({ oldLabel: label, isVolunteerFormOpen: !currentValue } as any);
+      toast.success(`STK Gönüllülük Formu ${currentValue ? 'kapatıldı' : 'açıldı'}.`);
+      const data = await adminApi.listPeriods();
+      setPeriods(data);
+    } catch (err: any) {
+      toast.error('Güncellenirken hata oluştu.');
+    }
+  }
+
 
 
   async function handleCreateSemester(e: React.FormEvent) {
@@ -120,11 +131,12 @@ export default function PeriodsPage() {
     try {
       // Create the base periods for this new semester with selected categories
       const activeTypes = docTypes.filter(t => t.isActive);
-      if (activeTypes.length === 0) {
-        toast.error('Aktif bir belge türü bulunamadı. Lütfen önce belge türü ekleyin.');
-        setCreating(false);
-        return;
+      
+      // Always ensure TRANSCRIPT is included even if not explicitly active, as it's a fixed request
+      if (!activeTypes.find(t => t.code === 'TRANSCRIPT')) {
+        activeTypes.push({ code: 'TRANSCRIPT', name: 'Transkript', isActive: true } as any);
       }
+
       await Promise.all(
         activeTypes.map(t => {
           let documentCatIds: string[] = [];
@@ -491,8 +503,40 @@ export default function PeriodsPage() {
                       </div>
                     </div>
 
-                    {/* Document Requests List */}
+                    {/* Sabit Talepler Alanı */}
                     <div className="space-y-4">
+                      <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-2 px-1 border-b pb-2">Sabit Talepler</h3>
+                      <div className="bg-amber-50/50 border border-amber-200/50 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <h4 className="font-bold text-amber-900 text-sm sm:text-base mb-1 flex items-center gap-2">
+                            STK Gönüllülük Formu
+                            {selectedSemesterPeriods[0]?.isVolunteerFormOpen && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 animate-pulse">Aktif Alımda</span>
+                            )}
+                          </h4>
+                          <p className="text-xs text-amber-700 max-w-xl">
+                            Öğrencilerin STK çalışmalarını raporlayacağı gönüllülük formu. Aktif edildiğinde öğrenci profilinde doldurulabilir hale gelir.
+                          </p>
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-center gap-3">
+                          {selectedSemesterPeriods[0]?.isVolunteerFormOpen && (
+                            <Link to={`/admin/volunteer-forms?periodLabel=${encodeURIComponent(selectedSemester)}`} className="text-xs font-semibold text-primary-600 hover:text-primary-800 bg-white border border-primary-200 px-3 py-1.5 rounded-lg transition-colors">
+                              Formları Görüntüle
+                            </Link>
+                          )}
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" className="sr-only peer" checked={!!selectedSemesterPeriods[0]?.isVolunteerFormOpen} onChange={() => toggleVolunteerForm(selectedSemester, !!selectedSemesterPeriods[0]?.isVolunteerFormOpen)} />
+                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+                            <span className={`ml-2 text-xs font-bold ${selectedSemesterPeriods[0]?.isVolunteerFormOpen ? 'text-green-600' : 'text-gray-400'}`}>
+                              {selectedSemesterPeriods[0]?.isVolunteerFormOpen ? 'AÇIK' : 'PASİF'}
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Document Requests List */}
+                    <div className="space-y-4 pt-4">
                       <div className="flex items-center justify-between px-1">
                         <h3 className="font-bold text-gray-800 text-base">Bu Dönemde Talep Edilen Belgeler</h3>
                         <span className="text-xs text-gray-500 font-medium">{selectedSemesterPeriods.length} belge isteniyor</span>
@@ -556,12 +600,22 @@ export default function PeriodsPage() {
                                     {/* Date and Target Info Chips */}
                                     <div className="flex items-center gap-3 text-[11px] text-gray-500 flex-wrap pt-1">
                                       {docCount > 0 ? (
-                                        <Link 
-                                          to={`/admin/approvals?periodLabel=${encodeURIComponent(selectedSemester)}&entity=${period.type}`}
-                                          className="text-primary-600 font-semibold hover:underline flex items-center gap-0.5"
-                                        >
-                                          {docCount} Belge Yüklendi
-                                        </Link>
+                                        <div className="flex items-center gap-3">
+                                          <Link 
+                                            to={`/admin/approvals?periodLabel=${encodeURIComponent(selectedSemester)}&entity=${period.type}`}
+                                            className="text-primary-600 font-semibold hover:underline flex items-center gap-0.5"
+                                          >
+                                            {docCount} Belge Yüklendi
+                                          </Link>
+                                          <a 
+                                            href={`/api/admin/documents/download-zip?periodLabel=${encodeURIComponent(selectedSemester)}&entity=${period.type}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[10px] font-bold bg-primary-50 text-primary-700 px-2.5 py-1 rounded-md hover:bg-primary-100 transition-colors border border-primary-200"
+                                          >
+                                            TÜMÜNÜ İNDİR (ZIP)
+                                          </a>
+                                        </div>
                                       ) : (
                                         <span className="font-medium text-gray-400">0 belge yüklendi</span>
                                       )}
