@@ -5,9 +5,10 @@ import type { StudentProfile, Document as DocFile, DocumentPeriod, Event, Announ
 import { PersonalTab, EducationTab, DocumentsTab } from '../../components/ProfileTabs';
 import { format, isToday, differenceInDays } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import VolunteerFormPage from './VolunteerFormPage';
+import toast from 'react-hot-toast';
 
-const TABS = ['Kişisel Bilgiler', 'Eğitim Bilgileri', 'Dokümanlar', 'STK Gönüllülük Formu'];
+
+const TABS = ['Kişisel Bilgiler', 'Eğitim Bilgileri', 'Dokümanlar'];
 
 export default function StudentProfilePage() {
   const { user } = useAuth();
@@ -51,6 +52,20 @@ export default function StudentProfilePage() {
   }
 
   useEffect(() => { loadAll(); }, [profileId]);
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !profileId) return;
+
+    const loadingToast = toast.loading('Fotoğraf yükleniyor...');
+    try {
+      await studentApi.uploadPhoto(profileId, file);
+      toast.success('Profil fotoğrafınız başarıyla güncellendi.', { id: loadingToast });
+      await loadAll();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.response?.data?.error || 'Fotoğraf yüklenirken hata oluştu.', { id: loadingToast });
+    }
+  }
 
 
 
@@ -326,13 +341,27 @@ export default function StudentProfilePage() {
         <div className="card-body">
           <div className="flex items-start gap-5">
             {/* Photo */}
-            <div className="relative flex-shrink-0">
-              <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-xl bg-primary-100 flex items-center justify-center text-primary-600 text-4xl font-bold overflow-hidden">
+            <div className="relative flex-shrink-0 group">
+              <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-primary-50 border-2 border-gray-100 shadow-sm flex items-center justify-center text-primary-600 text-3xl sm:text-4xl font-bold overflow-hidden cursor-pointer transition-all hover:shadow-md">
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                  title="Profil Fotoğrafını Değiştirmek İçin Tıklayın"
+                  onChange={handlePhotoUpload}
+                />
                 {profile.photoPath ? (
-                  <img src={`/${profile.photoPath}`} alt="Profil" className="w-full h-full object-cover" />
+                  <img src={`/${profile.photoPath}`} alt="Profil" className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" />
                 ) : (
-                  <img src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${profile.user?.tcKimlikNo || profile.id}`} alt="Avatar" className="w-full h-full object-cover" />
+                  <img src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${profile.user?.tcKimlikNo || profile.id}`} alt="Avatar" className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" />
                 )}
+                <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px] flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none p-2 text-center">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span className="text-[11px] font-medium text-white leading-tight">Fotoğraf Değiştir</span>
+                </div>
               </div>
             </div>
 
@@ -446,9 +475,7 @@ export default function StudentProfilePage() {
                   readOnly={false}
                 />
               )}
-              {activeTab === 3 && (
-                <VolunteerFormPage isEmbedded={true} initialProfile={profile} />
-              )}
+
             </div>
           </div>
         </div>

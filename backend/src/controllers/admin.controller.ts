@@ -16,6 +16,7 @@ import {
   sendNewPeriodEmail,
   sendMentorAssignedEmail,
 } from '../lib/email.service';
+import { seedStandardDocumentTypes } from '../utils/seed_docs';
 
 
 const BCRYPT_ROUNDS = 12;
@@ -161,6 +162,7 @@ export async function listStudents(req: Request, res: Response, next: NextFuncti
           user: { select: { id: true, tcKimlikNo: true, isActive: true } },
           mentor: true,
           scholarshipCategory: true,
+          documents: true,
           _count: { select: { approvableChanges: { where: { status: 'PENDING' } } } },
         },
         orderBy: { createdAt: 'desc' },
@@ -170,8 +172,50 @@ export async function listStudents(req: Request, res: Response, next: NextFuncti
       prisma.studentProfile.count({ where }),
     ]);
 
+    const openPeriods = await prisma.documentPeriod.findMany({
+      where: { isOpen: true },
+    });
+
+    const mappedProfiles = profiles.map(profile => {
+      let pendingCount = 0;
+      let missingCount = 0;
+
+      openPeriods.forEach(p => {
+        let applies = true;
+        if (p.categoryIds) {
+          try {
+            const catIds = JSON.parse(p.categoryIds);
+            if (catIds.length > 0 && profile.scholarshipCategoryId && !catIds.includes(profile.scholarshipCategoryId)) {
+              applies = false;
+            }
+          } catch {}
+        }
+        
+        if (applies) {
+          const doc = profile.documents.find(d => d.type === p.type && d.periodId === p.id);
+          if (!doc) {
+             missingCount++;
+          } else if (doc.status === 'PENDING') {
+             pendingCount++;
+          } else if (doc.status === 'REJECTED') {
+             missingCount++;
+          }
+        }
+      });
+
+      const { documents, ...rest } = profile;
+      return {
+        ...rest,
+        documentStatus: {
+          completed: missingCount === 0 && pendingCount === 0,
+          missingCount,
+          pendingCount,
+        }
+      };
+    });
+
     res.json({
-      data: profiles,
+      data: mappedProfiles,
       pagination: {
         total,
         page: Number(page),
@@ -179,6 +223,89 @@ export async function listStudents(req: Request, res: Response, next: NextFuncti
         totalPages: Math.ceil(total / Number(limit)),
       },
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Bulk Remind Students ────────────────────────────────────────────────
+export async function bulkRemindStudents(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { studentIds } = req.body;
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      throw new AppError(400, 'Geçerli öğrenci ID listesi gereklidir.');
+    }
+
+    // Fetch student profiles from the database matching either StudentProfile.id or User.id
+    const profiles = await prisma.studentProfile.findMany({
+      where: {
+        OR: [
+          { id: { in: studentIds } },
+          { userId: { in: studentIds } },
+        ],
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    if (profiles.length === 0) {
+      throw new AppError(404, 'Seçilen öğrenciler bulunamadı.');
+    }
+
+    // Send emails
+    const { sendMissingDocumentReminderEmail } = await import('../lib/email.service');
+    
+    let sentCount = 0;
+    const sentEmails: string[] = [];
+    const missingEmails: string[] = [];
+
+    for (const p of profiles) {
+      const targetEmail = (p.email && p.email.trim()) || (p.user?.email && p.user.email.trim());
+      const studentName = `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Bursiyer';
+
+      if (targetEmail) {
+        console.log(`[BulkRemind] Sending reminder to ${studentName} (${targetEmail})...`);
+        try {
+          await sendMissingDocumentReminderEmail({
+            to: targetEmail,
+            firstName: p.firstName || 'Bursiyer',
+          });
+          sentCount++;
+          sentEmails.push(targetEmail);
+          console.log(`[BulkRemind] Successfully sent reminder to ${targetEmail}`);
+        } catch (mailErr) {
+          console.error(`[BulkRemind] Error sending to ${targetEmail}:`, mailErr);
+        }
+      } else {
+        missingEmails.push(studentName);
+        console.warn(`[BulkRemind] No email address found for ${studentName} (Profile ID: ${p.id})`);
+      }
+    }
+
+    // Log the action
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.UPDATE,
+        module: 'Student',
+        entityId: 'BULK',
+        entityType: 'User',
+        oldValue: 'E-posta Hatırlatma',
+        newValue: `${sentCount} öğrenciye belge hatırlatması e-postası gönderildi: ${sentEmails.join(', ')}`,
+      },
+    });
+
+    if (sentCount === 0 && missingEmails.length > 0) {
+      throw new AppError(400, `Seçilen ${missingEmails.length} öğrencinin kayıtlı bir e-posta adresi bulunmuyor: ${missingEmails.join(', ')}`);
+    }
+
+    let msg = `${sentCount} öğrenciye belge hatırlatması başarıyla gönderildi.`;
+    if (missingEmails.length > 0) {
+      msg += ` (${missingEmails.length} öğrencinin e-postası kayıtlı olmadığı için atlandı: ${missingEmails.join(', ')})`;
+    }
+
+    res.json({ message: msg, sentCount, missingCount: missingEmails.length });
   } catch (err) {
     next(err);
   }
@@ -249,7 +376,7 @@ export async function updateStudentProfile(req: Request, res: Response, next: Ne
     }
 
     // Format boolean fields properly if sent as string
-    ['fatherAlive', 'motherAlive'].forEach(key => {
+    ['fatherAlive', 'motherAlive', 'isInitialDocsExempt'].forEach(key => {
       if (profileData[key] !== undefined) {
         profileData[key] = profileData[key] === true || profileData[key] === 'true' || profileData[key] === 'Evet';
       }
@@ -274,17 +401,27 @@ export async function updateStudentProfile(req: Request, res: Response, next: Ne
       data: profileData
     });
 
-    // Sync email to User table if provided
+    // Sync email to User table and StudentProfile properly if provided
     if (profileData.email !== undefined) {
-      const existingUserWithEmail = await prisma.user.findFirst({
-        where: { email: profileData.email, id: { not: updated.userId } }
-      });
-      if (!existingUserWithEmail) {
-        await prisma.user.update({
-          where: { id: updated.userId },
-          data: { email: profileData.email || null }
+      const cleanEmail = profileData.email && typeof profileData.email === 'string' && profileData.email.trim() !== ''
+        ? profileData.email.trim()
+        : null;
+
+      profileData.email = cleanEmail;
+
+      if (cleanEmail) {
+        const existingUserWithEmail = await prisma.user.findFirst({
+          where: { email: cleanEmail, id: { not: updated.userId } }
         });
+        if (existingUserWithEmail) {
+          throw new AppError(400, 'Bu e-posta adresi sistemde başka bir hesap tarafından kullanılmaktadır.');
+        }
       }
+      
+      await prisma.user.update({
+        where: { id: updated.userId },
+        data: { email: cleanEmail }
+      });
     }
 
     await prisma.auditLog.create({
@@ -1199,7 +1336,7 @@ export async function exportStudentsReport(req: Request, res: Response, next: Ne
 export async function listDocumentTypes(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const types = await prisma.documentTypeConfig.findMany({
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ isStatic: 'asc' }, { order: 'asc' }, { createdAt: 'desc' }],
     });
     res.json(types);
   } catch (err) {
@@ -1209,7 +1346,7 @@ export async function listDocumentTypes(req: Request, res: Response, next: NextF
 
 export async function createDocumentType(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { code, name, description, customFields, isActive, categoryIds } = req.body;
+    const { code, name, description, customFields, isActive, categoryIds, isStatic, isRequired, hasTemplate, templatePath, templateName, order } = req.body;
     if (!code || !name) throw new AppError(400, 'Kod ve Ad zorunludur.');
 
     const existing = await prisma.documentTypeConfig.findUnique({ where: { code } });
@@ -1220,7 +1357,20 @@ export async function createDocumentType(req: Request, res: Response, next: Next
       : null;
 
     const type = await prisma.documentTypeConfig.create({
-      data: { code, name, description, customFields, isActive: isActive ?? true, categoryIds: categoryIdsStr },
+      data: {
+        code,
+        name,
+        description,
+        customFields,
+        isActive: isActive ?? true,
+        categoryIds: categoryIdsStr,
+        isStatic: isStatic ?? false,
+        isRequired: isRequired ?? true,
+        hasTemplate: hasTemplate ?? false,
+        templatePath: templatePath || null,
+        templateName: templateName || null,
+        order: order ? Number(order) : 0,
+      },
     });
     res.status(201).json(type);
   } catch (err) {
@@ -1231,7 +1381,7 @@ export async function createDocumentType(req: Request, res: Response, next: Next
 export async function updateDocumentType(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
-    const { code, name, description, customFields, isActive, categoryIds } = req.body;
+    const { code, name, description, customFields, isActive, categoryIds, isStatic, isRequired, hasTemplate, templatePath, templateName, order } = req.body;
 
     if (code) {
       const existing = await prisma.documentTypeConfig.findUnique({ where: { code } });
@@ -1246,6 +1396,12 @@ export async function updateDocumentType(req: Request, res: Response, next: Next
         ? JSON.stringify(categoryIds)
         : null;
     }
+    if (isStatic !== undefined) updateData.isStatic = isStatic;
+    if (isRequired !== undefined) updateData.isRequired = isRequired;
+    if (hasTemplate !== undefined) updateData.hasTemplate = hasTemplate;
+    if (templatePath !== undefined) updateData.templatePath = templatePath;
+    if (templateName !== undefined) updateData.templateName = templateName;
+    if (order !== undefined) updateData.order = Number(order);
 
     const type = await prisma.documentTypeConfig.update({
       where: { id },
@@ -1262,6 +1418,21 @@ export async function deleteDocumentType(req: Request, res: Response, next: Next
     const { id } = req.params;
     await prisma.documentTypeConfig.delete({ where: { id } });
     res.json({ message: 'Belge türü silindi.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function initStandardDocumentTypes(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    await seedStandardDocumentTypes();
+
+    // Set all existing students as exempt so they are not asked for static onboarding docs
+    await prisma.studentProfile.updateMany({
+      data: { isInitialDocsExempt: true },
+    });
+
+    res.json({ message: 'Standart belge türleri oluşturuldu ve mevcut bursiyerler muaf olarak işaretlendi.' });
   } catch (err) {
     next(err);
   }
@@ -1488,7 +1659,7 @@ export async function downloadDocumentsZip(req: Request, res: Response, next: Ne
 
     const documents = await prisma.document.findMany({
       where: { periodId: period.id },
-      include: { studentProfile: { include: { user: true } }, documentPeriod: true }
+      include: { studentProfile: { include: { user: true } }, period: true }
     });
 
     if (documents.length === 0) {

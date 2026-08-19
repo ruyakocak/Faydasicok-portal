@@ -21,6 +21,8 @@ export default function StudentsListPage() {
   const [hasPending, setHasPending] = useState(false);
   const [scholarshipGroup, setScholarshipGroup] = useState('');
   const [page, setPage] = useState(1);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+  const [sendingReminders, setSendingReminders] = useState(false);
 
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [pastedTcs, setPastedTcs] = useState('');
@@ -168,6 +170,36 @@ export default function StudentsListPage() {
     }
   }
 
+  function toggleSelect(id: string) {
+    setSelectedStudentIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (!result) return;
+    const allIds = result.data.map(p => p.id);
+    if (selectedStudentIds.size === allIds.length) setSelectedStudentIds(new Set());
+    else setSelectedStudentIds(new Set(allIds));
+  }
+
+  async function handleBulkRemind() {
+    if (selectedStudentIds.size === 0) return;
+    setSendingReminders(true);
+    try {
+      const res = await adminApi.bulkRemindStudents(Array.from(selectedStudentIds));
+      toast.success(res?.message || `${selectedStudentIds.size} öğrenciye belge hatırlatması gönderildi.`);
+      setSelectedStudentIds(new Set());
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.response?.data?.error || 'Hatırlatma gönderilirken hata oluştu.');
+    } finally {
+      setSendingReminders(false);
+    }
+  }
+
   return (
     <div className="animate-fade-in">
       <div className="page-header flex items-start justify-between">
@@ -233,6 +265,22 @@ export default function StudentsListPage() {
             />
             Onay bekleyenler
           </label>
+          
+          {selectedStudentIds.size > 0 && (
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-sm text-gray-500">{selectedStudentIds.size} seçili</span>
+              <button 
+                onClick={handleBulkRemind} 
+                disabled={sendingReminders} 
+                className="btn-primary btn-sm bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500"
+              >
+                {sendingReminders ? <span className="spinner w-4 h-4 border-white" /> : (
+                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                )}
+                Hatırlatma Gönder
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -252,20 +300,37 @@ export default function StudentsListPage() {
             <table className="data-table">
               <thead>
                 <tr>
+                  <th className="w-10">
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+                      checked={!!result?.data.length && selectedStudentIds.size === result.data.length}
+                      onChange={toggleAll}
+                    />
+                  </th>
                   <th>Ad Soyad</th>
                   <th>TC Kimlik No</th>
                   <th>Üniversite / Bölüm</th>
                   <th>Sınıf</th>
                   <th>Kategori</th>
                   <th>Kayıt Durumu</th>
+                  <th>Belge Durumu</th>
                   <th>Mentör</th>
                   <th>Onay</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {result.data.map((profile) => (
+                {result.data.map((profile: any) => (
                   <tr key={profile.id}>
+                    <td>
+                      <input 
+                        type="checkbox" 
+                        className="rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+                        checked={selectedStudentIds.has(profile.id)}
+                        onChange={() => toggleSelect(profile.id)}
+                      />
+                    </td>
                     <td className="font-medium text-gray-900">
                       <div>{profile.firstName} {profile.lastName}</div>
                     </td>
@@ -292,6 +357,24 @@ export default function StudentsListPage() {
                       }`}>
                         {statusLabels[profile.studentStatus] || profile.studentStatus}
                       </span>
+                    </td>
+                    <td>
+                      {profile.documentStatus ? (
+                        profile.documentStatus.completed ? (
+                          <span className="badge badge-approved bg-green-50 text-green-700">🟢 Tamam</span>
+                        ) : (
+                          <div className="flex flex-col gap-1">
+                            {profile.documentStatus.missingCount > 0 && (
+                              <span className="badge badge-gray bg-red-50 text-red-700 text-[10px]">🔴 {profile.documentStatus.missingCount} Eksik</span>
+                            )}
+                            {profile.documentStatus.pendingCount > 0 && (
+                              <span className="badge badge-pending bg-yellow-50 text-yellow-700 text-[10px]">🟡 {profile.documentStatus.pendingCount} Onay Bekliyor</span>
+                            )}
+                          </div>
+                        )
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
                     </td>
                     <td>
                       {(profile as any).mentor ? (

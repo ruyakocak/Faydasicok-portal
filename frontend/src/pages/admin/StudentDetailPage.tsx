@@ -130,35 +130,45 @@ export default function StudentDetailPage() {
       {/* Profile header */}
       <div className="card mb-6">
         <div className="card-body flex items-start gap-5">
-          <div className="relative group w-16 h-16 rounded-xl bg-primary-100 flex items-center justify-center text-primary-600 text-xl font-bold overflow-hidden flex-shrink-0 cursor-pointer">
+          <div className="relative group w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-primary-50 border-2 border-gray-100 shadow-sm flex items-center justify-center text-primary-600 text-3xl font-bold overflow-hidden flex-shrink-0 cursor-pointer transition-all hover:shadow-md">
             <input 
               type="file" 
               accept="image/*" 
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-              title="Fotoğraf Yükle"
+              title="Fotoğrafı Değiştirmek İçin Tıklayın"
               onChange={handlePhotoUpload}
             />
             {profile.photoPath ? (
-              <img src={`/${profile.photoPath}`} alt="Profil" className="w-full h-full object-cover group-hover:opacity-70 transition-opacity" />
+              <img src={`/${profile.photoPath}`} alt="Profil" className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" />
             ) : (
-              <img src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${profile.user?.tcKimlikNo || profile.id}`} alt="Avatar" className="w-full h-full object-cover group-hover:opacity-70 transition-opacity" />
+              <img src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${profile.user?.tcKimlikNo || profile.id}`} alt="Avatar" className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" />
             )}
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px] flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none p-2 text-center">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
+              <span className="text-[11px] font-medium text-white leading-tight">Fotoğraf Değiştir</span>
             </div>
           </div>
           <div className="flex-1">
             <h1 className="text-xl font-semibold">{profile.firstName} {profile.lastName}</h1>
             <div className="text-sm text-gray-500">{profile.department} — {profile.universityName}</div>
-            <div className="flex items-center gap-3 mt-2 text-sm text-gray-600">
+            <div className="flex items-center gap-3 mt-2 text-sm text-gray-600 flex-wrap">
               <span>TC: <span className="font-mono">{profile.user?.tcKimlikNo || '—'}</span></span>
               {profile.grade && <span>{profile.grade}. Sınıf</span>}
               <span className={`badge ${profile.studentStatus === 'ACTIVE' ? 'badge-approved' : 'badge-pending'}`}>
                 {profile.studentStatus === 'ACTIVE' ? 'Aktif' : profile.studentStatus === 'INCOMPLETE' ? 'Tamamlanmadı' : profile.studentStatus}
               </span>
+              {profile.isInitialDocsExempt ? (
+                <span className="badge bg-purple-50 text-purple-700 border border-purple-200">
+                  🛡️ İlk Kayıt Belgelerinden Muaf
+                </span>
+              ) : (
+                <span className="badge bg-amber-50 text-amber-700 border border-amber-200">
+                  📋 İlk Kayıt Belgeleri Zorunlu
+                </span>
+              )}
             </div>
           </div>
           <div className="flex flex-col items-end gap-1.5 w-full max-w-[200px]">
@@ -174,6 +184,21 @@ export default function StudentDetailPage() {
               className="btn-secondary btn-sm text-amber-700 hover:text-amber-800 hover:bg-amber-50 border-amber-200 py-1 px-2.5 text-xs w-full justify-center"
             >
               {resetting ? <span className="spinner border-amber-600/30 border-t-amber-600 w-4 h-4" /> : 'Şifreyi Sıfırla'}
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  const newVal = !profile.isInitialDocsExempt;
+                  await adminApi.updateStudentProfile(profile.id, { isInitialDocsExempt: newVal });
+                  toast.success(`İlk kayıt muafiyeti ${newVal ? 'aktif edildi' : 'kaldırıldı'}.`);
+                  loadAll();
+                } catch (e: any) {
+                  toast.error(e?.response?.data?.error || 'Güncellenemedi');
+                }
+              }}
+              className="btn-secondary btn-sm text-purple-700 hover:text-purple-800 hover:bg-purple-50 border-purple-200 py-1 px-2.5 text-xs w-full justify-center"
+            >
+              {profile.isInitialDocsExempt ? 'Muafiyeti Kaldır' : 'Muaf Olarak İşaretle'}
             </button>
             {newPass && (
               <div className="bg-green-50 text-green-800 border border-green-200 rounded p-2 text-xs font-mono mt-1 text-center w-full">

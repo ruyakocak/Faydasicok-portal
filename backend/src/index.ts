@@ -15,6 +15,7 @@ import { auditRouter } from './routes/audit.routes';
 import { eventRouter } from './routes/event.routes';
 import { mentorshipRouter } from './routes/mentorship.routes';
 import { volunteerRouter } from './routes/volunteer.routes';
+import { seedStandardDocumentTypes } from './utils/seed_docs';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -62,6 +63,7 @@ async function start() {
   try {
     await prisma.$connect();
     console.log('✅ Database connected');
+    await seedStandardDocumentTypes().catch(err => console.error('Seed standard docs warning:', err));
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
     });

@@ -3,13 +3,18 @@ import toast from 'react-hot-toast';
 
 const api = axios.create({
   baseURL: '/api',
-  headers: { 'Content-Type': 'application/json' },
 });
 
 // ── Request interceptor: attach access token ─────────────────────────
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  // When sending FormData, let the browser set multipart/form-data with boundary
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
   return config;
 });
 

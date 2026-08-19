@@ -91,3 +91,51 @@ export const testSmtpSettings = async (req: Request, res: Response) => {
     res.status(500).json({ error: `E-posta gönderilemedi: ${error.message}` });
   }
 };
+
+const DEFAULT_VOLUNTEER_FORM_SCHEMA = {
+  fields: [
+    { id: 'fullName', label: 'Ad Soyad', type: 'text', required: true, isDefault: true },
+    { id: 'email', label: 'E-posta', type: 'email', required: true, isDefault: true },
+    { id: 'schoolAndDepartment', label: 'Okul ve Bölüm', type: 'text', required: true, isDefault: true },
+    { id: 'ngoOrProjectName', label: 'STK / Proje Adı', type: 'text', required: true, isDefault: true },
+    { id: 'projectDescription', label: 'Proje Detayı', type: 'textarea', required: true, isDefault: true },
+    { id: 'targetGroup', label: 'Hedef Grup', type: 'select', required: true, isDefault: true, options: 'Çocuklar, Gençler, Kadınlar, Yaşlılar, Engelliler, Hayvanlar, Çevre, Toplumsal Gelişim (gönüllülük sosyal sorumluluk sosyal girişimcilik toplumsal dayanışma), Diğer' },
+    { id: 'targetGroupOther', label: 'Hedef Grup - Diğer (Açıklama)', type: 'text', required: false, isDefault: true },
+    { id: 'totalHours', label: 'Dönem Boyunca Ayrılan Toplam Saat', type: 'number', required: true, isDefault: true },
+    { id: 'personalImpactEvaluation', label: 'Kişisel Etki ve Değişim Değerlendirmesi', type: 'textarea', required: true, isDefault: true },
+  ],
+  documents: [
+    { id: 'document1', label: 'Belge / Fotoğraf 1', required: true, isDefault: true },
+    { id: 'document2', label: 'Belge / Fotoğraf 2', required: false, isDefault: true },
+    { id: 'document3', label: 'Belge / Fotoğraf 3', required: false, isDefault: true },
+  ]
+};
+
+export const getVolunteerFormSchema = async (req: Request, res: Response) => {
+  try {
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: 'VOLUNTEER_FORM_SCHEMA' }
+    });
+    if (!setting) {
+      return res.status(200).json(DEFAULT_VOLUNTEER_FORM_SCHEMA);
+    }
+    res.status(200).json(JSON.parse(setting.value));
+  } catch (error) {
+    res.status(500).json({ error: 'Form ayarları getirilirken hata oluştu.' });
+  }
+};
+
+export const saveVolunteerFormSchema = async (req: Request, res: Response) => {
+  try {
+    const { fields, documents } = req.body;
+    const value = JSON.stringify({ fields: fields || [], documents: documents || [] });
+    await prisma.systemSetting.upsert({
+      where: { key: 'VOLUNTEER_FORM_SCHEMA' },
+      update: { value },
+      create: { key: 'VOLUNTEER_FORM_SCHEMA', value }
+    });
+    res.status(200).json({ message: 'Form ayarları kaydedildi.' });
+  } catch (error) {
+    res.status(500).json({ error: 'Form ayarları kaydedilirken hata oluştu.' });
+  }
+};

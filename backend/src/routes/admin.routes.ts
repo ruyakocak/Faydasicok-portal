@@ -29,6 +29,7 @@ import {
   createDocumentType,
   updateDocumentType,
   deleteDocumentType,
+  initStandardDocumentTypes,
   listScholarshipCategories,
   createScholarshipCategory,
   updateScholarshipCategory,
@@ -37,7 +38,8 @@ import {
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
-  downloadDocumentsZip
+  downloadDocumentsZip,
+  bulkRemindStudents
 } from '../controllers/admin.controller';
 import { upload } from '../middleware/upload.middleware';
 import multer from 'multer';
@@ -54,6 +56,7 @@ adminRouter.post('/students', requireAdmin, createStudent);
 adminRouter.patch('/students/:id', requireAdminOrReviewer, updateStudentProfile);
 adminRouter.post('/students/:id/photo', requireAdminOrReviewer, upload.single('file'), uploadStudentPhoto);
 adminRouter.post('/students/:id/reset-password', requireAdminOrReviewer, resetStudentPassword);
+adminRouter.post('/students/bulk-remind', requireAdminOrReviewer, bulkRemindStudents);
 adminRouter.post('/students/bulk-create', requireAdmin, multer({ storage: multer.memoryStorage() }).single('file'), bulkCreateStudents);
 adminRouter.get('/students/csv-template', requireAdmin, getCsvTemplate);
 adminRouter.get('/reports/students-export', requireAdminOrReviewer, exportStudentsReport);
@@ -69,6 +72,7 @@ adminRouter.post('/semesters/delete', requireAdmin, deleteSemester);
 
 // Document Type Configs — admin only
 adminRouter.get('/document-types', requireAdminOrReviewer, listDocumentTypes);
+adminRouter.post('/document-types/init-standard', requireAdmin, initStandardDocumentTypes);
 adminRouter.post('/document-types', requireAdmin, createDocumentType);
 adminRouter.patch('/document-types/:id', requireAdmin, updateDocumentType);
 adminRouter.delete('/document-types/:id', requireAdmin, deleteDocumentType);

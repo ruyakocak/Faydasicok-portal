@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { adminApi } from '../../api';
 import type { DocumentPeriod, DocumentTypeConfig, ScholarshipCategory } from '../../types';
-import DocumentTypesTab from './DocumentTypesTab';
 import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 
@@ -16,7 +15,7 @@ function parseCategoryIds(period: DocumentPeriod): string[] {
   }
 }
 
-export default function PeriodsPage() {
+export default function PeriodsTab() {
   const [periods, setPeriods] = useState<DocumentPeriod[]>([]);
   const [docTypes, setDocTypes] = useState<DocumentTypeConfig[]>([]);
   const [categories, setCategories] = useState<ScholarshipCategory[]>([]);
@@ -27,7 +26,7 @@ export default function PeriodsPage() {
   const [newCategoryIds, setNewCategoryIds] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [selectedSemester, setSelectedSemester] = useState('');
-  const [activeTab, setActiveTab] = useState<'periods' | 'types'>('periods');
+
 
 
 
@@ -379,37 +378,13 @@ export default function PeriodsPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="page-header flex items-start justify-between">
-        <div>
-          <h1 className="page-title">Dönem ve Evrak Yönetimi</h1>
-          <p className="page-subtitle">Eğitim dönemlerini ve toplanacak evrak türlerini belirleyin</p>
-        </div>
-        {activeTab === 'periods' && (
+      <div className="flex justify-end mb-4">
           <button onClick={() => { setShowCreate(true); setNewCategoryIds([]); }} className="btn-primary flex items-center gap-1.5">
             <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Yeni Dönem Ekle
           </button>
-        )}
       </div>
 
-      <div className="border-b border-gray-200 mb-6 flex gap-6">
-        <button
-          onClick={() => setActiveTab('periods')}
-          className={`py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'periods' ? 'border-primary-500 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-        >
-          Dönem Yönetimi
-        </button>
-        <button
-          onClick={() => setActiveTab('types')}
-          className={`py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'types' ? 'border-primary-500 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-        >
-          Belge Türü Ayarları
-        </button>
-      </div>
-
-      {activeTab === 'types' && <DocumentTypesTab />}
-
-      {activeTab === 'periods' && (
         <>
           {loading ? (
             <div className="flex items-center justify-center py-20">
@@ -707,7 +682,6 @@ export default function PeriodsPage() {
             </div>
           )}
         </>
-      )}
 
       {/* Create Semester Modal */}
       {showCreate && (
@@ -950,6 +924,231 @@ export default function PeriodsPage() {
               <button
                 onClick={() => setShowWarningModal(false)}
                 className="px-5 py-2 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors shadow-sm"
+              >
+                Anladım
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Single Period Modal */}
+      {editPeriod && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-modal w-full max-w-lg">
+            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-lg text-gray-900">Evrak Talebini Düzenle</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {(docTypes.find(dt => dt.code === editPeriod.type)?.name) || editPeriod.type} belgesi için talebi güncelliyorsunuz.
+                </p>
+              </div>
+              <button onClick={() => setEditPeriod(null)} className="text-gray-400 hover:text-gray-600">
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form onSubmit={handleSavePeriod} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label mb-1">Başlangıç Tarihi</label>
+                  <input type="datetime-local" className="form-input text-sm p-2" value={editPeriodForm.startDate} onChange={e => setEditPeriodForm(f => ({...f, startDate: e.target.value}))} />
+                </div>
+                <div>
+                  <label className="form-label mb-1">Bitiş Tarihi</label>
+                  <input type="datetime-local" className="form-input text-sm p-2" value={editPeriodForm.endDate} onChange={e => setEditPeriodForm(f => ({...f, endDate: e.target.value}))} />
+                </div>
+
+              </div>
+
+              <div>
+                <label className="form-label mb-1.5 mt-2">Kimlere Açık Olsun?</label>
+                <p className="text-[11px] text-gray-500 mb-2">
+                  Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse tüm kategorilerden istenir.
+                </p>
+                <div className="border border-gray-200 rounded-lg p-3 max-h-32 overflow-y-auto space-y-1">
+                  {activeCategories.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-2">Henüz aktif kategori bulunmuyor.</p>
+                  ) : (
+                    activeCategories.map(cat => (
+                      <label key={cat.id} className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-1.5 rounded-lg transition-colors">
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300 text-primary-500 focus:ring-primary-500 w-4 h-4"
+                          checked={editPeriodForm.categoryIds.includes(cat.id)}
+                          onChange={() => toggleEditPeriodCatId(cat.id)}
+                        />
+                        <span className="text-sm text-gray-700 font-medium">{cat.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-gray-100 mt-4">
+                <button type="button" onClick={() => setEditPeriod(null)} className="btn-secondary flex-1">İptal</button>
+                <button type="submit" className="btn-primary flex-1" disabled={savingPeriod}>
+                  {savingPeriod ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Kaydet'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Single Period Confirmation Modal */}
+      {deletePeriodId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden border border-red-100 animate-zoom-in">
+            <div className="px-6 py-4 border-b border-red-100 flex items-center justify-between bg-red-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-red-100 text-red-600 flex items-center justify-center">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-red-900">Evrak Talebini Kaldır</h3>
+              </div>
+              <button onClick={() => setDeletePeriodId(null)} className="text-red-400 hover:text-red-600 transition-colors">
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <div className="p-6">
+              <p className="text-sm text-gray-700 mb-4">
+                Bu belge talebini bu dönemden kaldırmak istediğinize emin misiniz? Öğrenciler artık bu dönem için bu belgeyi yükleyemeyecektir.
+              </p>
+              <p className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                <span className="font-semibold text-amber-600 block mb-1">DİKKAT:</span>
+                Eğer bu talebe ait öğrencilerin yüklediği onaylı/bekleyen belgeler varsa silme işlemine izin verilmeyecektir.
+              </p>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
+              <button onClick={() => setDeletePeriodId(null)} className="btn-secondary px-5">İptal</button>
+              <button onClick={handleDeletePeriod} className="btn-primary bg-red-600 hover:bg-red-700 focus:ring-red-500 px-5" disabled={deletingPeriod}>
+                {deletingPeriod ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Evet, Talebi Kaldır'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Document Request Modal */}
+      {showAddPeriod && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-modal w-full max-w-lg">
+            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-lg text-gray-900">Evrak Talebi Ekle</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  <strong>{selectedSemester}</strong> dönemine yeni bir belge toplama talebi ekleyin.
+                </p>
+              </div>
+              <button onClick={() => setShowAddPeriod(false)} className="text-gray-400 hover:text-gray-600">
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form onSubmit={handleAddPeriod} className="p-5 space-y-4">
+              <div>
+                <label className="form-label mb-1">Talep Edilecek Belge Türü</label>
+                <select
+                  className="form-select text-sm p-2"
+                  value={addPeriodForm.type}
+                  onChange={e => setAddPeriodForm(f => ({...f, type: e.target.value}))}
+                  required
+                >
+                  <option value="">Belge Türü Seçin</option>
+                  {docTypes
+                    .filter(t => t.isActive && !selectedSemesterPeriods.some(p => p.type === t.code))
+                    .map(t => (
+                      <option key={t.id} value={t.code}>{t.name}</option>
+                    ))}
+                </select>
+                {docTypes.filter(t => t.isActive && !selectedSemesterPeriods.some(p => p.type === t.code)).length === 0 && (
+                  <span className="text-[11px] text-amber-600 mt-1 block">
+                    ⚠️ Bu döneme eklenebilecek aktif başka bir belge türü bulunmuyor. Önce "Belge Türü Ayarları" sekmesinden yeni bir tür tanımlayın.
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label mb-1">Başlangıç Tarihi (Opsiyonel)</label>
+                  <input type="datetime-local" className="form-input text-sm p-2" value={addPeriodForm.startDate} onChange={e => setAddPeriodForm(f => ({...f, startDate: e.target.value}))} />
+                </div>
+                <div>
+                  <label className="form-label mb-1">Bitiş Tarihi (Opsiyonel)</label>
+                  <input type="datetime-local" className="form-input text-sm p-2" value={addPeriodForm.endDate} onChange={e => setAddPeriodForm(f => ({...f, endDate: e.target.value}))} />
+                </div>
+
+              </div>
+
+              <div>
+                <label className="form-label mb-1.5 mt-2">Kimlere Açık Olsun?</label>
+                <p className="text-[11px] text-gray-500 mb-2">
+                  Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse tüm kategorilerden istenir.
+                </p>
+                <div className="border border-gray-200 rounded-lg p-3 max-h-32 overflow-y-auto space-y-1">
+                  {activeCategories.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-2">Henüz aktif kategori bulunmuyor.</p>
+                  ) : (
+                    activeCategories.map(cat => (
+                      <label key={cat.id} className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-1.5 rounded-lg transition-colors">
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300 text-primary-500 focus:ring-primary-500 w-4 h-4"
+                          checked={addPeriodForm.categoryIds.includes(cat.id)}
+                          onChange={() => toggleAddPeriodCatId(cat.id)}
+                        />
+                        <span className="text-sm text-gray-700 font-medium">{cat.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-gray-100 mt-4">
+                <button type="button" onClick={() => setShowAddPeriod(false)} className="btn-secondary flex-1">İptal</button>
+                <button type="submit" className="btn-primary flex-1" disabled={addingPeriod || docTypes.filter(t => t.isActive && !selectedSemesterPeriods.some(p => p.type === t.code)).length === 0}>
+                  {addingPeriod ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Talebi Ekle'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Warning Modal */}
+      {showWarningModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-zoom-in">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-amber-100 bg-amber-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 flex-shrink-0">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-amber-900 text-lg">Otomatik Kapatma Bildirimi</h3>
+              </div>
+            </div>
+            
+            {/* Body */}
+            <div className="p-6">
+              <p className="text-sm text-gray-700 mb-4">
+                Sistemde aynı anda sadece <strong>TEK BİR dönemin</strong> aktif olmasına izin verilmektedir.
+              </p>
+              <p className="text-sm text-gray-700">
+                Siz bu dönemi açtığınız için, çakışmayı önlemek adına <strong className="text-amber-700">DİĞER TÜM DÖNEMLERDEKİ</strong> (eski dönemler vb.) açık evrak yüklemeleri otomatik olarak KAPATILMIŞTIR!
+              </p>
+            </div>
+            
+            {/* Actions */}
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end bg-gray-50/50">
+              <button
+                onClick={() => setShowWarningModal(false)}
+                className="px-6 py-2 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors shadow-sm focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
               >
                 Anladım
               </button>

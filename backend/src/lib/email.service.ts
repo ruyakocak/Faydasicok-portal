@@ -149,7 +149,32 @@ export async function sendNewPeriodEmail(opts: {
   await sendMail(to, `📁 Belge Yükleme Talebi: ${periodLabel}`, baseTemplate(`📁 Evrak Yükleme Talebi`, content));
 }
 
-// 3. Belge Onaylandı
+// 3. Eksik Belge Hatırlatma (Bulk Remind)
+export async function sendMissingDocumentReminderEmail(opts: {
+  to: string;
+  firstName?: string;
+}) {
+  const { to, firstName } = opts;
+
+  const content = `
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">${greet(firstName)}</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 24px;">
+      Faydasıçok Vakfı Burs Portalı'nda eğitim dönemine ait <strong>eksik veya onay bekleyen belgeleriniz</strong> olduğu tespit edilmiştir.
+    </p>
+    <div style="background:#fffbeb;border:1px solid #fef3c7;border-radius:12px;padding:20px 24px;margin:0 0 24px;">
+      <p style="margin:0 0 8px;color:#b45309;font-size:16px;font-weight:700;">⚠️ Eylem Gerekiyor</p>
+      <p style="margin:0;color:#374151;font-size:14px;line-height:1.6;">
+        Burs sürecinizin kesintiye uğramaması için lütfen en kısa sürede sisteme giriş yaparak eksik belgelerinizi yükleyiniz veya reddedilen belgelerinizi düzenleyiniz.
+      </p>
+    </div>
+    <p style="color:#374151;font-size:14px;line-height:1.6;margin:0;">
+      İşlemlerinizi gerçekleştirmek için <a href="http://localhost:5173/student/profile" style="color:#C62828;font-weight:600;text-decoration:none;">Burs Portalı</a>'na giriş yapabilirsiniz.
+    </p>`;
+
+  await sendMail(to, `⚠️ Eksik Belge Hatırlatması`, baseTemplate('Eksik Belge Bildirimi', content));
+}
+
+// 4. Belge Onaylandı
 export async function sendDocumentApprovedEmail(opts: {
   to: string;
   firstName?: string;

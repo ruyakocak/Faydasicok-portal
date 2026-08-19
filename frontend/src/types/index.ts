@@ -37,6 +37,7 @@ export interface StudentProfile {
   scholarshipCategory?: ScholarshipCategory;
   studentStatus: string;
   enrollmentStatus: string;
+  isInitialDocsExempt?: boolean;
   phone?: string;
   email?: string;
   address?: string;
@@ -77,6 +78,11 @@ export interface StudentProfile {
   approvableChanges?: ApprovableChange[];
   mentorId?: string;
   mentor?: MentorProfile;
+  documentStatus?: {
+    completed: boolean;
+    missingCount: number;
+    pendingCount: number;
+  };
 }
 
 export interface MentorProfile {
@@ -101,6 +107,12 @@ export interface DocumentTypeConfig {
   code: string;
   name: string;
   description?: string;
+  isStatic?: boolean;
+  isRequired?: boolean;
+  hasTemplate?: boolean;
+  templatePath?: string | null;
+  templateName?: string | null;
+  order?: number;
   customFields?: string; // JSON array string
   categoryIds?: string | null; // JSON array of scholarship category IDs
   isActive: boolean;

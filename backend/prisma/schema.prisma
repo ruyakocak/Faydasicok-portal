@@ -15,16 +15,16 @@ datasource db {
 // ─────────────────────────────────────────────
 
 model User {
-  id           String    @id @default(cuid())
-  tcKimlikNo   String?   @unique // Only for students
-  email        String?   @unique // For admin/reviewer
-  username     String?   @unique // For admin (e.g. "admin")
-  passwordHash String
-  role         String    @default("STUDENT") // STUDENT, REVIEWER, ADMIN
-  isActive     Boolean   @default(true)
-  forcePasswordChange Boolean @default(false)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                  String   @id @default(cuid())
+  tcKimlikNo          String?  @unique // Only for students
+  email               String?  @unique // For admin/reviewer
+  username            String?  @unique // For admin (e.g. "admin")
+  passwordHash        String
+  role                String   @default("STUDENT") // STUDENT, REVIEWER, ADMIN
+  isActive            Boolean  @default(true)
+  forcePasswordChange Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   // Relations
   studentProfile    StudentProfile?
@@ -70,66 +70,68 @@ model StudentProfile {
   id     String @id @default(cuid())
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   mentorId String?
   mentor   MentorProfile? @relation(fields: [mentorId], references: [id], onDelete: SetNull)
 
   // ── Personal Info (admin-approvable fields) ──
-  firstName          String  @default("")
-  lastName           String  @default("")
-  gender             String? // Erkek / Kadın
-  birthDate          DateTime?
-  birthPlace         String?
-  registeredCity     String? // Nüfusa kayıtlı şehir
-  scholarshipSources String? // Burs alınan yer(ler) — JSON array as string
-  scholarshipDate    DateTime? // Burs talep tarihi
+  firstName             String               @default("")
+  lastName              String               @default("")
+  gender                String? // Erkek / Kadın
+  birthDate             DateTime?
+  birthPlace            String?
+  registeredCity        String? // Nüfusa kayıtlı şehir
+  scholarshipSources    String? // Burs alınan yer(ler) — JSON array as string
+  scholarshipDate       DateTime? // Burs talep tarihi
   scholarshipCategoryId String?
   scholarshipCategory   ScholarshipCategory? @relation(fields: [scholarshipCategoryId], references: [id], onDelete: SetNull)
-  studentStatus      String   @default("INCOMPLETE") // INCOMPLETE, ACTIVE, PASSIVE, GRADUATED
-  enrollmentStatus   String   @default("ENROLLED") // ENROLLED, ON_LEAVE, GRADUATED, DROPPED
+  studentStatus         String               @default("INCOMPLETE") // INCOMPLETE, ACTIVE, PASSIVE, GRADUATED
+  enrollmentStatus      String               @default("ENROLLED") // ENROLLED, ON_LEAVE, GRADUATED, DROPPED
 
   // ── Contact (directly editable) ──
-  phone    String?
-  email    String?
-  address  String?
+  phone   String?
+  email   String?
+  address String?
 
   // ── Profile Photo ──
   photoPath String?
 
   // ── Bank Info (admin-approvable) ──
-  iban       String?
-  bankName   String?
+  iban     String?
+  bankName String?
 
   // ── Family Info ──
-  fatherName         String?
-  fatherAge          Int?
-  fatherAlive        Boolean @default(true)
+  fatherName          String?
+  fatherAge           Int?
+  fatherAlive         Boolean @default(true)
   fatherMaritalStatus String? // Bekâr/Evli/Boşanmış/Dul
-  fatherOccupation   String?
-  fatherIncome       Float?
-  motherName         String?
-  motherAge          Int?
-  motherAlive        Boolean @default(true)
+  fatherOccupation    String?
+  fatherIncome        Float?
+  motherName          String?
+  motherAge           Int?
+  motherAlive         Boolean @default(true)
   motherMaritalStatus String?
-  motherOccupation   String?
-  motherIncome       Float?
-  familyMemberCount  Int?
-  siblingCount       Int?
+  motherOccupation    String?
+  motherIncome        Float?
+  familyMemberCount   Int?
+  siblingCount        Int?
   siblingsInEducation Int?
-  socialSecurity     String? // Sosyal güvence
-  homeOwnership      String? // Kira/Mülk
-  homeAddress        String?
-  familyDescription  String?
+  socialSecurity      String? // Sosyal güvence
+  homeOwnership       String? // Kira/Mülk
+  homeAddress         String?
+  familyDescription   String?
 
   // ── Education Info ──
-  universityName    String?
-  faculty           String?
-  department        String?
-  grade             Int?    // Sınıf: 1,2,3,4,5,6
-  universityType    String? // Devlet/Vakıf
-  highSchoolName    String?
-  highSchoolCity    String?
+  universityName     String?
+  faculty            String?
+  department         String?
+  grade              Int? // Sınıf: 1,2,3,4,5,6
+  universityType     String? // Devlet/Vakıf
+  highSchoolName     String?
+  highSchoolCity     String?
   highSchoolGradYear Int?
+
+  isInitialDocsExempt Boolean  @default(false) // True for existing students who don't need to submit onboarding docs
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -155,7 +157,7 @@ model ScholarshipCategory {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  students    StudentProfile[]
+  students       StudentProfile[]
   volunteerForms VolunteerForm[]
 
   @@map("scholarship_categories")
@@ -166,22 +168,22 @@ model ScholarshipCategory {
 // ─────────────────────────────────────────────
 
 model DocumentPeriod {
-  id          String             @id @default(cuid())
-  type        String             // TRANSCRIPT, STUDENT_CERTIFICATE, VOLUNTEER_REPORT
-  label       String             // e.g. "2025-2026 Güz Dönemi"
-  semester    String?            // GUZ, BAHAR
-  academicYear String?           // e.g. "2025-2026"
-  grade       Int?               // Deprecated
-  grades      String?            // JSON array of grades, e.g. "[0, 1, 2]" where 0 is Hazırlık
-  isOpen      Boolean            @default(false)
-  isVolunteerFormOpen Boolean    @default(false)
-  categoryIds String?            // JSON array of scholarship category IDs (null = all categories)
-  startDate   DateTime?
-  endDate     DateTime?          // Auto-close date
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id                  String    @id @default(cuid())
+  type                String // TRANSCRIPT, STUDENT_CERTIFICATE, VOLUNTEER_REPORT
+  label               String // e.g. "2025-2026 Güz Dönemi"
+  semester            String? // GUZ, BAHAR
+  academicYear        String? // e.g. "2025-2026"
+  grade               Int? // Deprecated
+  grades              String? // JSON array of grades, e.g. "[0, 1, 2]" where 0 is Hazırlık
+  isOpen              Boolean   @default(false)
+  isVolunteerFormOpen Boolean   @default(false)
+  categoryIds         String? // JSON array of scholarship category IDs (null = all categories)
+  startDate           DateTime?
+  endDate             DateTime? // Auto-close date
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  documents Document[]
+  documents      Document[]
   volunteerForms VolunteerForm[]
 
   @@map("document_periods")
@@ -196,8 +198,14 @@ model DocumentTypeConfig {
   code         String   @unique
   name         String
   description  String?
-  customFields String?  // JSON array of custom field definitions (e.g. [{ id, label, type, required }])
-  categoryIds  String?  // JSON array of scholarship category IDs (null = all categories)
+  isStatic     Boolean  @default(false) // True: İlk Kayıt / Statik, False: Dönemsel
+  isRequired   Boolean  @default(true)  // True: Zorunlu, False: Opsiyonel (Yurt, Kira vb.)
+  hasTemplate  Boolean  @default(false) // True: İmzalanacak şablonu var (Taahhütname vb.)
+  templatePath String?  // İndirilebilir örnek/şablon PDF yolu
+  templateName String?  // Şablon dosya adı
+  order        Int      @default(0)     // Gösterim sırası
+  customFields String? // JSON array of custom field definitions (e.g. [{ id, label, type, required }])
+  categoryIds  String? // JSON array of scholarship category IDs (null = all categories)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -214,25 +222,25 @@ model Document {
   studentProfileId String
   studentProfile   StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
 
-  type             String         // APPLICATION_FORM, YKS_RESULT, etc.
-  isStatic         Boolean        @default(false) // True for static docs
+  type     String // APPLICATION_FORM, YKS_RESULT, etc.
+  isStatic Boolean @default(false) // True for static docs
 
   // Periodic doc fields
-  periodId         String?
-  period           DocumentPeriod? @relation(fields: [periodId], references: [id])
-  grade            Int?
-  semester         String?        // GUZ, BAHAR
-  academicYear     String?
+  periodId     String?
+  period       DocumentPeriod? @relation(fields: [periodId], references: [id])
+  grade        Int?
+  semester     String? // GUZ, BAHAR
+  academicYear String?
 
   // Transcript specific
-  transcriptNote   String?
+  transcriptNote String?
 
   // STK specific
-  volunteerOrg     String?
-  volunteerNote    String?
+  volunteerOrg  String?
+  volunteerNote String?
 
   // Dynamic fields
-  dynamicFields    String?        // JSON object storing answers for custom fields
+  dynamicFields String? // JSON object storing answers for custom fields
 
   // File info
   filePath         String
@@ -241,11 +249,11 @@ model Document {
   fileSize         Int
 
   // Approval
-  status           String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  rejectionNote    String?
+  status        String  @default("PENDING") // PENDING, APPROVED, REJECTED
+  rejectionNote String?
 
-  uploadedAt       DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  uploadedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   approvableChange ApprovableChange?
 
@@ -257,33 +265,33 @@ model Document {
 // ─────────────────────────────────────────────
 
 model ApprovableChange {
-  id               String               @id @default(cuid())
-  entityType       String               // PERSONAL_INFO, FAMILY_INFO, EDUCATION_INFO, BANK_INFO, DOCUMENT
+  id               String         @id @default(cuid())
+  entityType       String // PERSONAL_INFO, FAMILY_INFO, EDUCATION_INFO, BANK_INFO, DOCUMENT
   studentProfileId String
-  studentProfile   StudentProfile       @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  studentProfile   StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
 
   // For field changes (personal/family/education/bank info)
-  fieldName        String?
-  oldValue         String?
-  newValue         String?
+  fieldName String?
+  oldValue  String?
+  newValue  String?
 
   // For document changes
-  documentId       String?  @unique
-  document         Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String?   @unique
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   // Who made the change
-  changedById      String
-  changedBy        User     @relation("ChangedBy", fields: [changedById], references: [id])
+  changedById String
+  changedBy   User   @relation("ChangedBy", fields: [changedById], references: [id])
 
   // Approval
-  status           String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  reviewNote       String?
-  approvedById     String?
-  approvedBy       User?    @relation("ApprovedBy", fields: [approvedById], references: [id])
-  reviewedAt       DateTime?
+  status       String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  reviewNote   String?
+  approvedById String?
+  approvedBy   User?     @relation("ApprovedBy", fields: [approvedById], references: [id])
+  reviewedAt   DateTime?
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("approvable_changes")
 }
@@ -293,19 +301,19 @@ model ApprovableChange {
 // ─────────────────────────────────────────────
 
 model AuditLog {
-  id           String      @id @default(cuid())
-  userId       String
-  user         User        @relation("AuditLogUser", fields: [userId], references: [id])
-  action       String      // CREATE, UPDATE, DELETE, APPROVE, REJECT, LOGIN, LOGOUT, UPLOAD
-  module       String      // e.g. "BankInfo", "Transcript", "Login"
-  entityId     String?
-  entityType   String?
-  oldValue     String?
-  newValue     String?
-  approverId   String?
-  approver     User?       @relation("AuditLogApprover", fields: [approverId], references: [id])
-  ipAddress    String?
-  createdAt    DateTime    @default(now())
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation("AuditLogUser", fields: [userId], references: [id])
+  action     String // CREATE, UPDATE, DELETE, APPROVE, REJECT, LOGIN, LOGOUT, UPLOAD
+  module     String // e.g. "BankInfo", "Transcript", "Login"
+  entityId   String?
+  entityType String?
+  oldValue   String?
+  newValue   String?
+  approverId String?
+  approver   User?    @relation("AuditLogApprover", fields: [approverId], references: [id])
+  ipAddress  String?
+  createdAt  DateTime @default(now())
 
   @@map("audit_logs")
 }
@@ -321,7 +329,7 @@ model Event {
   date        DateTime
   meetingUrl  String?
   imagePath   String?
-  categoryIds String?  // JSON array of scholarship category IDs, null means all students
+  categoryIds String? // JSON array of scholarship category IDs, null means all students
   createdAt   DateTime @default(now())
 
   @@map("events")
@@ -332,7 +340,7 @@ model Event {
 // ─────────────────────────────────────────────
 
 model MentorProfile {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   firstName String
   lastName  String
   title     String?
@@ -341,8 +349,8 @@ model MentorProfile {
   email     String?
   photoPath String?
 
-  students  StudentProfile[]
-  notes     Note[]
+  students StudentProfile[]
+  notes    Note[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -351,19 +359,19 @@ model MentorProfile {
 }
 
 model Note {
-  id          String   @id @default(cuid())
+  id          String @id @default(cuid())
   createdById String
-  createdBy   User     @relation("NoteCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  
-  studentId   String
-  student     StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  
-  mentorId    String
-  mentor      MentorProfile @relation(fields: [mentorId], references: [id], onDelete: Cascade)
-  
-  noteText    String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdBy   User   @relation("NoteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  mentorId String
+  mentor   MentorProfile @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+
+  noteText  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("notes")
 }
@@ -388,7 +396,7 @@ model Announcement {
   id          String   @id @default(cuid())
   title       String
   content     String
-  categoryIds String?  // JSON array of scholarship category IDs, null means all students
+  categoryIds String? // JSON array of scholarship category IDs, null means all students
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -401,38 +409,41 @@ model Announcement {
 // ─────────────────────────────────────────────
 
 model VolunteerForm {
-  id                       String   @id @default(cuid())
-  studentProfileId         String
-  studentProfile           StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  id               String         @id @default(cuid())
+  studentProfileId String
+  studentProfile   StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
 
-  fullName                 String
-  email                    String
-  
+  fullName String
+  email    String
+
   // İlişkiler
-  scholarshipCategoryId    String?
-  scholarshipCategory      ScholarshipCategory? @relation(fields: [scholarshipCategoryId], references: [id])
-  
-  periodId                 String?
-  period                   DocumentPeriod? @relation(fields: [periodId], references: [id])
+  scholarshipCategoryId String?
+  scholarshipCategory   ScholarshipCategory? @relation(fields: [scholarshipCategoryId], references: [id])
 
-  schoolAndDepartment      String
-  ngoOrProjectName         String
-  projectDescription       String
-  targetGroup              String
+  periodId String?
+  period   DocumentPeriod? @relation(fields: [periodId], references: [id])
+
+  schoolAndDepartment      String?
+  ngoOrProjectName         String?
+  projectDescription       String?
+  targetGroup              String?
   targetGroupOther         String?
-  totalHours               Int
-  personalImpactEvaluation String
+  totalHours               Int?
+  personalImpactEvaluation String?
 
   // Dosya yolları (1 zorunlu, 2 opsiyonel)
-  document1Path            String
-  document1OriginalName    String
-  document2Path            String?
-  document2OriginalName    String?
-  document3Path            String?
-  document3OriginalName    String?
+  document1Path         String?
+  document1OriginalName String?
+  document2Path         String?
+  document2OriginalName String?
+  document3Path         String?
+  document3OriginalName String?
+  
+  otherDocuments        String? // JSON string representing array of other documents
+  dynamicFields         String? // JSON object storing answers for custom fields
 
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("volunteer_forms")
 }

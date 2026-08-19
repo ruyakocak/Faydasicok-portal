@@ -627,6 +627,7 @@ export function EducationTab({ profile, onSave, readOnly }: {
 }
 
 // ── Documents Tab ─────────────────────────────────────────────────────
+// ── Documents Tab ─────────────────────────────────────────────────────
 export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }: {
   profile: StudentProfile;
   documents: DocFile[];
@@ -636,13 +637,13 @@ export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }
 }) {
   const [docTypes, setDocTypes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeUploadDocType, setActiveUploadDocType] = useState<any | null>(null);
 
   useEffect(() => {
-    // Fetch from public authenticated endpoint
     documentApi.getActiveTypes().then(types => {
       setDocTypes(types);
     }).catch(() => {
-      // Ignore errors or show toast
+      // Ignore
     }).finally(() => setLoading(false));
   }, []);
 
@@ -650,66 +651,395 @@ export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }
     return <div className="py-10 text-center"><span className="spinner w-8 h-8" /></div>;
   }
 
+  // Filter doc types by student's category if restricted
+  const applicableDocTypes = docTypes.filter(docType => {
+    let dtCatIds: string[] = [];
+    try {
+      dtCatIds = docType.categoryIds ? JSON.parse(docType.categoryIds) : [];
+      if (!Array.isArray(dtCatIds)) dtCatIds = [];
+    } catch {}
+
+    if (dtCatIds.length > 0 && profile.scholarshipCategoryId && !dtCatIds.includes(profile.scholarshipCategoryId)) {
+      return false;
+    }
+    if (dtCatIds.length > 0 && !profile.scholarshipCategoryId) {
+      return false;
+    }
+    return true;
+  });
+
+  const staticDocTypes = applicableDocTypes.filter(d => d.isStatic === true);
+  const periodicDocTypes = applicableDocTypes.filter(d => d.isStatic !== true);
+
+  // Calculate static docs completion
+  const requiredStaticTypes = staticDocTypes.filter(d => d.isRequired !== false);
+  const uploadedRequiredCount = requiredStaticTypes.filter(dt => {
+    const doc = documents.find(d => d.type === dt.code);
+    return doc && doc.status !== 'REJECTED';
+  }).length;
+  
+  const completionPercentage = requiredStaticTypes.length > 0
+    ? Math.round((uploadedRequiredCount / requiredStaticTypes.length) * 100)
+    : 100;
+
+  function handleDownloadTemplate(dt: any) {
+    const isTaahhut = dt.code === 'TAAHHUTNAME';
+    const isAydinlatma = dt.code === 'AYDINLATMA_METNI';
+    
+    let textContent = '';
+    const dateStr = format(new Date(), 'dd.MM.yyyy');
+    const studentFullName = `${profile.firstName} ${profile.lastName}`.trim();
+    const tcNo = profile.user?.tcKimlikNo || '___________________';
+
+    if (isTaahhut) {
+      textContent = `FAYDASICOK EGITIM VAKFI BURSİYER TAAHHÜTNAMESİ
+
+Tarih: ${dateStr}
+Bursiyer Adı Soyadı: ${studentFullName}
+T.C. Kimlik No: ${tcNo}
+Üniversite / Bölüm: ${profile.universityName || ''} - ${profile.department || ''}
+
+FAYDASICOK EGITIM VAKFI YÖNETİMİNE,
+
+Vakfınız tarafından tarafıma tahsis edilen burs kapsamında;
+1. Burs başvurusunda ve sistemde beyan ettiğim tüm bilgi ve belgelerin doğru ve eksiksiz olduğunu,
+2. Öğrenim durumum, iletişim veya banka bilgilerimdeki değişiklikleri zamanında vakfa bildireceğimi,
+3. Her yarıyıl başında ve sonunda istenen Transkript, Öğrenci Belgesi ve Gönüllülük Formlarını eksiksiz yükleyeceğimi,
+4. Vakfın belirlediği bursiyer kurallarına, ahlaki ve etik değerlere uygun davranacağımı,
+aksi takdirde bursumun kesilmesini kabul ve taahhüt ederim.
+
+Bursiyer İmzası:
+
+_____________________________
+`;
+    } else if (isAydinlatma) {
+      textContent = `FAYDASICOK EGITIM VAKFI
+KVKK AYDINLATMA VE AÇIK RIZA METNİ
+
+Tarih: ${dateStr}
+Bursiyer Adı Soyadı: ${studentFullName}
+T.C. Kimlik No: ${tcNo}
+
+6698 Sayılı Kişisel Verilerin Korunması Kanunu (KVKK) uyarınca, Faydasıçok Eğitim Vakfı tarafından burs süreçlerimin yürütülmesi, değerlendirilmesi, iletişimin sağlanması ve kanuni yükümlülüklerin yerine getirilmesi amacıyla paylaştığım kimlik, iletişim, eğitim, aile ve finansal verilerimin işlenmesine, arşivlenmesine ve ilgili mevzuat çerçevesinde yetkili kurumlarla paylaşılmasına açık rıza gösteriyorum.
+
+Bursiyer İmzası:
+
+_____________________________
+`;
+    } else {
+      textContent = `${dt.name.toUpperCase()} ŞABLONU\n\nBursiyer: ${studentFullName} (TC: ${tcNo})\nTarih: ${dateStr}\n\nBu belgeyi imzalayarak taratıp sisteme yükleyiniz.\n\nİmza: _______________________`;
+    }
+
+    const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${dt.templateName || `${dt.code}_Sablonu.txt`}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success('Şablon belgesi indirildi.');
+  }
+
   return (
-    <div className="space-y-8">
-      {docTypes.filter(docType => {
-        let dtCatIds: string[] = [];
-        try {
-          dtCatIds = docType.categoryIds ? JSON.parse(docType.categoryIds) : [];
-          if (!Array.isArray(dtCatIds)) dtCatIds = [];
-        } catch {}
-
-        // Eğer belge türünün bir kategori kısıtlaması varsa ve öğrencinin kategorisi buna uymuyorsa, gösterme
-        if (dtCatIds.length > 0 && profile.scholarshipCategoryId && !dtCatIds.includes(profile.scholarshipCategoryId)) {
-          return false;
-        }
-        if (dtCatIds.length > 0 && !profile.scholarshipCategoryId) {
-          // Belge türü kısıtlı ama öğrencinin kategorisi yoksa, yine gösterme
-          return false;
-        }
-
-        return true;
-      }).map(docType => {
-        const typeDocs = documents.filter(d => d.type === docType.code);
-        // Öğrencinin kategorisine açık olan dönemleri filtrele
-        const typePeriods = periods.filter(p => {
-          if (p.type !== docType.code) return false;
-          // Fallback: If for some reason we still need to check period categories, we ignore it here
-          // as the single source of truth is now the DocumentType (Belge Türü) categoryIds.return true;
-          return true;
-        });
-
-        const hasOpenPeriod = typePeriods.some(p => p.isOpen);
-        const hasUploadedDocs = typeDocs.length > 0;
-
-        // Kullanıcının talebi: 'yüklemeye açık olmayan belgeler ekranda gözükmesin'
-        // Eğer bu belge türü o anda yüklemeye açık değilse ve daha önce yüklenmiş belge de yoksa tamamen gizleyelim.
-        if (!hasOpenPeriod && !hasUploadedDocs) {
-          return null;
-        }
-        
-        return (
-          <section key={docType.code}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-medium text-gray-900">{docType.name}</h3>
-              {!readOnly && (
-                <PeriodUploadButton
-                  periods={typePeriods}
-                  profileId={profile.id}
-                  docType={docType}
-                  onUploaded={onUpload}
-                />
-              )}
+    <div className="space-y-10">
+      {/* ── 1. STATİK / İLK KAYIT BELGELERİ ── */}
+      <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+        <div className="p-6 bg-gradient-to-r from-purple-50 via-white to-blue-50 border-b border-gray-200">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2.5 mb-1">
+                <span className="p-2 bg-purple-600 text-white rounded-lg shadow-sm">
+                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                </span>
+                <h3 className="text-lg font-bold text-gray-900">İlk Kayıt & Başvuru Belgeleri</h3>
+              </div>
+              <p className="text-xs text-gray-600">
+                Sisteme yeni kaydedilen bursiyerlerin yalnızca ilk kayıtta bir defaya mahsus yüklemesi gereken evraklar.
+              </p>
             </div>
-            <DocumentTable docs={typeDocs} docType={docType} />
-          </section>
-        );
-      })}
+
+            {/* Muafiyet / İlerleme Durumu */}
+            {profile.isInitialDocsExempt ? (
+              <div className="px-4 py-2 bg-emerald-100 text-emerald-900 rounded-xl border border-emerald-300 flex items-center gap-2 text-xs font-semibold shadow-xs">
+                <span>🛡️</span>
+                <span>Mevcut Bursiyer (Arşivde Kayıtlı / Muaf)</span>
+              </div>
+            ) : (
+              <div className="min-w-[200px] bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="font-semibold text-gray-700">Tamamlanma</span>
+                  <span className="font-bold text-purple-700">{uploadedRequiredCount} / {requiredStaticTypes.length} Zorunlu</span>
+                </div>
+                <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-500 ${
+                      completionPercentage === 100 ? 'bg-emerald-500' : 'bg-purple-600'
+                    }`}
+                    style={{ width: `${completionPercentage}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {profile.isInitialDocsExempt && (
+            <div className="mt-4 p-3 bg-white/80 rounded-xl border border-emerald-200 text-xs text-emerald-800 flex items-start gap-2.5">
+              <span className="text-base leading-none">ℹ️</span>
+              <p>
+                <strong>Muafiyet Bilgisi:</strong> Vakfımızın mevcut bursiyeri olduğunuz için ilk kayıt evraklarınız vakıf arşivimizde mevcuttur. Sistem tarafından onaylı kabul edilmiştir; yalnızca her dönem yenilenen dönemsel evraklarınızı yüklemeniz gerekmektedir.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Static Document Items */}
+        <div className="p-6 divide-y divide-gray-100">
+          {staticDocTypes.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">Tanımlı ilk kayıt belgesi bulunmuyor.</p>
+          ) : (
+            staticDocTypes.map((dt) => {
+              const uploadedDoc = documents.find(d => d.type === dt.code);
+              const isRequired = dt.isRequired !== false;
+              const isUploaded = !!uploadedDoc;
+
+              return (
+                <div key={dt.code} className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-gray-50/50 p-2.5 rounded-xl transition-colors">
+                  <div className="space-y-1 max-w-xl">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm text-gray-900">{dt.name}</span>
+                      {isRequired ? (
+                        <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md text-[10px] font-semibold">
+                          Zorunlu
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-md text-[10px] font-semibold">
+                          Opsiyonel (Varsa)
+                        </span>
+                      )}
+                      {uploadedDoc && (
+                        <StatusBadge status={uploadedDoc.status} note={uploadedDoc.rejectionNote} />
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">{dt.description || 'Açıklama belirtilmemiş.'}</p>
+                    
+                    {uploadedDoc && (
+                      <div className="flex items-center gap-3 text-xs text-gray-500 pt-1">
+                        <a
+                          href={`/${uploadedDoc.filePath}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary-600 hover:text-primary-800 hover:underline flex items-center gap-1 font-medium truncate max-w-xs"
+                        >
+                          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                          {uploadedDoc.originalFileName}
+                        </a>
+                        <span>•</span>
+                        <span>{format(new Date(uploadedDoc.uploadedAt), 'dd.MM.yyyy HH:mm')}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {dt.hasTemplate && (
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadTemplate(dt)}
+                        className="btn-secondary btn-sm text-xs flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100"
+                        title="İmzalanacak boş şablonu indirir"
+                      >
+                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                        Şablonu İndir
+                      </button>
+                    )}
+
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveUploadDocType(dt)}
+                        className={`btn-sm text-xs flex items-center gap-1.5 ${
+                          isUploaded
+                            ? 'btn-secondary text-gray-700'
+                            : isRequired
+                            ? 'btn-primary'
+                            : 'btn-secondary text-primary-700 bg-primary-50 border-primary-200'
+                        }`}
+                      >
+                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                        {isUploaded ? 'Yeniden Yükle' : 'Belge Yükle'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      {/* ── 2. DÖNEMSEL BELGELER (Transkript, Öğrenci Belgesi vb.) ── */}
+      <section className="space-y-6">
+        <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <span className="p-1.5 bg-blue-600 text-white rounded-md shadow-xs">
+                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </span>
+              Dönemsel Belgeler
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Her yarıyıl aktif dönemlerde yüklenmesi gereken güncel belgeler (Transkript, Öğrenci Belgesi vb.).
+            </p>
+          </div>
+        </div>
+
+        {periodicDocTypes.map(docType => {
+          const typeDocs = documents.filter(d => d.type === docType.code);
+          const typePeriods = periods.filter(p => p.type === docType.code);
+          const hasOpenPeriod = typePeriods.some(p => p.isOpen);
+          const hasUploadedDocs = typeDocs.length > 0;
+
+          if (!hasOpenPeriod && !hasUploadedDocs) {
+            return null;
+          }
+          
+          return (
+            <div key={docType.code} className="bg-white rounded-xl border border-gray-200 p-5 shadow-xs">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h4 className="font-bold text-gray-900 text-sm">{docType.name}</h4>
+                  {docType.description && <p className="text-xs text-gray-500 mt-0.5">{docType.description}</p>}
+                </div>
+                {!readOnly && (
+                  <PeriodUploadButton
+                    periods={typePeriods}
+                    profileId={profile.id}
+                    docType={docType}
+                    onUploaded={onUpload}
+                  />
+                )}
+              </div>
+              <DocumentTable docs={typeDocs} docType={docType} />
+            </div>
+          );
+        })}
+      </section>
+
+      {/* Static Document Upload Modal */}
+      {activeUploadDocType && (
+        <StaticUploadModal
+          docType={activeUploadDocType}
+          profileId={profile.id}
+          onClose={() => setActiveUploadDocType(null)}
+          onUploaded={() => {
+            setActiveUploadDocType(null);
+            onUpload?.();
+          }}
+        />
+      )}
     </div>
   );
 }
 
+function StaticUploadModal({ docType, profileId, onClose, onUploaded }: {
+  docType: any;
+  profileId: string;
+  onClose: () => void;
+  onUploaded: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [dynamicAnswers, setDynamicAnswers] = useState<Record<string, any>>({});
 
+  let customFields: any[] = [];
+  try {
+    customFields = docType.customFields ? JSON.parse(docType.customFields) : [];
+  } catch (e) {}
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!file) {
+      toast.error('Lütfen yüklenecek bir dosya seçiniz.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await documentApi.uploadStatic(profileId, docType.code, file, dynamicAnswers);
+      toast.success(`${docType.name} başarıyla yüklendi, onay bekliyor.`);
+      onUploaded();
+    } catch (err: any) {
+      // Handled by axios response interceptor
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+          <div>
+            <h3 className="font-bold text-gray-900 text-sm">{docType.name} Yükle</h3>
+            <p className="text-xs text-gray-500 mt-0.5">İlk Kayıt / Başvuru Evrakı</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {docType.description && (
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-900">
+              {docType.description}
+            </div>
+          )}
+
+          {customFields.map(field => (
+            <div key={field.id}>
+              <label className="form-label text-xs">{field.label} {field.required && <span className="text-red-500">*</span>}</label>
+              {field.type === 'textarea' ? (
+                <textarea
+                  className="form-input text-xs"
+                  required={field.required}
+                  value={dynamicAnswers[field.id] || ''}
+                  onChange={e => setDynamicAnswers(p => ({ ...p, [field.id]: e.target.value }))}
+                />
+              ) : (
+                <input
+                  type={field.type === 'number' ? 'number' : 'text'}
+                  className="form-input text-xs"
+                  required={field.required}
+                  value={dynamicAnswers[field.id] || ''}
+                  onChange={e => setDynamicAnswers(p => ({ ...p, [field.id]: e.target.value }))}
+                />
+              )}
+            </div>
+          ))}
+
+          <div>
+            <label className="form-label text-xs">Dosya Seçin (PDF, JPG, PNG) <span className="text-red-500">*</span></label>
+            <input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              className="form-input py-2 text-xs"
+              onChange={e => setFile(e.target.files?.[0] || null)}
+              required
+            />
+            <p className="text-[11px] text-gray-400 mt-1">Maksimum dosya boyutu 10MB olmalıdır.</p>
+          </div>
+
+          <div className="flex gap-2 pt-3 border-t border-gray-100">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1 text-xs">İptal</button>
+            <button type="submit" className="btn-primary flex-1 text-xs" disabled={loading}>
+              {loading ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Yükle ve Gönder'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 function DocumentTable({ docs, docType }: { docs: DocFile[]; docType: any }) {
   if (!docs.length) {
@@ -739,7 +1069,6 @@ function DocumentTable({ docs, docType }: { docs: DocFile[]; docType: any }) {
           {docs.map(doc => {
             let answers: any = {};
             try { answers = doc.dynamicFields ? JSON.parse(doc.dynamicFields) : {}; } catch (e) {}
-            // Backwards compatibility for legacy fields
             if (docType.code === 'TRANSCRIPT' && doc.grade) answers['Sınıf'] = doc.grade;
             if (docType.code === 'VOLUNTEER_REPORT' && doc.volunteerOrg) answers['Kurum'] = doc.volunteerOrg;
             
@@ -764,8 +1093,6 @@ function DocumentTable({ docs, docType }: { docs: DocFile[]; docType: any }) {
     </div>
   );
 }
-
-// Removed StaticUploadButton as it is unused
 
 function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
   periods?: DocumentPeriod[];
@@ -793,13 +1120,15 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
       toast.success('Belge yüklendi, onay bekleniyor.');
       setOpen(false);
       onUploaded?.();
+    } catch (err: any) {
+      // Handled by axios response interceptor
     } finally {
       setLoading(false);
     }
   }
 
   if (openPeriods.length === 0) {
-    return <button disabled className="btn-secondary btn-sm opacity-50 cursor-not-allowed">Yükleme Kapalı</button>;
+    return <button disabled className="btn-secondary btn-sm opacity-50 cursor-not-allowed text-xs">Yükleme Kapalı</button>;
   }
 
   if (open) {
@@ -807,12 +1136,12 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
       <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-modal w-full max-w-md">
           <div className="p-5 border-b border-gray-200">
-            <h3 className="font-semibold">{docType.name} Yükle</h3>
+            <h3 className="font-semibold text-sm">{docType.name} Yükle</h3>
           </div>
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
             <div>
-              <label className="form-label">Yüklenecek Dönem <span className="text-primary-500">*</span></label>
-              <select className="form-select" value={selectedPeriodId} onChange={e => setSelectedPeriodId(e.target.value)} required>
+              <label className="form-label text-xs">Yüklenecek Dönem <span className="text-primary-500">*</span></label>
+              <select className="form-select text-xs" value={selectedPeriodId} onChange={e => setSelectedPeriodId(e.target.value)} required>
                 {openPeriods.map(p => (
                   <option key={p.id} value={p.id}>{p.label}</option>
                 ))}
@@ -821,10 +1150,10 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
             
             {customFields.map(field => (
               <div key={field.id}>
-                <label className="form-label">{field.label} {field.required && <span className="text-primary-500">*</span>}</label>
+                <label className="form-label text-xs">{field.label} {field.required && <span className="text-primary-500">*</span>}</label>
                 {field.type === 'textarea' ? (
                   <textarea
-                    className="form-input"
+                    className="form-input text-xs"
                     required={field.required}
                     value={dynamicAnswers[field.id] || ''}
                     onChange={e => setDynamicAnswers(p => ({ ...p, [field.id]: e.target.value }))}
@@ -832,7 +1161,7 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
                 ) : (
                   <input
                     type={field.type === 'number' ? 'number' : 'text'}
-                    className="form-input"
+                    className="form-input text-xs"
                     required={field.required}
                     value={dynamicAnswers[field.id] || ''}
                     onChange={e => setDynamicAnswers(p => ({ ...p, [field.id]: e.target.value }))}
@@ -842,12 +1171,12 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
             ))}
 
             <div>
-              <label className="form-label">Dosya (PDF, JPG, PNG) <span className="text-primary-500">*</span></label>
-              <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="form-input py-1.5" onChange={e => setFile(e.target.files?.[0] || null)} required />
+              <label className="form-label text-xs">Dosya (PDF, JPG, PNG) <span className="text-primary-500">*</span></label>
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="form-input py-1.5 text-xs" onChange={e => setFile(e.target.files?.[0] || null)} required />
             </div>
             <div className="flex gap-2 pt-2">
-              <button type="button" onClick={() => setOpen(false)} className="btn-secondary flex-1">İptal</button>
-              <button type="submit" className="btn-primary flex-1" disabled={loading}>
+              <button type="button" onClick={() => setOpen(false)} className="btn-secondary flex-1 text-xs">İptal</button>
+              <button type="submit" className="btn-primary flex-1 text-xs" disabled={loading}>
                 {loading ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Yükle'}
               </button>
             </div>
@@ -858,8 +1187,8 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
   }
 
   return (
-    <button onClick={() => setOpen(true)} className="btn-primary btn-sm">
-      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
+    <button onClick={() => setOpen(true)} className="btn-primary btn-sm text-xs flex items-center gap-1.5">
+      <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
       Belge Yükle
     </button>
   );

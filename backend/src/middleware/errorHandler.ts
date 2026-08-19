@@ -11,7 +11,7 @@ export class AppError extends Error {
 }
 
 export function errorHandler(
-  err: Error,
+  err: any,
   _req: Request,
   res: Response,
   _next: NextFunction,
@@ -21,8 +21,24 @@ export function errorHandler(
     return;
   }
 
+  // Multer errors
+  if (err.name === 'MulterError' || err.code === 'LIMIT_FILE_SIZE') {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      res.status(400).json({ error: 'Dosya boyutu en fazla 10MB olabilir.' });
+      return;
+    }
+    res.status(400).json({ error: err.message || 'Dosya yükleme hatası.' });
+    return;
+  }
+
+  // Multer custom fileFilter errors
+  if (err.message && (err.message.includes('PDF') || err.message.includes('dosya') || err.message.includes('Dosya'))) {
+    res.status(400).json({ error: err.message });
+    return;
+  }
+
   // Prisma errors
-  if (err.constructor.name === 'PrismaClientKnownRequestError') {
+  if (err.constructor?.name === 'PrismaClientKnownRequestError') {
     const prismaErr = err as any;
     if (prismaErr.code === 'P2002') {
       res.status(409).json({ error: 'Bu kayıt zaten mevcut.' });
@@ -34,7 +50,7 @@ export function errorHandler(
     }
   }
 
-  // Log unexpected errors (but don't leak details to client)
+  // Log unexpected errors
   console.error('Unexpected error:', err);
-  res.status(500).json({ error: 'Sunucu hatası oluştu.' });
+  res.status(500).json({ error: err.message || 'Sunucu hatası oluştu.' });
 }

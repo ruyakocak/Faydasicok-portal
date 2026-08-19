@@ -19,8 +19,7 @@ import DashboardPage from './pages/admin/DashboardPage';
 import StudentsListPage from './pages/admin/StudentsListPage';
 import StudentDetailPage from './pages/admin/StudentDetailPage';
 import MentorsPage from './pages/admin/MentorsPage';
-import ApprovalQueuePage from './pages/admin/ApprovalQueuePage';
-import PeriodsPage from './pages/admin/PeriodsPage';
+import DocumentCenterPage from './pages/admin/DocumentCenterPage';
 import AuditLogPage from './pages/admin/AuditLogPage';
 import UsersPage from './pages/admin/UsersPage';
 import EventsPage from './pages/admin/EventsPage';
@@ -83,8 +82,7 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="students" element={<StudentsListPage />} />
           <Route path="students/:profileId" element={<StudentDetailPage />} />
-          <Route path="approvals" element={<ApprovalQueuePage />} />
-          <Route path="periods" element={<PeriodsPage />} />
+          <Route path="documents" element={<DocumentCenterPage />} />
           <Route path="events" element={<EventsPage />} />
           <Route path="mentors" element={<MentorsPage />} />
           <Route path="audit-logs" element={<AuditLogPage />} />

@@ -43,7 +43,7 @@ export async function getActiveDocumentTypes(req: Request, res: Response, next: 
   try {
     const types = await prisma.documentTypeConfig.findMany({
       where: { isActive: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ isStatic: 'asc' }, { order: 'asc' }, { createdAt: 'desc' }],
     });
     res.json(types);
   } catch (err) {
@@ -53,11 +53,14 @@ export async function getActiveDocumentTypes(req: Request, res: Response, next: 
 
 // ── Helper: get student profile and validate ownership ───────────────
 async function getProfileAndValidate(req: Request, profileId: string) {
-  const profile = await prisma.studentProfile.findUnique({ where: { id: profileId } });
+  let profile = await prisma.studentProfile.findUnique({ where: { id: profileId } });
+  if (!profile) {
+    profile = await prisma.studentProfile.findUnique({ where: { userId: profileId } });
+  }
   if (!profile) throw new AppError(404, 'Profil bulunamadı.');
 
   const isAdminOrReviewer = req.user!.role === Role.ADMIN || req.user!.role === Role.REVIEWER;
-  const isOwner = req.user!.userId === profile.userId;
+  const isOwner = req.user!.userId === profile.userId || req.user!.profileId === profile.id;
 
   if (!isAdminOrReviewer && !isOwner) {
     throw new AppError(403, 'Bu profile belge yükleme yetkiniz yok.');
@@ -85,6 +88,15 @@ async function saveDocumentWithApproval(
   docData: Record<string, any>,
 ) {
   if (!req.file) throw new AppError(400, 'Dosya bulunamadı.');
+
+  let dynamicFieldsStr = docData.dynamicFields;
+  if (dynamicFieldsStr && typeof dynamicFieldsStr !== 'string') {
+    dynamicFieldsStr = JSON.stringify(dynamicFieldsStr);
+  }
+  if (dynamicFieldsStr === '{}' || dynamicFieldsStr === '""' || dynamicFieldsStr === 'null') {
+    dynamicFieldsStr = null;
+  }
+  docData.dynamicFields = dynamicFieldsStr;
 
   const stored = await storageService.save(req.file.buffer, req.file.originalname, req.file.mimetype);
 
@@ -131,23 +143,15 @@ async function saveDocumentWithApproval(
 // ── Upload Static Document ────────────────────────────────────────────
 export async function uploadStaticDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { profileId, type } = req.body;
+    const { profileId, type, dynamicFields } = req.body;
     if (!profileId || !type) throw new AppError(400, 'profileId ve type zorunludur.');
 
-    const staticTypes: DocumentType[] = [
-      'APPLICATION_FORM', 'YKS_RESULT', 'UNIVERSITY_PLACEMENT',
-      'MOTHER_INCOME', 'FATHER_INCOME', 'ID_PHOTOCOPY',
-      'CRIMINAL_RECORD', 'GRADUATION_CERTIFICATE',
-    ];
-    if (!staticTypes.includes(type as DocumentType)) {
-      throw new AppError(400, 'Geçersiz belge türü.');
-    }
+    const profile = await getProfileAndValidate(req, profileId);
 
-    await getProfileAndValidate(req, profileId);
-
-    const doc = await saveDocumentWithApproval(req, profileId, {
-      type: type as DocumentType,
+    const doc = await saveDocumentWithApproval(req, profile.id, {
+      type,
       isStatic: true,
+      dynamicFields: dynamicFields || null,
     });
 
     res.status(201).json({ message: 'Belge yüklendi, onay bekleniyor.', document: doc });
@@ -162,7 +166,7 @@ export async function uploadTranscript(req: Request, res: Response, next: NextFu
     const { profileId, grade, semester, academicYear, note, periodId } = req.body;
     if (!profileId) throw new AppError(400, 'profileId zorunludur.');
 
-    await getProfileAndValidate(req, profileId);
+    const profile = await getProfileAndValidate(req, profileId);
 
     // Check if the period is open
     if (periodId) {
@@ -171,8 +175,7 @@ export async function uploadTranscript(req: Request, res: Response, next: NextFu
         throw new AppError(400, 'Bu dönem için transkript yükleme şu anda kapalı.');
       }
       // Check category restriction
-      const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
-      if (!isPeriodAllowedForCategory(period, profile?.scholarshipCategoryId)) {
+      if (!isPeriodAllowedForCategory(period, profile.scholarshipCategoryId)) {
         throw new AppError(403, 'Bu dönem sizin burs kategoriniz için açık değil.');
       }
     } else {
@@ -181,15 +184,14 @@ export async function uploadTranscript(req: Request, res: Response, next: NextFu
         where: { type: DocumentPeriodType.TRANSCRIPT, isOpen: true },
       });
       if (req.user!.role === Role.STUDENT) {
-        const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
-        const hasMatch = openPeriods.some(p => isPeriodAllowedForCategory(p, profile?.scholarshipCategoryId));
+        const hasMatch = openPeriods.some(p => isPeriodAllowedForCategory(p, profile.scholarshipCategoryId));
         if (!hasMatch) {
           throw new AppError(400, 'Transkript yükleme şu anda kapalı.');
         }
       }
     }
 
-    const doc = await saveDocumentWithApproval(req, profileId, {
+    const doc = await saveDocumentWithApproval(req, profile.id, {
       type: DocumentType.TRANSCRIPT,
       isStatic: false,
       periodId: periodId || null,
@@ -211,25 +213,23 @@ export async function uploadStudentCertificate(req: Request, res: Response, next
     const { profileId, grade, academicYear, periodId } = req.body;
     if (!profileId) throw new AppError(400, 'profileId zorunludur.');
 
-    await getProfileAndValidate(req, profileId);
+    const profile = await getProfileAndValidate(req, profileId);
 
     if (periodId) {
       const period = await prisma.documentPeriod.findUnique({ where: { id: periodId } });
       if (!period?.isOpen) throw new AppError(400, 'Bu dönem için öğrenci belgesi yükleme kapalı.');
-      const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
-      if (!isPeriodAllowedForCategory(period, profile?.scholarshipCategoryId)) {
+      if (!isPeriodAllowedForCategory(period, profile.scholarshipCategoryId)) {
         throw new AppError(403, 'Bu dönem sizin burs kategoriniz için açık değil.');
       }
     } else if (req.user!.role === Role.STUDENT) {
       const openPeriods = await prisma.documentPeriod.findMany({
         where: { type: DocumentPeriodType.STUDENT_CERTIFICATE, isOpen: true },
       });
-      const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
-      const hasMatch = openPeriods.some(p => isPeriodAllowedForCategory(p, profile?.scholarshipCategoryId));
+      const hasMatch = openPeriods.some(p => isPeriodAllowedForCategory(p, profile.scholarshipCategoryId));
       if (!hasMatch) throw new AppError(400, 'Öğrenci belgesi yükleme şu anda kapalı.');
     }
 
-    const doc = await saveDocumentWithApproval(req, profileId, {
+    const doc = await saveDocumentWithApproval(req, profile.id, {
       type: DocumentType.STUDENT_CERTIFICATE,
       isStatic: false,
       periodId: periodId || null,
@@ -250,25 +250,23 @@ export async function uploadVolunteerReport(req: Request, res: Response, next: N
     if (!profileId) throw new AppError(400, 'profileId zorunludur.');
     if (!volunteerOrg) throw new AppError(400, 'Gönüllülük yapılan kurum adı zorunludur.');
 
-    await getProfileAndValidate(req, profileId);
+    const profile = await getProfileAndValidate(req, profileId);
 
     if (periodId) {
       const period = await prisma.documentPeriod.findUnique({ where: { id: periodId } });
       if (!period?.isOpen) throw new AppError(400, 'Bu dönem için STK raporu yükleme kapalı.');
-      const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
-      if (!isPeriodAllowedForCategory(period, profile?.scholarshipCategoryId)) {
+      if (!isPeriodAllowedForCategory(period, profile.scholarshipCategoryId)) {
         throw new AppError(403, 'Bu dönem sizin burs kategoriniz için açık değil.');
       }
     } else if (req.user!.role === Role.STUDENT) {
       const openPeriods = await prisma.documentPeriod.findMany({
         where: { type: DocumentPeriodType.VOLUNTEER_REPORT, isOpen: true },
       });
-      const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
-      const hasMatch = openPeriods.some(p => isPeriodAllowedForCategory(p, profile?.scholarshipCategoryId));
+      const hasMatch = openPeriods.some(p => isPeriodAllowedForCategory(p, profile.scholarshipCategoryId));
       if (!hasMatch) throw new AppError(400, 'STK Gönüllülük Raporu yükleme şu anda kapalı.');
     }
 
-    const doc = await saveDocumentWithApproval(req, profileId, {
+    const doc = await saveDocumentWithApproval(req, profile.id, {
       type: DocumentType.VOLUNTEER_REPORT,
       isStatic: false,
       periodId: periodId || null,
@@ -291,19 +289,18 @@ export async function uploadDynamicDocument(req: Request, res: Response, next: N
     const { profileId, periodId, type, dynamicFields } = req.body;
     if (!profileId || !periodId || !type) throw new AppError(400, 'profileId, periodId ve type zorunludur.');
 
-    await getProfileAndValidate(req, profileId);
+    const profile = await getProfileAndValidate(req, profileId);
 
     const period = await prisma.documentPeriod.findUnique({ where: { id: periodId } });
     if (!period?.isOpen) throw new AppError(400, 'Bu dönem için yükleme kapalı.');
 
     // Check category restriction
-    const profile = await prisma.studentProfile.findUnique({ where: { id: profileId }, select: { scholarshipCategoryId: true } });
-    if (!isPeriodAllowedForCategory(period, profile?.scholarshipCategoryId)) {
+    if (!isPeriodAllowedForCategory(period, profile.scholarshipCategoryId)) {
       throw new AppError(403, 'Bu dönem sizin burs kategoriniz için açık değil.');
     }
 
     // Save with approval
-    const doc = await saveDocumentWithApproval(req, profileId, {
+    const doc = await saveDocumentWithApproval(req, profile.id, {
       type,
       isStatic: false,
       periodId,

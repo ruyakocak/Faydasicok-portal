@@ -8,20 +8,22 @@ import {
   adminGetVolunteerForm,
   adminUpdateVolunteerForm,
   adminDeleteVolunteerForm,
+  adminExportVolunteerFormsExcel,
 } from '../controllers/volunteer.controller';
+import { getVolunteerFormSchema, saveVolunteerFormSchema } from '../controllers/settings.controller';
 
 export const volunteerRouter = Router();
 volunteerRouter.use(authenticate);
 
+// ── Settings routes (Public GET, Admin PUT) ─────────────────────────
+volunteerRouter.get('/settings/schema', getVolunteerFormSchema);
+volunteerRouter.put('/settings/schema', saveVolunteerFormSchema);
+
 // ── Student routes ──────────────────────────────────────────────────
-// Submit volunteer form with up to 3 file uploads
+// Submit volunteer form with dynamic files
 volunteerRouter.post(
   '/',
-  upload.fields([
-    { name: 'document1', maxCount: 1 },
-    { name: 'document2', maxCount: 1 },
-    { name: 'document3', maxCount: 1 },
-  ]),
+  upload.any(),
   submitVolunteerForm,
 );
 
@@ -29,6 +31,7 @@ volunteerRouter.post(
 volunteerRouter.get('/my', getMyVolunteerForms);
 
 // ── Admin routes ────────────────────────────────────────────────────
+volunteerRouter.get('/export/excel', adminExportVolunteerFormsExcel);
 volunteerRouter.get('/', adminListVolunteerForms);
 volunteerRouter.get('/:id', adminGetVolunteerForm);
 volunteerRouter.patch('/:id', adminUpdateVolunteerForm);

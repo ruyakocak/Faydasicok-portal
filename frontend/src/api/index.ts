@@ -63,10 +63,13 @@ export const documentApi = {
   getActiveTypes: () =>
     api.get('/documents/types').then((r) => r.data),
 
-  uploadStatic: (profileId: string, type: string, file: File) => {
+  uploadStatic: (profileId: string, type: string, file: File, dynamicFields?: any) => {
     const fd = new FormData();
     fd.append('profileId', profileId);
     fd.append('type', type);
+    if (dynamicFields) {
+      fd.append('dynamicFields', JSON.stringify(dynamicFields));
+    }
     fd.append('file', file);
     return api.post('/documents/static', fd).then((r) => r.data);
   },
@@ -163,6 +166,9 @@ export const adminApi = {
   exportStudentsReport: () =>
     api.get('/admin/reports/students-export', { responseType: 'blob' }).then((r) => r.data),
 
+  bulkRemindStudents: (studentIds: string[]) =>
+    api.post('/admin/students/bulk-remind', { studentIds }).then(r => r.data),
+
   listPeriods: (): Promise<DocumentPeriod[]> =>
     api.get('/admin/periods').then((r) => r.data),
 
@@ -236,6 +242,9 @@ export const adminApi = {
   deleteDocumentType: (id: string) =>
     api.delete(`/admin/document-types/${id}`).then((r) => r.data),
 
+  initStandardDocumentTypes: () =>
+    api.post('/admin/document-types/init-standard').then((r) => r.data),
+
   // Settings
   getSmtpSettings: () =>
     api.get('/admin/settings/smtp').then((r) => r.data),
@@ -304,7 +313,9 @@ export const announcementApi = {
 export const volunteerApi = {
   // Student
   submit: (formData: FormData) =>
-    api.post('/volunteer-forms', formData).then((r) => r.data),
+    api.post('/volunteer-forms', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data),
 
   getMyForms: () =>
     api.get('/volunteer-forms/my').then((r) => r.data),
@@ -321,4 +332,13 @@ export const volunteerApi = {
 
   adminDelete: (id: string) =>
     api.delete(`/volunteer-forms/${id}`).then((r) => r.data),
+
+  exportExcel: (params?: Record<string, string>) =>
+    api.get('/volunteer-forms/export/excel', { params, responseType: 'blob' }).then((r) => r.data),
+
+  getSettingsSchema: () =>
+    api.get('/volunteer-forms/settings/schema').then((r) => r.data),
+
+  saveSettingsSchema: (schema: any) =>
+    api.put('/volunteer-forms/settings/schema', schema).then((r) => r.data),
 };

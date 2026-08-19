@@ -135,7 +135,7 @@ async function createApprovableChange(
   });
 }
 
-// ── Update Contact Info (requires approval) ────────────────────────
+// ── Update Contact Info (direct update + audit log) ────────────────────────
 export async function updateContactInfo(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
@@ -148,73 +148,79 @@ export async function updateContactInfo(req: Request, res: Response, next: NextF
 
     const { phone, email, address } = req.body;
     
-    // Detect contact changes
-    const changes = getContactChanges(
-      { phone: profile.phone, email: profile.email || profile.user?.email, address: profile.address },
-      { phone, email, address }
-    );
-
-    if (changes.length === 0) {
-      res.json({ message: 'Değişiklik yapılmadı.', profile });
-      return;
-    }
-
-    // Create ApprovableChange records for each field
-    const approvableChanges = [];
-    const fieldsToUpdate = { phone, email, address };
-    
-    for (const [key, newVal] of Object.entries(fieldsToUpdate)) {
-      if (newVal !== undefined) {
-        let oldVal = null;
-        if (key === 'phone') oldVal = profile.phone;
-        if (key === 'email') oldVal = profile.email || profile.user?.email;
-        if (key === 'address') oldVal = profile.address;
-
-        if (oldVal !== newVal) {
-          // Remove existing pending changes for this field
-          await prisma.approvableChange.deleteMany({
-            where: {
-              studentProfileId: id,
-              entityType: 'PERSONAL_INFO',
-              fieldName: key,
-              status: 'PENDING',
-            },
-          });
-
-          approvableChanges.push({
-            entityType: 'PERSONAL_INFO',
-            studentProfileId: id,
-            fieldName: key,
-            oldValue: oldVal || null,
-            newValue: newVal || null,
-            changedById: req.user!.userId,
-            status: 'PENDING',
-          });
-        }
+    // Check email conflict if email changed
+    if (email && email.trim() !== '') {
+      const existingUserWithEmail = await prisma.user.findFirst({
+        where: { email: email.trim(), id: { not: profile.userId } }
+      });
+      if (existingUserWithEmail) {
+        throw new AppError(400, 'Bu e-posta adresi başka bir kullanıcı tarafından kullanılmaktadır.');
       }
     }
 
-    if (approvableChanges.length > 0) {
-      await prisma.approvableChange.createMany({
-        data: approvableChanges,
-      });
+    const updateData: any = {};
+    const auditLogs: any[] = [];
 
-      // Trigger admin email notification
-      const studentName = `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'Öğrenci';
-      const studentIdentifier = profile.user?.tcKimlikNo ? `TC: ${profile.user.tcKimlikNo}` : `ID: ${profile.id}`;
-
-      sendStudentContactUpdatedEmail({
-        studentName,
-        studentIdentifier,
-        profileId: profile.id,
-        changes,
-        updatedAt: new Date(),
-      }).catch(err => {
-        console.error('[StudentController] Failed to send contact update email:', err);
+    if (phone !== undefined && phone !== profile.phone) {
+      updateData.phone = phone || null;
+      auditLogs.push({
+        userId: req.user!.userId,
+        action: AuditAction.UPDATE,
+        module: 'Student',
+        entityId: id,
+        entityType: 'StudentProfile',
+        oldValue: profile.phone,
+        newValue: phone || null,
       });
     }
 
-    res.json({ message: 'İletişim bilgisi güncelleme talebiniz oluşturuldu. Yönetici onayından sonra aktif olacaktır.' });
+    if (email !== undefined && email !== (profile.email || profile.user?.email)) {
+      updateData.email = email ? email.trim() : null;
+      auditLogs.push({
+        userId: req.user!.userId,
+        action: AuditAction.UPDATE,
+        module: 'Student',
+        entityId: id,
+        entityType: 'StudentProfile',
+        oldValue: profile.email || profile.user?.email,
+        newValue: email ? email.trim() : null,
+      });
+    }
+
+    if (address !== undefined && address !== profile.address) {
+      updateData.address = address || null;
+      auditLogs.push({
+        userId: req.user!.userId,
+        action: AuditAction.UPDATE,
+        module: 'Student',
+        entityId: id,
+        entityType: 'StudentProfile',
+        oldValue: profile.address,
+        newValue: address || null,
+      });
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      const updatedProfile = await prisma.studentProfile.update({
+        where: { id },
+        data: updateData,
+      });
+
+      if (updateData.email !== undefined) {
+        await prisma.user.update({
+          where: { id: profile.userId },
+          data: { email: updateData.email },
+        });
+      }
+
+      if (auditLogs.length > 0) {
+        await prisma.auditLog.createMany({ data: auditLogs });
+      }
+
+      res.json({ message: 'İletişim bilgileriniz başarıyla güncellendi.', profile: updatedProfile });
+    } else {
+      res.json({ message: 'Herhangi bir değişiklik yapılmadı.', profile });
+    }
   } catch (err) {
     next(err);
   }

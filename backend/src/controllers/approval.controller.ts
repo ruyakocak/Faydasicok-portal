@@ -149,6 +149,12 @@ export async function approveChange(req: Request, res: Response, next: NextFunct
         if (fieldName === 'email') {
           const profile = await tx.studentProfile.findUnique({ where: { id: change.studentProfileId } });
           if (profile) {
+            const existingUserWithEmail = await tx.user.findFirst({
+              where: { email: value, id: { not: profile.userId } }
+            });
+            if (existingUserWithEmail) {
+              throw new AppError(400, 'Bu e-posta adresi sistemde başka bir hesap tarafından kullanılmaktadır.');
+            }
             await tx.user.update({
               where: { id: profile.userId },
               data: { email: value || null },

@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { Link, useSearchParams } from 'react-router-dom';
 import EmptyState from '../../components/EmptyState';
+import DocumentPreviewDrawer from '../../components/DocumentPreviewDrawer';
 
 const documentTypeLabels: Record<string, string> = {
   TRANSCRIPT: 'Transkript',
@@ -55,7 +56,7 @@ function renderBankInfo(val?: string | null) {
   return <span className="text-gray-700 text-xs font-medium">{val}</span>;
 }
 
-export default function ApprovalQueuePage() {
+export default function ApprovalQueueTab() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [result, setResult] = useState<PaginatedResponse<ApprovableChange> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,9 +74,9 @@ export default function ApprovalQueuePage() {
     adminApi.listDocumentTypes().then(setDocTypes).catch(console.error);
     adminApi.listScholarshipCategories().then(setCategories).catch(console.error);
   }, []);
-  const [rejectingId, setRejectingId] = useState<string | null>(null);
-  const [rejectNote, setRejectNote] = useState('');
   const [page, setPage] = useState(1);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState<ApprovableChange | null>(null);
 
   const dynamicFilterOptions = useMemo(() => {
     const options: Record<string, { label: string; type: 'entity' | 'document' }> = {};
@@ -160,21 +161,14 @@ export default function ApprovalQueuePage() {
     load();
   }
 
-  async function handleReject() {
-    if (!rejectingId || !rejectNote.trim()) { toast.error('Red sebebi yazınız.'); return; }
-    await approvalApi.reject(rejectingId, rejectNote);
+  async function handleReject(id: string, note: string) {
+    await approvalApi.reject(id, note);
     toast.success('Reddedildi.');
-    setRejectingId(null);
-    setRejectNote('');
     load();
   }
 
   return (
     <div className="animate-fade-in">
-      <div className="page-header">
-        <h1 className="page-title">Onay Kuyruğu</h1>
-        <p className="page-subtitle">Bursiyerlerden gelen değişiklik ve belge talepleri</p>
-      </div>
 
       {/* Filters */}
       <div className="card mb-4">
@@ -301,9 +295,12 @@ export default function ApprovalQueuePage() {
                     </td>
                     <td className="text-sm">
                       {change.entityType === 'DOCUMENT' && change.document?.filePath ? (
-                        <a href={`/${change.document.filePath}`} target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline text-xs">
+                        <button 
+                          onClick={() => { setPreviewDocument(change); setDrawerOpen(true); }} 
+                          className="text-primary-500 hover:underline text-xs"
+                        >
                           {change.document.originalFileName}
-                        </a>
+                        </button>
                       ) : change.entityType === 'BANK_INFO' ? (
                         renderBankInfo(change.newValue)
                       ) : (
@@ -315,35 +312,22 @@ export default function ApprovalQueuePage() {
                     </td>
                     {statusFilter === 'PENDING' && (
                       <td>
-                        {rejectingId === change.id ? (
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="text"
-                              className="form-input text-xs py-1 w-32"
-                              placeholder="Red sebebi..."
-                              value={rejectNote}
-                              onChange={e => setRejectNote(e.target.value)}
-                              autoFocus
-                            />
-                            <button onClick={handleReject} className="btn-danger btn-sm">Reddet</button>
-                            <button onClick={() => { setRejectingId(null); setRejectNote(''); }} className="btn-ghost btn-sm">İptal</button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          {change.entityType === 'DOCUMENT' && change.document?.filePath && (
                             <button
-                              onClick={() => handleApprove(change.id)}
-                              className="px-2.5 py-1 text-xs font-medium bg-status-approved-bg text-status-approved-text rounded hover:bg-green-100 transition-colors"
+                              onClick={() => { setPreviewDocument(change); setDrawerOpen(true); }}
+                              className="px-2.5 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
                             >
-                              ✓ Onayla
+                              İncele
                             </button>
-                            <button
-                              onClick={() => { setRejectingId(change.id); setRejectNote(''); }}
-                              className="px-2.5 py-1 text-xs font-medium bg-status-rejected-bg text-status-rejected-text rounded hover:bg-red-100 transition-colors"
-                            >
-                              ✗ Reddet
-                            </button>
-                          </div>
-                        )}
+                          )}
+                          <button
+                            onClick={() => handleApprove(change.id)}
+                            className="px-2.5 py-1 text-xs font-medium bg-status-approved-bg text-status-approved-text rounded hover:bg-green-100 transition-colors"
+                          >
+                            ✓ Onayla
+                          </button>
+                        </div>
                       </td>
                     )}
                     {statusFilter !== 'PENDING' && (
@@ -377,6 +361,14 @@ export default function ApprovalQueuePage() {
           </div>
         )}
       </div>
+
+      <DocumentPreviewDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        document={previewDocument}
+        onApprove={handleApprove}
+        onReject={handleReject}
+      />
     </div>
   );
 }
