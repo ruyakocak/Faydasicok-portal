@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { approvalApi, adminApi } from '../../api';
 import type { ApprovableChange, PaginatedResponse, DocumentPeriod, DocumentTypeConfig } from '../../types';
 import toast from 'react-hot-toast';
@@ -15,12 +15,62 @@ const documentTypeLabels: Record<string, string> = {
 };
 
 const entityTypeLabels: Record<string, string> = {
-  DOCUMENT: 'Belge',
+  DOCUMENT: 'Evrak / Belge',
   BANK_INFO: 'Banka Bilgisi',
   PERSONAL_INFO: 'Kişisel Bilgi',
   FAMILY_INFO: 'Aile Bilgisi',
   EDUCATION_INFO: 'Eğitim Bilgisi',
+  CONTACT_INFO: 'İletişim Bilgisi',
 };
+
+const fieldNameLabels: Record<string, string> = {
+  email: 'E-Posta Adresi',
+  phone: 'Telefon Numarası',
+  tcKimlikNo: 'T.C. Kimlik No',
+  bankInfo: 'Banka & IBAN',
+  bankName: 'Banka Adı',
+  iban: 'IBAN Numarası',
+  accountHolder: 'Hesap Sahibi',
+  address: 'Adres / İkametgâh',
+  birthDate: 'Doğum Tarihi',
+  birthPlace: 'Doğum Yeri',
+  gender: 'Cinsiyet',
+  maritalStatus: 'Medeni Durum',
+  universityName: 'Üniversite',
+  university: 'Üniversite',
+  universityType: 'Üniversite Türü',
+  faculty: 'Fakülte',
+  department: 'Bölüm',
+  grade: 'Sınıf',
+  gpa: 'Genel Not Ortalaması (GNO)',
+  studentNo: 'Öğrenci Numarası',
+  motherAlive: 'Anne Durumu',
+  fatherAlive: 'Baba Durumu',
+  motherJob: 'Anne Mesleği',
+  fatherJob: 'Baba Mesleği',
+  familyIncome: 'Aile Aylık Geliri',
+  siblingCount: 'Kardeş Sayısı',
+  highSchool: 'Mezun Olunan Lise',
+  city: 'Şehir',
+  district: 'İlçe',
+};
+
+function getEntityBadge(entityType: string) {
+  switch (entityType) {
+    case 'DOCUMENT':
+      return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 mb-1 block w-max uppercase tracking-wider">Evrak / Belge</span>;
+    case 'BANK_INFO':
+      return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 mb-1 block w-max uppercase tracking-wider">Banka Bilgisi</span>;
+    case 'PERSONAL_INFO':
+      return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 mb-1 block w-max uppercase tracking-wider">Kişisel Bilgi</span>;
+    case 'FAMILY_INFO':
+      return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 mb-1 block w-max uppercase tracking-wider">Aile Bilgisi</span>;
+    case 'EDUCATION_INFO':
+      return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 mb-1 block w-max uppercase tracking-wider">Eğitim Bilgisi</span>;
+    default:
+      return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-50 text-gray-700 border border-gray-200 mb-1 block w-max uppercase tracking-wider">{entityTypeLabels[entityType] || entityType}</span>;
+  }
+}
 
 function formatIbanDisplay(iban?: string | null): string {
   if (!iban) return '—';
@@ -58,6 +108,9 @@ function renderBankInfo(val?: string | null) {
 
 export default function ApprovalQueueTab() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [queueMode, setQueueMode] = useState<'DOCUMENT' | 'PROFILE'>(
+    searchParams.get('mode') === 'profile' ? 'PROFILE' : 'DOCUMENT'
+  );
   const [result, setResult] = useState<PaginatedResponse<ApprovableChange> | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -68,47 +121,33 @@ export default function ApprovalQueueTab() {
   const [periods, setPeriods] = useState<DocumentPeriod[]>([]);
   const [docTypes, setDocTypes] = useState<DocumentTypeConfig[]>([]);
   const [categories, setCategories] = useState<import('../../types').ScholarshipCategory[]>([]);
+  const [rejectingChange, setRejectingChange] = useState<ApprovableChange | null>(null);
+  const [rejectionNote, setRejectionNote] = useState('');
+  const [rejecting, setRejecting] = useState(false);
 
   useEffect(() => {
     adminApi.listPeriods().then(setPeriods).catch(console.error);
     adminApi.listDocumentTypes().then(setDocTypes).catch(console.error);
     adminApi.listScholarshipCategories().then(setCategories).catch(console.error);
   }, []);
+
   const [page, setPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<ApprovableChange | null>(null);
 
-  const dynamicFilterOptions = useMemo(() => {
-    const options: Record<string, { label: string; type: 'entity' | 'document' }> = {};
-    
-    docTypes.forEach(t => {
-      options[t.code] = { label: t.name, type: 'document' };
-    });
-    
-    return options;
-  }, [docTypes]);
-
   const load = useCallback(async () => {
     setLoading(true);
     const params: Record<string, string> = { status: statusFilter, page: String(page), limit: '20' };
-    if (periodFilter) params.periodLabel = periodFilter;
-    if (categoryFilter) params.categoryId = categoryFilter;
-    const filter = dynamicFilterOptions[entityFilter];
-    if (filter) {
-      if (filter.type === 'document') {
-        params.documentType = entityFilter;
-      } else {
-        params.entityType = entityFilter;
-      }
-    } else if (entityFilter) {
-      // If docTypes hasn't loaded yet, we can blindly pass it to documentType or entityType
-      // depending on if it's a known entity type
-      if (['DOCUMENT', 'BANK_INFO', 'PERSONAL_INFO', 'FAMILY_INFO', 'EDUCATION_INFO'].includes(entityFilter)) {
-        params.entityType = entityFilter;
-      } else {
-        params.documentType = entityFilter;
-      }
+    
+    if (queueMode === 'DOCUMENT') {
+      params.entityType = 'DOCUMENT';
+      if (periodFilter) params.periodLabel = periodFilter;
+      if (entityFilter) params.documentType = entityFilter;
+    } else {
+      params.entityType = entityFilter || 'PROFILE';
     }
+
+    if (categoryFilter) params.categoryId = categoryFilter;
 
     try {
       const data = await approvalApi.getQueue(params);
@@ -116,17 +155,18 @@ export default function ApprovalQueueTab() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, entityFilter, periodFilter, categoryFilter, page, dynamicFilterOptions]);
+  }, [queueMode, statusFilter, entityFilter, periodFilter, categoryFilter, page]);
 
   // Update URL when filters change
   useEffect(() => {
     const newParams = new URLSearchParams();
+    newParams.set('mode', queueMode === 'PROFILE' ? 'profile' : 'documents');
     if (statusFilter !== 'ALL') newParams.set('status', statusFilter);
     if (entityFilter) newParams.set('entity', entityFilter);
-    if (periodFilter) newParams.set('periodLabel', periodFilter);
+    if (periodFilter && queueMode === 'DOCUMENT') newParams.set('periodLabel', periodFilter);
     if (categoryFilter) newParams.set('category', categoryFilter);
     setSearchParams(newParams, { replace: true });
-  }, [statusFilter, entityFilter, periodFilter, categoryFilter, setSearchParams]);
+  }, [queueMode, statusFilter, entityFilter, periodFilter, categoryFilter, setSearchParams]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -150,7 +190,7 @@ export default function ApprovalQueueTab() {
     if (!selected.size) return;
     const ids = [...selected];
     const { approved, failed } = await approvalApi.bulkApprove(ids);
-    toast.success(`${approved} onaylandı${failed ? `, ${failed} başarısız` : ''}`);
+    toast.success(`${approved} öğe onaylandı${failed ? `, ${failed} başarısız` : ''}`);
     setSelected(new Set());
     load();
   }
@@ -161,68 +201,220 @@ export default function ApprovalQueueTab() {
     load();
   }
 
-  async function handleReject(id: string, note: string) {
-    await approvalApi.reject(id, note);
-    toast.success('Reddedildi.');
-    load();
+  async function handleRejectSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!rejectingChange) return;
+    if (!rejectionNote.trim()) {
+      toast.error('Lütfen bir red gerekçesi belirtiniz.');
+      return;
+    }
+    setRejecting(true);
+    try {
+      await approvalApi.reject(rejectingChange.id, rejectionNote.trim());
+      toast.success('Talep reddedildi.');
+      setRejectingChange(null);
+      setRejectionNote('');
+      load();
+    } catch {
+      // Handled by axios interceptor
+    } finally {
+      setRejecting(false);
+    }
+  }
+
+  const [downloadingZip, setDownloadingZip] = useState(false);
+
+  async function handleDownloadFilteredZip() {
+    setDownloadingZip(true);
+    try {
+      const blob = await adminApi.downloadDocumentsZip({
+        status: statusFilter !== 'ALL' ? statusFilter : undefined,
+        categoryId: categoryFilter || undefined,
+        periodLabel: periodFilter || undefined,
+        entity: entityFilter || undefined,
+      });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const safePeriod = periodFilter ? `${periodFilter.replace(/[^a-zA-Z0-9_ğüşöçİĞÜŞÖÇ]/g, '_')}_` : '';
+      const safeEntity = entityFilter ? `${entityFilter}_` : '';
+      a.download = `${safePeriod}${safeEntity}belgeleri.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Filtrelenen belgeler ZIP arşivi olarak indirildi.');
+    } catch (err: any) {
+      toast.error('Seçili filtrelere ait indirilecek belge bulunamadı.');
+    } finally {
+      setDownloadingZip(false);
+    }
   }
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in space-y-4">
+      {/* ── Sub-Tabs (Segmented Control) ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2 rounded-2xl border border-gray-200 shadow-2xs">
+        <div className="flex items-center gap-1.5 p-1 bg-gray-100/90 rounded-xl">
+          <button
+            type="button"
+            onClick={() => {
+              setQueueMode('DOCUMENT');
+              setEntityFilter('');
+              setPage(1);
+              setSelected(new Set());
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+              queueMode === 'DOCUMENT'
+                ? 'bg-white text-primary-700 shadow-xs border border-gray-200/80'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <span>Evrak Onayları</span>
+            {result?.counts?.pendingDocuments !== undefined && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                queueMode === 'DOCUMENT'
+                  ? 'bg-primary-100 text-primary-800'
+                  : 'bg-gray-200 text-gray-700'
+              }`}>
+                {result.counts.pendingDocuments}
+              </span>
+            )}
+          </button>
 
-      {/* Filters */}
-      <div className="card mb-4">
-        <div className="card-body py-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setQueueMode('PROFILE');
+              setEntityFilter('');
+              setPeriodFilter('');
+              setPage(1);
+              setSelected(new Set());
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+              queueMode === 'PROFILE'
+                ? 'bg-white text-emerald-800 shadow-xs border border-gray-200/80'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span>Profil & IBAN Değişiklikleri</span>
+            {result?.counts?.pendingProfiles !== undefined && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                queueMode === 'PROFILE'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-gray-200 text-gray-700'
+              }`}>
+                {result.counts.pendingProfiles}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {queueMode === 'DOCUMENT' && (
+          <div className="flex items-center gap-2 px-2">
+            <button
+              type="button"
+              onClick={handleDownloadFilteredZip}
+              disabled={downloadingZip}
+              className="btn-secondary btn-sm flex items-center gap-1.5 text-primary-700 bg-primary-50 border-primary-200 hover:bg-primary-100 transition-colors shadow-2xs font-semibold text-xs py-1.5"
+              title="Seçili filtrelere uyan tüm belgeleri ZIP arşivi olarak indir"
+            >
+              {downloadingZip ? (
+                <>
+                  <span className="spinner border-primary-300 border-t-primary-600 w-3.5 h-3.5" />
+                  <span>İndiriliyor...</span>
+                </>
+              ) : (
+                <>
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Filtreli Belgeleri İndir (ZIP)</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Filters Bar ── */}
+      <div className="card">
+        <div className="card-body py-3.5 flex flex-wrap items-center gap-3">
           <select
-            className="form-select text-sm w-40"
+            className="form-select text-xs w-36"
             value={statusFilter}
             onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
           >
-            <option value="ALL">Tümü</option>
-            <option value="PENDING">Onay Bekliyor</option>
+            <option value="ALL">Tüm Durumlar</option>
+            <option value="PENDING">Onay Bekleyenler</option>
             <option value="APPROVED">Onaylananlar</option>
             <option value="REJECTED">Reddedilenler</option>
           </select>
+
           <select
-            className="form-select text-sm w-44"
+            className="form-select text-xs w-44"
             value={categoryFilter}
             onChange={e => { setCategoryFilter(e.target.value); setPage(1); }}
           >
-            <option value="">Tüm Kategoriler</option>
+            <option value="">Tüm Bursiyer Kategorileri</option>
             {categories.map(c => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          <select
-            className="form-select text-sm w-48"
-            value={periodFilter}
-            onChange={e => { setPeriodFilter(e.target.value); setPage(1); }}
-          >
-            <option value="">Tüm Dönemler</option>
-            {Array.from(new Set(periods.map(p => p.label))).map(label => (
-              <option key={label} value={label}>{label}</option>
-            ))}
-          </select>
-          <select
-            className="form-select text-sm w-44"
-            value={entityFilter}
-            onChange={e => { setEntityFilter(e.target.value); setPage(1); }}
-          >
-            <option value="">Tüm Türler</option>
-            {Object.entries(dynamicFilterOptions).map(([k, v]) => (
-              <option key={k} value={k}>{v.label}</option>
-            ))}
-          </select>
+
+          {queueMode === 'DOCUMENT' && (
+            <>
+              <select
+                className="form-select text-xs w-44"
+                value={periodFilter}
+                onChange={e => { setPeriodFilter(e.target.value); setPage(1); }}
+              >
+                <option value="">Tüm Dönemler</option>
+                {Array.from(new Set(periods.map(p => p.label))).map(label => (
+                  <option key={label} value={label}>{label}</option>
+                ))}
+              </select>
+
+              <select
+                className="form-select text-xs w-44"
+                value={entityFilter}
+                onChange={e => { setEntityFilter(e.target.value); setPage(1); }}
+              >
+                <option value="">Tüm Belge Türleri</option>
+                {docTypes.map(dt => (
+                  <option key={dt.code} value={dt.code}>{dt.name}</option>
+                ))}
+              </select>
+            </>
+          )}
+
+          {queueMode === 'PROFILE' && (
+            <select
+              className="form-select text-xs w-44"
+              value={entityFilter}
+              onChange={e => { setEntityFilter(e.target.value); setPage(1); }}
+            >
+              <option value="">Tüm Bilgi Türleri</option>
+              <option value="BANK_INFO">Banka & IBAN Bilgileri</option>
+              <option value="PERSONAL_INFO">Kişisel Bilgiler</option>
+              <option value="EDUCATION_INFO">Eğitim Bilgileri</option>
+              <option value="FAMILY_INFO">Aile Bilgileri</option>
+            </select>
+          )}
+
           {selected.size > 0 && statusFilter === 'PENDING' && (
-            <button onClick={handleBulkApprove} className="btn-primary btn-sm ml-auto">
-              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/></svg>
-              Seçilenleri Onayla ({selected.size})
-            </button>
+            <div className="ml-auto">
+              <button onClick={handleBulkApprove} className="btn-primary btn-sm flex items-center gap-1.5 shadow-xs text-xs">
+                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/></svg>
+                Seçilenleri Onayla ({selected.size})
+              </button>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Table */}
+      {/* ── Table ── */}
       <div className="card overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16">
@@ -230,8 +422,8 @@ export default function ApprovalQueueTab() {
           </div>
         ) : !result?.data.length ? (
           <EmptyState 
-            title="Bekleyen öğe yok" 
-            description="Tüm değişiklikler işlendi." 
+            title={queueMode === 'DOCUMENT' ? 'Bekleyen evrak yok' : 'Bekleyen profil değişikliği yok'} 
+            description="Seçili filtrelere uygun incelenecek kayıt bulunamadı." 
           />
         ) : (
           <div className="overflow-x-auto">
@@ -243,10 +435,24 @@ export default function ApprovalQueueTab() {
                       <input type="checkbox" onChange={toggleAll} checked={selected.size === result.data.length} className="rounded border-gray-300 text-primary-500" />
                     </th>
                   )}
-                  <th>Öğrenci</th>
-                  <th>İşlem / Belge</th>
-                  <th>Eski Değer</th>
-                  <th>Yeni Değer / Dosya</th>
+                  <th>Bursiyer</th>
+                  <th className="text-center">Kategori</th>
+
+                  {/* Mode Specific Columns */}
+                  {queueMode === 'DOCUMENT' ? (
+                    <>
+                      <th>Belge Türü</th>
+                      <th>Dönem</th>
+                      <th>Yüklenen Dosya</th>
+                    </>
+                  ) : (
+                    <>
+                      <th>Değişen Alan</th>
+                      <th>Eski Değer</th>
+                      <th>Yeni Değer</th>
+                    </>
+                  )}
+
                   <th>Tarih</th>
                   {statusFilter === 'PENDING' && <th>İşlem</th>}
                   {statusFilter !== 'PENDING' && <th>Durum</th>}
@@ -265,81 +471,129 @@ export default function ApprovalQueueTab() {
                         />
                       </td>
                     )}
-                    <td>
+                    <td className="whitespace-nowrap">
                       <Link
                         to={`/admin/students/${change.studentProfileId}`}
-                        className="text-primary-500 hover:underline font-medium text-sm"
+                        className="text-primary-600 hover:underline font-semibold text-sm block"
                       >
                         {change.studentProfile?.firstName} {change.studentProfile?.lastName}
                       </Link>
-                      <div className="text-xs text-gray-400">{change.studentProfile?.department}</div>
+                      <div className="text-[11px] text-gray-400">
+                        {change.studentProfile?.department || change.studentProfile?.universityName}
+                      </div>
                     </td>
-                    <td>
-                      {change.entityType !== 'DOCUMENT' && (
-                        <span className="badge-gray text-[10px] mb-1 block w-max uppercase tracking-wider">
-                          {entityTypeLabels[change.entityType] || change.entityType}
+                    <td className="text-center whitespace-nowrap">
+                      {(change.studentProfile as any)?.scholarshipCategory?.name ? (
+                        <span className="badge badge-gray text-xs">
+                          {(change.studentProfile as any).scholarshipCategory.name}
                         </span>
-                      )}
-                      <span className="text-sm text-gray-800 font-medium">
-                        {change.entityType === 'DOCUMENT' 
-                          ? (docTypes.find(d => d.code === change.document?.type)?.name || documentTypeLabels[change.document?.type || ''] || change.document?.type || '—') 
-                          : (change.fieldName === 'bankInfo' ? 'Banka & IBAN' : change.fieldName || '—')}
-                      </span>
-                    </td>
-                    <td className="text-sm">
-                      {change.entityType === 'BANK_INFO' ? (
-                        renderBankInfo(change.oldValue)
                       ) : (
-                        <span className="text-sm text-gray-500 max-w-32 truncate">{change.oldValue || '—'}</span>
+                        <span className="text-gray-400 text-xs">—</span>
                       )}
                     </td>
-                    <td className="text-sm">
-                      {change.entityType === 'DOCUMENT' && change.document?.filePath ? (
-                        <button 
-                          onClick={() => { setPreviewDocument(change); setDrawerOpen(true); }} 
-                          className="text-primary-500 hover:underline text-xs"
-                        >
-                          {change.document.originalFileName}
-                        </button>
-                      ) : change.entityType === 'BANK_INFO' ? (
-                        renderBankInfo(change.newValue)
-                      ) : (
-                        <span className="font-medium">{change.newValue || '—'}</span>
-                      )}
-                    </td>
+
+                    {/* Document Mode Cells */}
+                    {queueMode === 'DOCUMENT' && (
+                      <>
+                        <td>
+                          {getEntityBadge('DOCUMENT')}
+                          <span className="text-sm text-gray-900 font-semibold block">
+                            {docTypes.find(d => d.code === change.document?.type)?.name || documentTypeLabels[change.document?.type || ''] || change.document?.type || 'Belge'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="text-xs text-gray-700 font-medium">
+                            {change.document?.period?.label || (change.document?.academicYear ? `${change.document.academicYear} ${change.document.semester || ''}` : 'İlk Kayıt / Genel')}
+                          </span>
+                        </td>
+                        <td>
+                          {change.document?.filePath ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => { setPreviewDocument(change); setDrawerOpen(true); }}
+                                className="text-primary-600 hover:underline text-xs font-semibold flex items-center gap-1 truncate max-w-xs"
+                                title="Önizle ve İncele"
+                              >
+                                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                {change.document.originalFileName}
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                        </td>
+                      </>
+                    )}
+
+                    {/* Profile Mode Cells */}
+                    {queueMode === 'PROFILE' && (
+                      <>
+                        <td>
+                          {getEntityBadge(change.entityType)}
+                          <span className="text-sm text-gray-900 font-semibold block">
+                            {fieldNameLabels[change.fieldName || ''] || change.fieldName || 'Bilgi Değişikliği'}
+                          </span>
+                        </td>
+                        <td className="text-sm">
+                          {change.entityType === 'BANK_INFO' ? (
+                            renderBankInfo(change.oldValue)
+                          ) : (
+                            <span className="text-xs text-gray-500 max-w-48 truncate block">{change.oldValue || '—'}</span>
+                          )}
+                        </td>
+                        <td className="text-sm">
+                          {change.entityType === 'BANK_INFO' ? (
+                            renderBankInfo(change.newValue)
+                          ) : (
+                            <span className="text-xs font-semibold text-gray-900 max-w-48 truncate block">{change.newValue || '—'}</span>
+                          )}
+                        </td>
+                      </>
+                    )}
+
                     <td className="text-xs text-gray-500 whitespace-nowrap">
-                      {format(new Date(change.createdAt), 'dd MMM HH:mm', { locale: tr })}
+                      {format(new Date(change.createdAt), 'dd MMM yyyy HH:mm', { locale: tr })}
                     </td>
+
                     {statusFilter === 'PENDING' && (
                       <td>
                         <div className="flex items-center gap-1.5">
-                          {change.entityType === 'DOCUMENT' && change.document?.filePath && (
+                          {queueMode === 'DOCUMENT' && change.document?.filePath && (
                             <button
                               onClick={() => { setPreviewDocument(change); setDrawerOpen(true); }}
-                              className="px-2.5 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                              className="px-2.5 py-1 text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
                             >
                               İncele
                             </button>
                           )}
                           <button
                             onClick={() => handleApprove(change.id)}
-                            className="px-2.5 py-1 text-xs font-medium bg-status-approved-bg text-status-approved-text rounded hover:bg-green-100 transition-colors"
+                            className="px-2.5 py-1 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
+                            title="Onayla"
                           >
                             ✓ Onayla
+                          </button>
+                          <button
+                            onClick={() => { setRejectingChange(change); setRejectionNote(''); }}
+                            className="px-2.5 py-1 text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors"
+                            title="Reddet"
+                          >
+                            ✗ Reddet
                           </button>
                         </div>
                       </td>
                     )}
+
                     {statusFilter !== 'PENDING' && (
                       <td className="w-32 pr-6">
                         {change.status === 'PENDING' ? (
                           <span className="badge badge-gray text-yellow-700 bg-yellow-50">Onay Bekliyor</span>
                         ) : (
-                          <span className={`badge ${change.status === 'APPROVED' ? 'badge-approved' : 'badge-gray text-red-700 bg-red-50'}`}>
+                          <span className={`badge ${change.status === 'APPROVED' ? 'badge-approved' : 'badge-gray text-rose-700 bg-rose-50 border border-rose-200'}`}>
                             {change.status === 'APPROVED' ? 'Onaylandı' : 'Reddedildi'}
                           </span>
                         )}
-                        {change.reviewNote && <div className="text-xs text-gray-400 mt-0.5">{change.reviewNote}</div>}
+                        {change.reviewNote && <div className="text-[11px] text-rose-700 mt-1 font-medium">{change.reviewNote}</div>}
                       </td>
                     )}
                   </tr>
@@ -352,23 +606,92 @@ export default function ApprovalQueueTab() {
         {/* Pagination */}
         {result && result.pagination.totalPages > 1 && (
           <div className="card-footer flex items-center justify-between">
-            <span className="text-sm text-gray-500">Toplam: {result.pagination.total}</span>
+            <span className="text-xs text-gray-500 font-medium">Toplam {result.pagination.total} kayıt</span>
             <div className="flex items-center gap-2">
-              <button className="btn-secondary btn-sm" onClick={() => setPage(p => p - 1)} disabled={page === 1}>← Önceki</button>
-              <span className="text-sm">{page} / {result.pagination.totalPages}</span>
-              <button className="btn-secondary btn-sm" onClick={() => setPage(p => p + 1)} disabled={page === result.pagination.totalPages}>Sonraki →</button>
+              <button className="btn-secondary btn-sm text-xs" onClick={() => setPage(p => p - 1)} disabled={page === 1}>← Önceki</button>
+              <span className="text-xs font-semibold">{page} / {result.pagination.totalPages}</span>
+              <button className="btn-secondary btn-sm text-xs" onClick={() => setPage(p => p + 1)} disabled={page === result.pagination.totalPages}>Sonraki →</button>
             </div>
           </div>
         )}
       </div>
 
+      {/* ── Document Preview Drawer ── */}
       <DocumentPreviewDrawer
         isOpen={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         document={previewDocument}
         onApprove={handleApprove}
-        onReject={handleReject}
+        onReject={async (id, note) => {
+          await approvalApi.reject(id, note);
+          toast.success('Reddedildi.');
+          setDrawerOpen(false);
+          load();
+        }}
       />
+
+      {/* ── Rejection Note Modal ── */}
+      {rejectingChange && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in border border-gray-200">
+            <div className="p-5 bg-rose-50 border-b border-rose-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 font-bold">
+                  !
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm">Talebi Reddet</h3>
+                  <p className="text-[11px] text-rose-700">
+                    {rejectingChange.studentProfile?.firstName} {rejectingChange.studentProfile?.lastName}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setRejectingChange(null)}
+                className="w-7 h-7 rounded-lg hover:bg-rose-200/50 text-gray-400 hover:text-gray-700 flex items-center justify-center transition-colors text-lg"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleRejectSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="form-label text-xs">
+                  Red Gerekçesi <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  className="form-input text-xs"
+                  rows={4}
+                  required
+                  placeholder="Örn: Yüklenen transkriptte güncel dönem notları okunmuyor veya belgede e-imza/barkod bulunmamaktadır."
+                  value={rejectionNote}
+                  onChange={e => setRejectionNote(e.target.value)}
+                />
+                <p className="text-[11px] text-gray-500 mt-1">
+                  Bu gerekçe öğrenciye bildirilecek ve panelinde pop-up olarak görüntülenecektir.
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setRejectingChange(null)}
+                  className="btn-secondary flex-1 text-xs"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  disabled={rejecting}
+                  className="btn-sm bg-rose-600 hover:bg-rose-700 text-white font-semibold flex-1 text-xs rounded-lg transition-colors flex items-center justify-center"
+                >
+                  {rejecting ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Reddi Onayla'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

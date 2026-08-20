@@ -39,7 +39,11 @@ import {
   updateAnnouncement,
   deleteAnnouncement,
   downloadDocumentsZip,
-  bulkRemindStudents
+  bulkRemindStudents,
+  listGraduates,
+  graduateStudents,
+  revertGraduation,
+  exportGraduatesReport,
 } from '../controllers/admin.controller';
 import { upload } from '../middleware/upload.middleware';
 import multer from 'multer';
@@ -60,6 +64,12 @@ adminRouter.post('/students/bulk-remind', requireAdminOrReviewer, bulkRemindStud
 adminRouter.post('/students/bulk-create', requireAdmin, multer({ storage: multer.memoryStorage() }).single('file'), bulkCreateStudents);
 adminRouter.get('/students/csv-template', requireAdmin, getCsvTemplate);
 adminRouter.get('/reports/students-export', requireAdminOrReviewer, exportStudentsReport);
+
+// Graduates — admin + reviewer
+adminRouter.get('/graduates', requireAdminOrReviewer, listGraduates);
+adminRouter.post('/graduates/graduate', requireAdminOrReviewer, graduateStudents);
+adminRouter.post('/graduates/revert', requireAdminOrReviewer, revertGraduation);
+adminRouter.get('/reports/graduates-export', requireAdminOrReviewer, exportGraduatesReport);
 
 // Periods — admin only
 adminRouter.get('/periods', requireAdminOrReviewer, listPeriods);

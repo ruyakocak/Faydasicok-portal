@@ -157,17 +157,26 @@ export default function StudentDetailPage() {
             <div className="flex items-center gap-3 mt-2 text-sm text-gray-600 flex-wrap">
               <span>TC: <span className="font-mono">{profile.user?.tcKimlikNo || '—'}</span></span>
               {profile.grade && <span>{profile.grade}. Sınıf</span>}
-              <span className={`badge ${profile.studentStatus === 'ACTIVE' ? 'badge-approved' : 'badge-pending'}`}>
-                {profile.studentStatus === 'ACTIVE' ? 'Aktif' : profile.studentStatus === 'INCOMPLETE' ? 'Tamamlanmadı' : profile.studentStatus}
+              <span className={`badge ${
+                profile.studentStatus === 'ACTIVE' ? 'badge-approved' : 
+                profile.studentStatus === 'GRADUATED' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold' : 
+                'badge-pending'
+              }`}>
+                {profile.studentStatus === 'ACTIVE' ? 'Aktif' : 
+                 profile.studentStatus === 'GRADUATED' ? (profile.graduationYear ? `🎓 ${profile.graduationYear} Mezunu` : '🎓 Mezun') : 
+                 profile.studentStatus === 'INCOMPLETE' ? 'Tamamlanmadı' : 
+                 profile.studentStatus}
               </span>
-              {profile.isInitialDocsExempt ? (
-                <span className="badge bg-purple-50 text-purple-700 border border-purple-200">
-                  🛡️ İlk Kayıt Belgelerinden Muaf
-                </span>
-              ) : (
-                <span className="badge bg-amber-50 text-amber-700 border border-amber-200">
-                  📋 İlk Kayıt Belgeleri Zorunlu
-                </span>
+              {profile.studentStatus !== 'GRADUATED' && (
+                profile.isInitialDocsExempt ? (
+                  <span className="badge bg-purple-50 text-purple-700 border border-purple-200">
+                    🛡️ İlk Kayıt Belgelerinden Muaf
+                  </span>
+                ) : (
+                  <span className="badge bg-amber-50 text-amber-700 border border-amber-200">
+                    📋 İlk Kayıt Belgeleri Zorunlu
+                  </span>
+                )
               )}
             </div>
           </div>
@@ -185,21 +194,23 @@ export default function StudentDetailPage() {
             >
               {resetting ? <span className="spinner border-amber-600/30 border-t-amber-600 w-4 h-4" /> : 'Şifreyi Sıfırla'}
             </button>
-            <button
-              onClick={async () => {
-                try {
-                  const newVal = !profile.isInitialDocsExempt;
-                  await adminApi.updateStudentProfile(profile.id, { isInitialDocsExempt: newVal });
-                  toast.success(`İlk kayıt muafiyeti ${newVal ? 'aktif edildi' : 'kaldırıldı'}.`);
-                  loadAll();
-                } catch (e: any) {
-                  toast.error(e?.response?.data?.error || 'Güncellenemedi');
-                }
-              }}
-              className="btn-secondary btn-sm text-purple-700 hover:text-purple-800 hover:bg-purple-50 border-purple-200 py-1 px-2.5 text-xs w-full justify-center"
-            >
-              {profile.isInitialDocsExempt ? 'Muafiyeti Kaldır' : 'Muaf Olarak İşaretle'}
-            </button>
+            {profile.studentStatus !== 'GRADUATED' && (
+              <button
+                onClick={async () => {
+                  try {
+                    const newVal = !profile.isInitialDocsExempt;
+                    await adminApi.updateStudentProfile(profile.id, { isInitialDocsExempt: newVal });
+                    toast.success(`İlk kayıt muafiyeti ${newVal ? 'aktif edildi' : 'kaldırıldı'}.`);
+                    loadAll();
+                  } catch (e: any) {
+                    toast.error(e?.response?.data?.error || 'Güncellenemedi');
+                  }
+                }}
+                className="btn-secondary btn-sm text-purple-700 hover:text-purple-800 hover:bg-purple-50 border-purple-200 py-1 px-2.5 text-xs w-full justify-center"
+              >
+                {profile.isInitialDocsExempt ? 'Muafiyeti Kaldır' : 'Muaf Olarak İşaretle'}
+              </button>
+            )}
             {newPass && (
               <div className="bg-green-50 text-green-800 border border-green-200 rounded p-2 text-xs font-mono mt-1 text-center w-full">
                 Yeni: <span className="font-bold text-sm bg-white px-1.5 py-0.5 rounded border border-green-300 select-all">{newPass}</span>

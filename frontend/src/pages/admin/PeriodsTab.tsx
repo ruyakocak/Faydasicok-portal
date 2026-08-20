@@ -577,7 +577,7 @@ export default function PeriodsTab() {
                                       {docCount > 0 ? (
                                         <div className="flex items-center gap-3">
                                           <Link 
-                                            to={`/admin/approvals?periodLabel=${encodeURIComponent(selectedSemester)}&entity=${period.type}`}
+                                            to={`/admin/documents?tab=approvals&periodLabel=${encodeURIComponent(selectedSemester)}&entity=${period.type}`}
                                             className="text-primary-600 font-semibold hover:underline flex items-center gap-0.5"
                                           >
                                             {docCount} Belge Yüklendi

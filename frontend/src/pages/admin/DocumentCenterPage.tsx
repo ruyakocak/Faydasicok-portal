@@ -1,10 +1,21 @@
-import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import ApprovalQueueTab from './ApprovalQueueTab';
 import PeriodsTab from './PeriodsTab';
 import DocumentTypesTab from './DocumentTypesTab';
 
 export default function DocumentCenterPage() {
-  const [activeTab, setActiveTab] = useState<'approvals' | 'periods' | 'types'>('approvals');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const activeTab: 'approvals' | 'periods' | 'types' =
+    tabParam === 'periods' || tabParam === 'types' || tabParam === 'approvals'
+      ? tabParam
+      : 'approvals';
+
+  function handleTabChange(tab: 'approvals' | 'periods' | 'types') {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set('tab', tab);
+    setSearchParams(newParams);
+  }
 
   return (
     <div className="animate-fade-in">
@@ -16,7 +27,7 @@ export default function DocumentCenterPage() {
       <div className="border-b border-gray-200 mb-6">
         <nav className="-mb-px flex space-x-8">
           <button
-            onClick={() => setActiveTab('approvals')}
+            onClick={() => handleTabChange('approvals')}
             className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'approvals'
                 ? 'border-primary-500 text-primary-600'
@@ -26,7 +37,7 @@ export default function DocumentCenterPage() {
             Onay Bekleyenler
           </button>
           <button
-            onClick={() => setActiveTab('periods')}
+            onClick={() => handleTabChange('periods')}
             className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'periods'
                 ? 'border-primary-500 text-primary-600'
@@ -36,7 +47,7 @@ export default function DocumentCenterPage() {
             Dönem / Talep Yönetimi
           </button>
           <button
-            onClick={() => setActiveTab('types')}
+            onClick={() => handleTabChange('types')}
             className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'types'
                 ? 'border-primary-500 text-primary-600'

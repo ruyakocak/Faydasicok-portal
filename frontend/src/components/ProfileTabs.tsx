@@ -7,15 +7,38 @@ import { format } from 'date-fns';
 import { UNIVERSITIES } from '../constants/universities';
 
 // ── Status Badge ──────────────────────────────────────────────────────
-export function StatusBadge({ status, note }: { status: string; note?: string | null }) {
+export function StatusBadge({ status, note, onShowNote }: { status: string; note?: string | null; onShowNote?: (note: string) => void }) {
   const cls = status === 'APPROVED' ? 'badge-approved' : status === 'PENDING' ? 'badge-pending' : 'badge-rejected';
   const label = status === 'APPROVED' ? 'Onaylandı' : status === 'PENDING' ? 'Onay Bekliyor' : 'Reddedildi';
   return (
-    <span title={note || undefined} className={`badge ${cls} cursor-default`}>
-      <span className={`w-1.5 h-1.5 rounded-full inline-block mr-1 ${status === 'APPROVED' ? 'bg-status-approved' : status === 'PENDING' ? 'bg-status-pending' : 'bg-status-rejected'}`} />
-      {label}
-      {note && status === 'REJECTED' && <span className="ml-1 text-xs">({note})</span>}
-    </span>
+    <div className="inline-flex items-center gap-1.5 flex-wrap">
+      <span title={note || undefined} className={`badge ${cls} cursor-default`}>
+        <span className={`w-1.5 h-1.5 rounded-full inline-block mr-1 ${status === 'APPROVED' ? 'bg-status-approved' : status === 'PENDING' ? 'bg-status-pending' : 'bg-status-rejected'}`} />
+        {label}
+      </span>
+      {note && status === 'REJECTED' && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onShowNote) {
+              onShowNote(note);
+            } else {
+              alert(`Red Sebebi:\n${note}`);
+            }
+          }}
+          className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+          title="Yönetici red gerekçesini görüntüleyin"
+        >
+          <svg className="w-3 h-3 text-rose-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          Red Sebebini Gör
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -627,7 +650,6 @@ export function EducationTab({ profile, onSave, readOnly }: {
 }
 
 // ── Documents Tab ─────────────────────────────────────────────────────
-// ── Documents Tab ─────────────────────────────────────────────────────
 export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }: {
   profile: StudentProfile;
   documents: DocFile[];
@@ -638,6 +660,8 @@ export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }
   const [docTypes, setDocTypes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeUploadDocType, setActiveUploadDocType] = useState<any | null>(null);
+  const [selectedRejectionNote, setSelectedRejectionNote] = useState<string | null>(null);
+  const [historyModalDocType, setHistoryModalDocType] = useState<any | null>(null);
 
   useEffect(() => {
     documentApi.getActiveTypes().then(types => {
@@ -820,7 +844,11 @@ _____________________________
                         </span>
                       )}
                       {uploadedDoc && (
-                        <StatusBadge status={uploadedDoc.status} note={uploadedDoc.rejectionNote} />
+                        <StatusBadge
+                          status={uploadedDoc.status}
+                          note={uploadedDoc.rejectionNote}
+                          onShowNote={setSelectedRejectionNote}
+                        />
                       )}
                     </div>
                     <p className="text-xs text-gray-500">{dt.description || 'Açıklama belirtilmemiş.'}</p>
@@ -881,51 +909,103 @@ _____________________________
       )}
 
       {/* ── 2. DÖNEMSEL BELGELER (Transkript, Öğrenci Belgesi vb.) ── */}
-      <section className="space-y-6">
-        <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <span className="p-1.5 bg-blue-600 text-white rounded-md shadow-xs">
-                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              </span>
-              Dönemsel Belgeler
-            </h3>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Her yarıyıl aktif dönemlerde yüklenmesi gereken güncel belgeler (Transkript, Öğrenci Belgesi vb.).
-            </p>
+      <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+        <div className="p-6 bg-gradient-to-r from-blue-50 via-white to-indigo-50 border-b border-gray-200">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2.5 mb-1">
+                <span className="p-2 bg-blue-600 text-white rounded-lg shadow-sm">
+                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </span>
+                <h3 className="text-lg font-bold text-gray-900">Dönemsel Belgeler</h3>
+              </div>
+              <p className="text-xs text-gray-600">
+                Her yarıyıl aktif dönemlerde yüklenmesi gereken güncel belgeler (Transkript, Öğrenci Belgesi vb.).
+              </p>
+            </div>
           </div>
         </div>
 
-        {periodicDocTypes.map(docType => {
-          const typeDocs = documents.filter(d => d.type === docType.code);
-          const typePeriods = periods.filter(p => p.type === docType.code);
-          const hasOpenPeriod = typePeriods.some(p => p.isOpen);
-          const hasUploadedDocs = typeDocs.length > 0;
+        {/* Periodic Document Items (Identical design to static documents) */}
+        <div className="p-6 divide-y divide-gray-100">
+          {periodicDocTypes.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">Tanımlı dönemsel belge bulunmuyor.</p>
+          ) : (
+            periodicDocTypes.map((dt) => {
+              const typePeriods = periods.filter(p => p.type === dt.code);
+              const openPeriod = typePeriods.find(p => p.isOpen);
+              const typeDocs = documents.filter(d => d.type === dt.code);
+              
+              const uploadedInOpenPeriod = openPeriod ? typeDocs.find(d => d.periodId === openPeriod.id) : null;
+              const latestDoc = uploadedInOpenPeriod || typeDocs[0];
+              const isUploaded = !!latestDoc;
 
-          if (!hasOpenPeriod && !hasUploadedDocs) {
-            return null;
-          }
-          
-          return (
-            <div key={docType.code} className="bg-white rounded-xl border border-gray-200 p-5 shadow-xs">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h4 className="font-bold text-gray-900 text-sm">{docType.name}</h4>
-                  {docType.description && <p className="text-xs text-gray-500 mt-0.5">{docType.description}</p>}
+              return (
+                <div key={dt.code} className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-gray-50/50 p-2.5 rounded-xl transition-colors">
+                  <div className="space-y-1 max-w-xl">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm text-gray-900">{dt.name}</span>
+                      {openPeriod ? (
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-md text-[10px] font-semibold">
+                          {openPeriod.label}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 border border-gray-200 rounded-md text-[10px] font-semibold">
+                          Dönem Kapalı
+                        </span>
+                      )}
+                      {latestDoc && (
+                        <StatusBadge
+                          status={latestDoc.status}
+                          note={latestDoc.rejectionNote}
+                          onShowNote={setSelectedRejectionNote}
+                        />
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">{dt.description || 'Açıklama belirtilmemiş.'}</p>
+
+                    {latestDoc && (
+                      <div className="flex items-center gap-3 text-xs text-gray-500 pt-1 flex-wrap">
+                        <a
+                          href={`/${latestDoc.filePath}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary-600 hover:text-primary-800 hover:underline flex items-center gap-1 font-medium truncate max-w-xs"
+                        >
+                          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                          {latestDoc.originalFileName}
+                        </a>
+                        <span>•</span>
+                        <span>{format(new Date(latestDoc.uploadedAt), 'dd.MM.yyyy HH:mm')}</span>
+                        {typeDocs.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setHistoryModalDocType(dt)}
+                            className="text-primary-600 hover:underline font-semibold ml-1 text-[11px] cursor-pointer inline-flex items-center gap-0.5"
+                          >
+                            Tüm Yükleme Geçmişi ({typeDocs.length}) &rarr;
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {!readOnly && (
+                      <PeriodUploadButton
+                        periods={typePeriods}
+                        profileId={profile.id}
+                        docType={dt}
+                        onUploaded={onUpload}
+                        isUploaded={isUploaded}
+                      />
+                    )}
+                  </div>
                 </div>
-                {!readOnly && (
-                  <PeriodUploadButton
-                    periods={typePeriods}
-                    profileId={profile.id}
-                    docType={docType}
-                    onUploaded={onUpload}
-                  />
-                )}
-              </div>
-              <DocumentTable docs={typeDocs} docType={docType} />
-            </div>
-          );
-        })}
+              );
+            })
+          )}
+        </div>
       </section>
 
       {/* Static Document Upload Modal */}
@@ -939,6 +1019,78 @@ _____________________________
             onUpload?.();
           }}
         />
+      )}
+
+      {/* Rejection Note Pop-up Modal */}
+      {selectedRejectionNote && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in border border-gray-200">
+            <div className="p-5 bg-rose-50 border-b border-rose-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 font-bold">
+                  !
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm">Belge Red Sebebi</h3>
+                  <p className="text-[11px] text-rose-700">Yönetici inceleme gerekçesi</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedRejectionNote(null)}
+                className="w-7 h-7 rounded-lg hover:bg-rose-200/50 text-gray-400 hover:text-gray-700 flex items-center justify-center transition-colors text-lg"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Yöneticilerimiz tarafından yüklediğiniz belge incelenmiş ve aşağıdaki gerekçe ile reddedilmiştir:
+              </p>
+              <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 font-medium whitespace-pre-wrap leading-relaxed">
+                {selectedRejectionNote}
+              </div>
+              <p className="text-[11px] text-gray-500 bg-amber-50/70 border border-amber-200 p-2.5 rounded-lg">
+                💡 Lütfen yukarıdaki gerekçeyi dikkate alarak güncel ve eksiksiz belgenizi <strong>"Yeniden Yükle"</strong> butonuyla sisteme yükleyiniz.
+              </p>
+            </div>
+            <div className="px-6 py-3.5 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedRejectionNote(null)}
+                className="btn-primary btn-sm text-xs px-5"
+              >
+                Tamam, Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* History Modal for Multiple Period Uploads */}
+      {historyModalDocType && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-scale-in border border-gray-200">
+            <div className="p-5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-gray-900 text-sm">{historyModalDocType.name} — Geçmiş Yüklemeler</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Bu belge türüne ait yüklenen tüm geçmiş evraklar</p>
+              </div>
+              <button onClick={() => setHistoryModalDocType(null)} className="w-7 h-7 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-700 flex items-center justify-center">
+                &times;
+              </button>
+            </div>
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              <DocumentTable
+                docs={documents.filter(d => d.type === historyModalDocType.code)}
+                docType={historyModalDocType}
+                onShowRejectionNote={setSelectedRejectionNote}
+              />
+            </div>
+            <div className="px-6 py-3.5 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button onClick={() => setHistoryModalDocType(null)} className="btn-secondary btn-sm text-xs">Kapat</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -978,14 +1130,14 @@ function StaticUploadModal({ docType, profileId, onClose, onUploaded }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-scale-in border border-gray-200">
         <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50">
           <div>
             <h3 className="font-bold text-gray-900 text-sm">{docType.name} Yükle</h3>
             <p className="text-xs text-gray-500 mt-0.5">İlk Kayıt / Başvuru Evrakı</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="w-7 h-7 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 flex items-center justify-center">
             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
@@ -1043,7 +1195,7 @@ function StaticUploadModal({ docType, profileId, onClose, onUploaded }: {
   );
 }
 
-function DocumentTable({ docs, docType }: { docs: DocFile[]; docType: any }) {
+function DocumentTable({ docs, docType, onShowRejectionNote }: { docs: DocFile[]; docType: any; onShowRejectionNote?: (note: string) => void }) {
   if (!docs.length) {
     return <p className="text-sm text-gray-400 text-center py-4">Henüz belge yüklenmedi.</p>;
   }
@@ -1055,15 +1207,15 @@ function DocumentTable({ docs, docType }: { docs: DocFile[]; docType: any }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="data-table table-fixed w-full min-w-[850px]">
+      <table className="data-table table-fixed w-full min-w-[700px]">
         <thead>
           <tr>
-            <th className="w-56">Dönem</th>
+            <th className="w-48">Dönem</th>
             <th className="w-36">Yüklenme Tarihi</th>
             {customFields.map(f => (
-              <th key={f.id} className="w-56 whitespace-normal break-words">{f.label}</th>
+              <th key={f.id} className="w-48 whitespace-normal break-words">{f.label}</th>
             ))}
-            <th className="w-40">Durum</th>
+            <th className="w-56">Durum</th>
             <th className="w-auto">Dosya</th>
           </tr>
         </thead>
@@ -1081,9 +1233,15 @@ function DocumentTable({ docs, docType }: { docs: DocFile[]; docType: any }) {
                 {customFields.map(f => (
                   <td key={f.id} className="truncate" title={answers[f.id]}>{answers[f.id] || '—'}</td>
                 ))}
-                <td><StatusBadge status={doc.status} note={doc.rejectionNote} /></td>
                 <td>
-                  <a href={`/${doc.filePath}`} target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline text-xs truncate max-w-32 inline-block">
+                  <StatusBadge
+                    status={doc.status}
+                    note={doc.rejectionNote}
+                    onShowNote={onShowRejectionNote}
+                  />
+                </td>
+                <td>
+                  <a href={`/${doc.filePath}`} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline text-xs truncate max-w-32 inline-block font-medium">
                     {doc.originalFileName}
                   </a>
                 </td>
@@ -1096,11 +1254,12 @@ function DocumentTable({ docs, docType }: { docs: DocFile[]; docType: any }) {
   );
 }
 
-function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
+function PeriodUploadButton({ periods = [], profileId, docType, onUploaded, isUploaded }: {
   periods?: DocumentPeriod[];
   profileId: string;
   docType: any;
   onUploaded?: () => void;
+  isUploaded?: boolean;
 }) {
   const openPeriods = periods.filter(p => p.isOpen);
   const [open, setOpen] = useState(false);
@@ -1130,15 +1289,21 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
   }
 
   if (openPeriods.length === 0) {
-    return <button disabled className="btn-secondary btn-sm opacity-50 cursor-not-allowed text-xs">Yükleme Kapalı</button>;
+    return <button disabled className="btn-secondary btn-sm opacity-50 cursor-not-allowed text-xs">Dönem Kapalı</button>;
   }
 
   if (open) {
     return (
-      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-modal w-full max-w-md">
-          <div className="p-5 border-b border-gray-200">
-            <h3 className="font-semibold text-sm">{docType.name} Yükle</h3>
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in border border-gray-200">
+          <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+            <div>
+              <h3 className="font-bold text-gray-900 text-sm">{docType.name} Yükle</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Dönemsel Evrak</p>
+            </div>
+            <button onClick={() => setOpen(false)} className="w-7 h-7 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
           </div>
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
             <div>
@@ -1176,10 +1341,10 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
               <label className="form-label text-xs">Dosya (PDF, JPG, PNG) <span className="text-primary-500">*</span></label>
               <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="form-input py-1.5 text-xs" onChange={e => setFile(e.target.files?.[0] || null)} required />
             </div>
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-2 pt-2 border-t border-gray-100">
               <button type="button" onClick={() => setOpen(false)} className="btn-secondary flex-1 text-xs">İptal</button>
               <button type="submit" className="btn-primary flex-1 text-xs" disabled={loading}>
-                {loading ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Yükle'}
+                {loading ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Yükle ve Gönder'}
               </button>
             </div>
           </form>
@@ -1189,9 +1354,16 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded }: {
   }
 
   return (
-    <button onClick={() => setOpen(true)} className="btn-primary btn-sm text-xs flex items-center gap-1.5">
+    <button
+      onClick={() => setOpen(true)}
+      className={`btn-sm text-xs flex items-center gap-1.5 ${
+        isUploaded
+          ? 'btn-secondary text-gray-700'
+          : 'btn-primary'
+      }`}
+    >
       <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
-      Belge Yükle
+      {isUploaded ? 'Yeniden Yükle' : 'Belge Yükle'}
     </button>
   );
 }

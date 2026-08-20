@@ -6,13 +6,6 @@ import { adminApi } from '../../api';
 import type { StudentProfile, PaginatedResponse } from '../../types';
 import toast from 'react-hot-toast';
 
-const statusLabels: Record<string, string> = {
-  INCOMPLETE: 'Tamamlanmadı',
-  ACTIVE: 'Aktif',
-  PASSIVE: 'Pasif',
-  GRADUATED: 'Mezun',
-};
-
 
 export default function StudentsListPage() {
   const [result, setResult] = useState<PaginatedResponse<StudentProfile> | null>(null);
@@ -45,6 +38,12 @@ export default function StudentsListPage() {
 
   const [categories, setCategories] = useState<import('../../types').ScholarshipCategory[]>([]);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+
+  // Graduation modal
+  const [graduationModalOpen, setGraduationModalOpen] = useState(false);
+  const [graduatingStudentIds, setGraduatingStudentIds] = useState<string[]>([]);
+  const [graduationYear, setGraduationYear] = useState<number>(new Date().getFullYear());
+  const [graduating, setGraduating] = useState(false);
 
   // Load mentors and categories once
   useEffect(() => {
@@ -167,9 +166,29 @@ export default function StudentsListPage() {
       URL.revokeObjectURL(url);
       toast.success('Rapor başarıyla indirildi.');
     } catch (err) {
-      toast.error('Rapor indirilirken hata oluştu.');
+      toast.error('Toplu hatırlatma gönderilirken hata oluştu.');
     } finally {
-      setExporting(false);
+      setSendingReminders(false);
+    }
+  }
+
+  async function handleConfirmGraduation() {
+    if (graduatingStudentIds.length === 0) return;
+    setGraduating(true);
+    try {
+      await adminApi.graduateStudents({
+        studentIds: graduatingStudentIds,
+        graduationYear: Number(graduationYear),
+      });
+      toast.success(`${graduatingStudentIds.length} öğrenci başarıyla ${graduationYear} mezunlarına aktarıldı.`);
+      setGraduationModalOpen(false);
+      setGraduatingStudentIds([]);
+      setSelectedStudentIds(new Set());
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Mezuniyete aktarma sırasında hata oluştu.');
+    } finally {
+      setGraduating(false);
     }
   }
 
@@ -205,13 +224,13 @@ export default function StudentsListPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="page-header flex items-start justify-between">
+      <div className="page-header flex flex-wrap items-center justify-between gap-4 mb-5">
         <div>
           <h1 className="page-title">Bursiyerler</h1>
           <p className="page-subtitle">{result?.pagination.total ?? 0} bursiyer kayıtlı</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={handleExport} disabled={exporting} className="btn-secondary btn-sm text-green-700 border-green-200 hover:bg-green-50">
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={handleExport} disabled={exporting} className="btn-secondary btn-sm text-green-700 border-green-200 hover:bg-green-50 shadow-2xs font-semibold">
             {exporting ? (
               <span className="spinner w-4 h-4 border-green-700 mr-1" />
             ) : (
@@ -219,20 +238,18 @@ export default function StudentsListPage() {
             )}
             Excel İndir
           </button>
-          <button onClick={() => setIsCategoryModalOpen(true)} className="btn-secondary btn-sm text-gray-700">
+          <button onClick={() => setIsCategoryModalOpen(true)} className="btn-secondary btn-sm text-gray-700 shadow-2xs">
             <svg viewBox="0 0 24 24" className="w-4 h-4 mr-1" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
             Kategoriler
           </button>
-          <button onClick={() => { setCreateModalOpen(true); setCreateResult(null); setNewStudentForm({ tcKimlikNo: '', firstName: '', lastName: '', scholarshipCategoryId: '', isNewStudent: true }); }} className="btn-primary btn-sm">
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+          <button onClick={() => { setCreateModalOpen(true); setCreateResult(null); setNewStudentForm({ tcKimlikNo: '', firstName: '', lastName: '', scholarshipCategoryId: '', isNewStudent: true }); }} className="btn-primary btn-sm shadow-2xs">
+            <svg viewBox="0 0 24 24" className="w-4 h-4 mr-1" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
             Bursiyer Ekle
           </button>
-
-          <button onClick={() => { setBulkModalOpen(true); setCreatedResults([]); setPastedTcs(''); }} className="btn-secondary btn-sm">
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+          <button onClick={() => { setBulkModalOpen(true); setCreatedResults([]); setPastedTcs(''); }} className="btn-secondary btn-sm shadow-2xs">
+            <svg viewBox="0 0 24 24" className="w-4 h-4 mr-1" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
             Toplu TC Yapıştır
           </button>
-
         </div>
       </div>
 
@@ -243,14 +260,14 @@ export default function StudentsListPage() {
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input
               type="text"
-              className="form-input pl-9"
+              className="form-input pl-9 text-xs"
               placeholder="Ad, soyad veya TC ile ara..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             />
           </div>
           <select
-            className="form-select max-w-[200px]"
+            className="form-select text-xs max-w-[200px]"
             value={scholarshipGroup}
             onChange={(e) => { setScholarshipGroup(e.target.value); setPage(1); }}
           >
@@ -259,7 +276,7 @@ export default function StudentsListPage() {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+          <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer select-none">
             <input
               type="checkbox"
               className="rounded border-gray-300 text-primary-500 focus:ring-primary-500"
@@ -271,16 +288,27 @@ export default function StudentsListPage() {
           
           {selectedStudentIds.size > 0 && (
             <div className="ml-auto flex items-center gap-2">
-              <span className="text-sm text-gray-500">{selectedStudentIds.size} seçili</span>
+              <span className="text-xs text-gray-500 font-medium">{selectedStudentIds.size} seçili</span>
               <button 
                 onClick={handleBulkRemind} 
                 disabled={sendingReminders} 
-                className="btn-primary btn-sm bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500"
+                className="btn-primary btn-sm bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500 text-xs shadow-xs"
               >
-                {sendingReminders ? <span className="spinner w-4 h-4 border-white" /> : (
-                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                {sendingReminders ? <span className="spinner w-4 h-4 border-white mr-1" /> : (
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 mr-1" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
                 )}
                 Hatırlatma Gönder
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setGraduatingStudentIds(Array.from(selectedStudentIds));
+                  setGraduationYear(new Date().getFullYear());
+                  setGraduationModalOpen(true);
+                }}
+                className="btn-sm bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs font-semibold rounded-lg flex items-center gap-1 shadow-xs px-2.5 py-1.5 transition-colors"
+              >
+                <span>🎓 Seçilenleri Mezun Et ({selectedStudentIds.size})</span>
               </button>
             </div>
           )}
@@ -299,11 +327,11 @@ export default function StudentsListPage() {
             description="Arama kriterlerinizi değiştirin veya yeni bursiyer ekleyin." 
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="data-table">
+          <div className="overflow-x-auto w-full">
+            <table className="data-table w-full">
               <thead>
                 <tr>
-                  <th className="w-10">
+                  <th className="w-8 text-center">
                     <input 
                       type="checkbox" 
                       className="rounded border-gray-300 text-primary-500 focus:ring-primary-500"
@@ -312,21 +340,20 @@ export default function StudentsListPage() {
                     />
                   </th>
                   <th>Ad Soyad</th>
-                  <th>TC Kimlik No</th>
+                  <th className="text-center">TC Kimlik No</th>
                   <th>Üniversite / Bölüm</th>
-                  <th>Sınıf</th>
-                  <th>Kategori</th>
-                  <th>Kayıt Durumu</th>
-                  <th>Belge Durumu</th>
-                  <th>Mentör</th>
-                  <th>Onay</th>
-                  <th></th>
+                  <th className="text-center">Sınıf</th>
+                  <th className="text-center">Kategori</th>
+                  <th className="text-center">Belge Durumu</th>
+                  <th className="text-center">Mentör</th>
+                  <th className="text-center">Onay</th>
+                  <th className="text-center w-14">Mezun</th>
                 </tr>
               </thead>
               <tbody>
                 {result.data.map((profile: any) => (
                   <tr key={profile.id}>
-                    <td>
+                    <td className="text-center">
                       <input 
                         type="checkbox" 
                         className="rounded border-gray-300 text-primary-500 focus:ring-primary-500"
@@ -334,44 +361,44 @@ export default function StudentsListPage() {
                         onChange={() => toggleSelect(profile.id)}
                       />
                     </td>
-                    <td className="font-medium text-gray-900">
-                      <div>{profile.firstName} {profile.lastName}</div>
+                    <td className="font-semibold text-gray-900 whitespace-nowrap">
+                      <Link 
+                        to={`/admin/students/${profile.id}`} 
+                        className="hover:text-primary-600 hover:underline transition-colors block"
+                      >
+                        {profile.firstName || profile.lastName ? `${profile.firstName} ${profile.lastName}`.trim() : 'İsimsiz Öğrenci'}
+                      </Link>
                     </td>
-                    <td className="text-gray-600 font-mono text-sm">
+                    <td className="text-center text-gray-600 font-mono text-xs whitespace-nowrap">
                       {profile.user?.tcKimlikNo || '—'}
                     </td>
                     <td>
-                      <div className="text-gray-900 text-sm">{profile.universityName || '—'}</div>
-                      <div className="text-gray-500 text-xs">{profile.department}</div>
+                      <div className="text-gray-900 text-xs font-semibold leading-tight">{profile.universityName || '—'}</div>
+                      <div className="text-gray-500 text-[11px] leading-tight mt-0.5">{profile.department}</div>
                     </td>
-                    <td className="text-center">{profile.grade ? `${profile.grade}. Sınıf` : '—'}</td>
-                    <td>
+                    <td className="text-center text-xs font-medium text-gray-700 whitespace-nowrap">{profile.grade ? `${profile.grade}. Sınıf` : '—'}</td>
+                    <td className="text-center whitespace-nowrap">
                       {profile.scholarshipCategory ? (
                         <span className="badge badge-gray text-xs">{profile.scholarshipCategory.name}</span>
                       ) : (
                         <span className="text-gray-400 text-xs">—</span>
                       )}
                     </td>
-                    <td>
-                      <span className={`badge ${
-                        profile.studentStatus === 'ACTIVE' ? 'badge-approved' :
-                        profile.studentStatus === 'INCOMPLETE' ? 'badge-pending' :
-                        'badge-gray'
-                      }`}>
-                        {statusLabels[profile.studentStatus] || profile.studentStatus}
-                      </span>
-                    </td>
-                    <td>
+                    <td className="text-center whitespace-nowrap">
                       {profile.documentStatus ? (
                         profile.documentStatus.completed ? (
-                          <span className="badge badge-approved bg-green-50 text-green-700">🟢 Tamam</span>
+                          <span className="badge badge-approved bg-emerald-50 text-emerald-700 px-2.5 py-0.5 text-xs">🟢 Tamam</span>
                         ) : (
-                          <div className="flex flex-col gap-1">
+                          <div className="flex flex-col items-center justify-center gap-1">
                             {profile.documentStatus.missingCount > 0 && (
-                              <span className="badge badge-gray bg-red-50 text-red-700 text-[10px]">🔴 {profile.documentStatus.missingCount} Eksik</span>
+                              <span className="badge bg-rose-50 text-rose-700 border border-rose-200 text-xs px-2 py-0.5 font-medium inline-flex items-center gap-1">
+                                🔴 {profile.documentStatus.missingCount} Eksik
+                              </span>
                             )}
                             {profile.documentStatus.pendingCount > 0 && (
-                              <span className="badge badge-pending bg-yellow-50 text-yellow-700 text-[10px]">🟡 {profile.documentStatus.pendingCount} Onay Bekliyor</span>
+                              <span className="badge bg-amber-50 text-amber-800 border border-amber-200 text-xs px-2 py-0.5 font-medium inline-flex items-center gap-1">
+                                🟡 {profile.documentStatus.pendingCount} Bekliyor
+                              </span>
                             )}
                           </div>
                         )
@@ -379,30 +406,38 @@ export default function StudentsListPage() {
                         <span className="text-gray-400 text-xs">—</span>
                       )}
                     </td>
-                    <td>
+                    <td className="text-center whitespace-nowrap">
                       {(profile as any).mentor ? (
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium text-gray-900">{(profile as any).mentor.firstName} {(profile as any).mentor.lastName}</span>
-                          <button onClick={() => openMentorModal(profile)} className="text-[10px] text-primary-600 hover:underline self-start">Değiştir</button>
+                        <div className="flex flex-col items-center">
+                          <span className="text-xs font-semibold text-gray-900">{(profile as any).mentor.firstName} {(profile as any).mentor.lastName}</span>
+                          <button onClick={() => openMentorModal(profile)} className="text-[10px] text-primary-600 hover:underline mt-0.5">Değiştir</button>
                         </div>
                       ) : (
-                        <button onClick={() => openMentorModal(profile)} className="btn-ghost btn-sm text-[11px] px-2 py-1">Atama Yap</button>
+                        <button onClick={() => openMentorModal(profile)} className="btn-ghost btn-sm text-[11px] px-2 py-0.5">Atama Yap</button>
                       )}
                     </td>
-                    <td>
-                      {(profile as any)._count?.approvableChanges > 0 && (
-                        <span className="badge-pending badge">
+                    <td className="text-center whitespace-nowrap">
+                      {(profile as any)._count?.approvableChanges > 0 ? (
+                        <span className="badge bg-amber-50 text-amber-800 border border-amber-200 text-xs px-2 py-0.5 font-medium inline-flex items-center justify-center">
                           {(profile as any)._count.approvableChanges} bekliyor
                         </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
                       )}
                     </td>
-                    <td>
-                      <Link
-                        to={`/admin/students/${profile.id}`}
-                        className="btn-ghost btn-sm text-primary-500"
+                    <td className="text-center whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGraduatingStudentIds([profile.id]);
+                          setGraduationYear(new Date().getFullYear());
+                          setGraduationModalOpen(true);
+                        }}
+                        className="p-1.5 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-800 rounded-lg border border-indigo-100 hover:border-indigo-300 transition-all text-sm shadow-2xs"
+                        title="Öğrenciyi Mezuna Aktar"
                       >
-                        İncele →
-                      </Link>
+                        🎓
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -687,6 +722,73 @@ export default function StudentsListPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Graduation Modal */}
+      {graduationModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in border border-gray-200">
+            <div className="p-5 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center flex-shrink-0 font-bold">
+                  🎓
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm">Mezuniyete Aktar</h3>
+                  <p className="text-[11px] text-indigo-800">
+                    {graduatingStudentIds.length} öğrenci mezun statüsüne geçirilecek
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setGraduationModalOpen(false)}
+                className="w-7 h-7 rounded-lg hover:bg-indigo-200/50 text-gray-400 hover:text-gray-700 flex items-center justify-center transition-colors text-lg"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="form-label text-xs mb-1 block">Mezuniyet Yılı</label>
+                <input
+                  type="number"
+                  min="2000"
+                  max="2099"
+                  className="form-input text-xs font-semibold"
+                  value={graduationYear}
+                  onChange={(e) => setGraduationYear(parseInt(e.target.value) || new Date().getFullYear())}
+                  placeholder="Örn: 2026"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">Öğrencilerin gruplandırılacağı mezuniyet yılı.</p>
+              </div>
+
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                <div>• Öğrenciler <strong>Bursiyerler</strong> listesinden çıkarılıp <strong>Mezunlar</strong> paneline taşınır.</div>
+                <div>• Öğrenci portalına giriş erişimleri <strong>kapatılır</strong>.</div>
+                <div>• Bu işlem dilediğiniz zaman <em>Mezunlar</em> sayfasından <strong>Geri Alınabilir</strong>.</div>
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setGraduationModalOpen(false)}
+                  className="btn-secondary flex-1 text-xs"
+                >
+                  İptal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmGraduation}
+                  disabled={graduating}
+                  className="btn-sm bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex-1 text-xs rounded-lg transition-colors flex items-center justify-center shadow-xs"
+                >
+                  {graduating ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : '🎓 Mezuniyete Aktar'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

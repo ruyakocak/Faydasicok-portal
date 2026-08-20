@@ -7,6 +7,7 @@ import ExcelJS from 'exceljs';
 import AdmZip from 'adm-zip';
 import fs from 'fs';
 import path from 'path';
+import { format } from 'date-fns';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuditAction, Role, StudentStatus } from '../types/enums';
@@ -68,10 +69,18 @@ function schedulePeriodEmail(periodId: string, delayMs: number = 300000) {
 // ── Dashboard ────────────────────────────────────────────────────────
 export async function getDashboard(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const [totalStudents, pendingChanges, activePeriods, recentLogs, thisMonthDocs] = await Promise.all([
+    const [totalStudents, pendingChanges, openDocPeriods, recentLogs, thisMonthDocs] = await Promise.all([
       prisma.studentProfile.count(),
       prisma.approvableChange.count({ where: { status: 'PENDING' } }),
-      prisma.documentPeriod.count({ where: { isOpen: true } }),
+      prisma.documentPeriod.findMany({
+        where: {
+          OR: [
+            { isOpen: true },
+            { isVolunteerFormOpen: true }
+          ]
+        },
+        select: { label: true }
+      }),
       prisma.auditLog.findMany({
         where: { 
           action: { in: ['APPROVE', 'REJECT', 'UPLOAD'] },
@@ -100,6 +109,8 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
         },
       }),
     ]);
+
+    const activePeriods = new Set(openDocPeriods.map(p => p.label.trim())).size;
 
     res.json({
       stats: {
@@ -134,7 +145,11 @@ export async function listStudents(req: Request, res: Response, next: NextFuncti
     }
     if (university) where.universityName = { contains: university as string, mode: 'insensitive' };
     if (grade) where.grade = parseInt(grade as string);
-    if (studentStatus) where.studentStatus = studentStatus;
+    if (studentStatus) {
+      where.studentStatus = studentStatus;
+    } else {
+      where.studentStatus = { not: 'GRADUATED' };
+    }
     if (enrollmentStatus) where.enrollmentStatus = enrollmentStatus;
     if (scholarshipGroup) where.scholarshipCategoryId = scholarshipGroup;
 
@@ -1216,117 +1231,289 @@ export async function exportStudentsReport(req: Request, res: Response, next: Ne
     const students = await prisma.studentProfile.findMany({
       include: {
         user: { select: { tcKimlikNo: true, email: true, isActive: true } },
-        documents: true,
+        scholarshipCategory: true,
+        mentor: true,
+        documents: {
+          include: { period: true },
+        },
       },
-      orderBy: { firstName: 'asc' },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
 
     const activePeriods = await prisma.documentPeriod.findMany({ where: { isOpen: true } });
     
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Faydasıçok Vakfı';
+    workbook.creator = 'Faydasıçok Eğitim Vakfı';
     workbook.created = new Date();
 
-    // 1. Tüm Bursiyerler
-    const allStudentsSheet = workbook.addWorksheet('Tüm Bursiyerler');
-    allStudentsSheet.columns = [
-      { header: 'TC Kimlik No', key: 'tc', width: 15 },
-      { header: 'Ad', key: 'firstName', width: 20 },
-      { header: 'Soyad', key: 'lastName', width: 20 },
-      { header: 'Üniversite', key: 'uni', width: 30 },
-      { header: 'Bölüm', key: 'dept', width: 30 },
-      { header: 'Sınıf', key: 'grade', width: 10 },
-      { header: 'E-posta', key: 'email', width: 30 },
-      { header: 'Telefon', key: 'phone', width: 15 },
-      { header: 'Burs Durumu', key: 'status', width: 15 },
-    ];
-    
-    allStudentsSheet.getRow(1).font = { bold: true };
-    
-    students.forEach(s => {
-      allStudentsSheet.addRow({
-        tc: s.user?.tcKimlikNo || '',
-        firstName: s.firstName,
-        lastName: s.lastName,
-        uni: s.universityName || '',
-        dept: s.department || '',
-        grade: s.grade || '',
-        email: s.user?.email || s.email || '',
-        phone: s.phone || '',
-        status: s.studentStatus,
+    const statusTranslations: Record<string, string> = {
+      ACTIVE: 'Aktif',
+      PASSIVE: 'Pasif',
+      GRADUATED: 'Mezun',
+      INCOMPLETE: 'İlk Kayıt / Eksik',
+    };
+
+    function applyProfessionalStyle(sheet: ExcelJS.Worksheet, headerColorArgb = 'FF1E3A8A') {
+      sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
+      sheet.properties.defaultRowHeight = 26;
+
+      const headerRow = sheet.getRow(1);
+      headerRow.height = 32;
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: headerColorArgb },
+        };
+        cell.font = {
+          name: 'Calibri',
+          size: 11,
+          bold: true,
+          color: { argb: 'FFFFFFFF' },
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF94A3B8' } },
+          left: { style: 'thin', color: { argb: 'FF94A3B8' } },
+          bottom: { style: 'medium', color: { argb: 'FF0F172A' } },
+          right: { style: 'thin', color: { argb: 'FF94A3B8' } },
+        };
       });
-    });
 
-    // 2. Eksik Belgeli Öğrenciler
-    const missingDocsSheet = workbook.addWorksheet('Eksik Belgeli Öğrenciler');
-    missingDocsSheet.columns = [
-      { header: 'TC Kimlik No', key: 'tc', width: 15 },
-      { header: 'Ad', key: 'firstName', width: 20 },
-      { header: 'Soyad', key: 'lastName', width: 20 },
-      { header: 'Eksik Belge', key: 'missingDoc', width: 30 },
-      { header: 'E-posta', key: 'email', width: 30 },
-      { header: 'Telefon', key: 'phone', width: 15 },
-    ];
-    missingDocsSheet.getRow(1).font = { bold: true };
-
-    if (activePeriods.length > 0) {
-      students.forEach(s => {
-        activePeriods.forEach(period => {
-          const hasDoc = s.documents.some(d => d.periodId === period.id && (d.status === 'APPROVED' || d.status === 'PENDING'));
-          if (!hasDoc && s.studentStatus !== 'GRADUATED' && s.studentStatus !== 'PASSIVE') {
-            missingDocsSheet.addRow({
-              tc: s.user?.tcKimlikNo || '',
-              firstName: s.firstName,
-              lastName: s.lastName,
-              missingDoc: period.label,
-              email: s.user?.email || s.email || '',
-              phone: s.phone || '',
-            });
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+        row.height = 24;
+        const isEven = rowNumber % 2 === 0;
+        row.eachCell((cell) => {
+          cell.font = { name: 'Calibri', size: 10 };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          };
+          if (isEven) {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF8FAFC' },
+            };
           }
         });
       });
-    } else {
-      missingDocsSheet.addRow({ tc: 'Aktif belge dönemi bulunmuyor.' });
     }
 
-    // 3. İstatistikler
-    const statsSheet = workbook.addWorksheet('İstatistikler');
-    statsSheet.columns = [
-      { header: 'Kategori', key: 'category', width: 25 },
-      { header: 'Değer', key: 'value', width: 40 },
-      { header: 'Kişi Sayısı', key: 'count', width: 15 },
+    // ───────────────────────────────────────────────
+    // 1. TÜM BURSİYERLER DETAYLI SAYFASI
+    // ───────────────────────────────────────────────
+    const allStudentsSheet = workbook.addWorksheet('Tüm Bursiyerler');
+    allStudentsSheet.columns = [
+      { header: 'T.C. Kimlik No', key: 'tc', width: 20 },
+      { header: 'Adı', key: 'firstName', width: 20 },
+      { header: 'Soyadı', key: 'lastName', width: 20 },
+      { header: 'Bursiyer Kategorisi', key: 'category', width: 28 },
+      { header: 'Burs Durumu', key: 'studentStatus', width: 18 },
+      { header: 'İlk Kayıt Muafiyeti', key: 'initialDocsExempt', width: 24 },
+      { header: 'Burs Başlangıç Tarihi', key: 'scholarshipDate', width: 24 },
+      { header: 'Telefon Numarası', key: 'phone', width: 20 },
+      { header: 'E-Posta Adresi', key: 'email', width: 34 },
+      { header: 'İkametgâh Adresi', key: 'address', width: 42 },
+      { header: 'Nüfusa Kayıtlı İl', key: 'registeredCity', width: 22 },
+      { header: 'Cinsiyet', key: 'gender', width: 14 },
+      { header: 'Doğum Tarihi', key: 'birthDate', width: 18 },
+      { header: 'Doğum Yeri', key: 'birthPlace', width: 20 },
+      { header: 'Banka Adı', key: 'bankName', width: 26 },
+      { header: 'IBAN Numarası', key: 'iban', width: 36 },
+      { header: 'Üniversite', key: 'universityName', width: 36 },
+      { header: 'Üniversite Türü', key: 'universityType', width: 20 },
+      { header: 'Fakülte', key: 'faculty', width: 30 },
+      { header: 'Bölüm', key: 'department', width: 32 },
+      { header: 'Sınıf', key: 'grade', width: 14 },
+      { header: 'Mentör Adı Soyadı', key: 'mentorName', width: 28 },
+      { header: 'Sisteme Kayıt Tarihi', key: 'createdAt', width: 24 },
     ];
-    statsSheet.getRow(1).font = { bold: true };
 
+    students.forEach((s) => {
+      const mentorFullName = s.mentor ? `${s.mentor.firstName} ${s.mentor.lastName}`.trim() : 'Atama Yapılmadı';
+
+      allStudentsSheet.addRow({
+        tc: s.user?.tcKimlikNo || '',
+        firstName: s.firstName || '',
+        lastName: s.lastName || '',
+        category: s.scholarshipCategory?.name || 'Tanımsız / Genel',
+        studentStatus: statusTranslations[s.studentStatus] || s.studentStatus || '—',
+        initialDocsExempt: s.isInitialDocsExempt ? 'Muaf (Eski Bursiyer)' : 'Zorunlu',
+        scholarshipDate: s.scholarshipDate ? format(new Date(s.scholarshipDate), 'dd.MM.yyyy') : '—',
+        phone: s.phone || '',
+        email: s.user?.email || s.email || '',
+        address: s.address || '',
+        registeredCity: s.registeredCity || '',
+        gender: s.gender || '',
+        birthDate: s.birthDate ? format(new Date(s.birthDate), 'dd.MM.yyyy') : '',
+        birthPlace: s.birthPlace || '',
+        bankName: s.bankName || '',
+        iban: s.iban || '',
+        universityName: s.universityName || '',
+        universityType: s.universityType || '',
+        faculty: s.faculty || '',
+        department: s.department || '',
+        grade: s.grade ? `${s.grade}. Sınıf` : '',
+        mentorName: mentorFullName,
+        createdAt: s.createdAt ? format(new Date(s.createdAt), 'dd.MM.yyyy HH:mm') : '',
+      });
+    });
+
+    applyProfessionalStyle(allStudentsSheet, 'FF1E3A8A');
+
+    // ───────────────────────────────────────────────
+    // 2. EKSİK BELGELİ ÖĞRENCİLER SAYFASI
+    // ───────────────────────────────────────────────
+    const missingDocsSheet = workbook.addWorksheet('Eksik Belgeli Öğrenciler');
+    missingDocsSheet.columns = [
+      { header: 'T.C. Kimlik No', key: 'tc', width: 16 },
+      { header: 'Adı', key: 'firstName', width: 16 },
+      { header: 'Soyadı', key: 'lastName', width: 16 },
+      { header: 'Bursiyer Kategorisi', key: 'category', width: 24 },
+      { header: 'Üniversite', key: 'uni', width: 30 },
+      { header: 'Bölüm', key: 'dept', width: 28 },
+      { header: 'Sınıf', key: 'grade', width: 10 },
+      { header: 'Telefon', key: 'phone', width: 16 },
+      { header: 'E-Posta', key: 'email', width: 28 },
+      { header: 'Eksik Belge / Dönem', key: 'missingDoc', width: 32 },
+    ];
+
+    if (activePeriods.length > 0) {
+      students.forEach((s) => {
+        if (s.studentStatus !== 'GRADUATED' && s.studentStatus !== 'PASSIVE') {
+          activePeriods.forEach((period) => {
+            const hasDoc = s.documents.some(
+              (d) => d.periodId === period.id && (d.status === 'APPROVED' || d.status === 'PENDING')
+            );
+            if (!hasDoc) {
+              missingDocsSheet.addRow({
+                tc: s.user?.tcKimlikNo || '',
+                firstName: s.firstName || '',
+                lastName: s.lastName || '',
+                category: s.scholarshipCategory?.name || 'Genel',
+                uni: s.universityName || '',
+                dept: s.department || '',
+                grade: s.grade ? `${s.grade}. Sınıf` : '',
+                phone: s.phone || '',
+                email: s.user?.email || s.email || '',
+                missingDoc: `${period.label} (${period.type})`,
+              });
+            }
+          });
+        }
+      });
+    } else {
+      missingDocsSheet.addRow({
+        tc: '—',
+        firstName: 'Aktif evrak yükleme dönemi bulunmuyor.',
+      });
+    }
+
+    applyProfessionalStyle(missingDocsSheet, 'FFB91C1C'); // Crimson Red Header
+
+    // ───────────────────────────────────────────────
+    // 3. ÖZET İSTATİSTİKLER SAYFASI
+    // ───────────────────────────────────────────────
+    const statsSheet = workbook.addWorksheet('Özet İstatistikler');
+    statsSheet.columns = [
+      { header: 'Grup / Boyut', key: 'group', width: 24 },
+      { header: 'Kategori / Değer', key: 'value', width: 36 },
+      { header: 'Öğrenci Sayısı', key: 'count', width: 16 },
+      { header: 'Yüzde (%)', key: 'percent', width: 14 },
+    ];
+
+    const categoryStats: Record<string, number> = {};
+    const statusStats: Record<string, number> = {};
     const uniStats: Record<string, number> = {};
     const deptStats: Record<string, number> = {};
-    const statusStats: Record<string, number> = {};
+    let withMentor = 0;
+    let withoutMentor = 0;
 
-    students.forEach(s => {
+    const totalStudents = students.length;
+
+    students.forEach((s) => {
+      const cat = s.scholarshipCategory?.name || 'Tanımsız / Genel';
+      const status = statusTranslations[s.studentStatus] || s.studentStatus || 'Bilinmiyor';
       const uni = s.universityName || 'Belirtilmemiş';
       const dept = s.department || 'Belirtilmemiş';
-      const status = s.studentStatus || 'Bilinmiyor';
 
+      categoryStats[cat] = (categoryStats[cat] || 0) + 1;
+      statusStats[status] = (statusStats[status] || 0) + 1;
       uniStats[uni] = (uniStats[uni] || 0) + 1;
       deptStats[dept] = (deptStats[dept] || 0) + 1;
-      statusStats[status] = (statusStats[status] || 0) + 1;
+
+      if (s.mentorId) withMentor++;
+      else withoutMentor++;
     });
 
-    Object.entries(statusStats).sort((a,b) => b[1]-a[1]).forEach(([val, count]) => {
-      statsSheet.addRow({ category: 'Bursiyer Durumu', value: val, count });
+    // Add Category Stats
+    Object.entries(categoryStats).sort((a, b) => b[1] - a[1]).forEach(([val, count]) => {
+      statsSheet.addRow({
+        group: 'Bursiyer Kategorisi',
+        value: val,
+        count,
+        percent: totalStudents ? `%${((count / totalStudents) * 100).toFixed(1)}` : '0',
+      });
     });
-    statsSheet.addRow({}); // boş satır
-    Object.entries(uniStats).sort((a,b) => b[1]-a[1]).forEach(([val, count]) => {
-      statsSheet.addRow({ category: 'Üniversite', value: val, count });
+    statsSheet.addRow({});
+
+    // Add Status Stats
+    Object.entries(statusStats).sort((a, b) => b[1] - a[1]).forEach(([val, count]) => {
+      statsSheet.addRow({
+        group: 'Bursiyerlik Durumu',
+        value: val,
+        count,
+        percent: totalStudents ? `%${((count / totalStudents) * 100).toFixed(1)}` : '0',
+      });
     });
-    statsSheet.addRow({}); // boş satır
-    Object.entries(deptStats).sort((a,b) => b[1]-a[1]).forEach(([val, count]) => {
-      statsSheet.addRow({ category: 'Bölüm', value: val, count });
+    statsSheet.addRow({});
+
+    // Mentorship Stats
+    statsSheet.addRow({
+      group: 'Mentörlük Eşleşmesi',
+      value: 'Mentörü Olan Bursiyerler',
+      count: withMentor,
+      percent: totalStudents ? `%${((withMentor / totalStudents) * 100).toFixed(1)}` : '0',
     });
+    statsSheet.addRow({
+      group: 'Mentörlük Eşleşmesi',
+      value: 'Mentör Bekleyen Bursiyerler',
+      count: withoutMentor,
+      percent: totalStudents ? `%${((withoutMentor / totalStudents) * 100).toFixed(1)}` : '0',
+    });
+    statsSheet.addRow({});
+
+    // University Stats
+    Object.entries(uniStats).sort((a, b) => b[1] - a[1]).forEach(([val, count]) => {
+      statsSheet.addRow({
+        group: 'Üniversite Dağılımı',
+        value: val,
+        count,
+        percent: totalStudents ? `%${((count / totalStudents) * 100).toFixed(1)}` : '0',
+      });
+    });
+    statsSheet.addRow({});
+
+    // Department Stats (Top 15)
+    Object.entries(deptStats).sort((a, b) => b[1] - a[1]).slice(0, 15).forEach(([val, count]) => {
+      statsSheet.addRow({
+        group: 'Bölüm Dağılımı (İlk 15)',
+        value: val,
+        count,
+        percent: totalStudents ? `%${((count / totalStudents) * 100).toFixed(1)}` : '0',
+      });
+    });
+
+    applyProfessionalStyle(statsSheet, 'FF047857'); // Emerald Green Header
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="bursiyer-raporu.xlsx"');
-    
+    res.setHeader('Content-Disposition', 'attachment; filename="faydasicok_bursiyer_raporu.xlsx"');
+
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) {
@@ -1651,49 +1838,357 @@ export async function deleteAnnouncement(req: Request, res: Response, next: Next
 
 export async function downloadDocumentsZip(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { periodLabel, entity } = req.query;
-    if (!periodLabel || !entity) throw new AppError(400, 'periodLabel and entity are required.');
+    const { periodLabel, entity, documentType, status, categoryId, category } = req.query;
 
-    const period = await prisma.documentPeriod.findFirst({
-      where: { label: String(periodLabel), type: String(entity) }
-    });
-    
-    if (!period) throw new AppError(404, 'Seçili döneme ait evrak talebi bulunamadı.');
+    const docType = (documentType || entity) ? String(documentType || entity) : undefined;
+    const catId = (categoryId || category) ? String(categoryId || category) : undefined;
+    const statusVal = status ? String(status) : undefined;
+
+    const where: any = {};
+
+    // Status filter
+    if (statusVal && statusVal !== 'ALL') {
+      where.status = statusVal;
+    }
+
+    // Document Type filter
+    if (docType && docType !== 'DOCUMENT' && docType !== 'ALL' && !['BANK_INFO', 'PERSONAL_INFO', 'FAMILY_INFO', 'EDUCATION_INFO', 'CONTACT_INFO'].includes(docType)) {
+      where.type = docType;
+    }
+
+    // Period filter
+    if (periodLabel && periodLabel !== 'ALL') {
+      where.period = { label: String(periodLabel) };
+    }
+
+    // Category filter
+    if (catId && catId !== 'ALL') {
+      where.studentProfile = { scholarshipCategoryId: catId };
+    }
 
     const documents = await prisma.document.findMany({
-      where: { periodId: period.id },
-      include: { studentProfile: { include: { user: true } }, period: true }
+      where,
+      include: {
+        studentProfile: {
+          include: { user: true, scholarshipCategory: true },
+        },
+        period: true,
+      },
+      orderBy: { uploadedAt: 'desc' },
     });
 
     if (documents.length === 0) {
-      throw new AppError(404, 'Bu döneme ait yüklenmiş belge bulunamadı.');
+      throw new AppError(404, 'Seçili filtrelere uygun yüklenmiş belge bulunamadı.');
     }
 
     const zip = new AdmZip();
     let hasFiles = false;
+    const addedFileNames = new Set<string>();
 
     for (const doc of documents) {
       const filePath = path.join(__dirname, '../../', doc.filePath);
       if (fs.existsSync(filePath)) {
-        const studentName = `${doc.studentProfile.firstName}_${doc.studentProfile.lastName}`.replace(/[^a-zA-Z0-9_ğüşöçİĞÜŞÖÇ]/g, '');
-        const tc = doc.studentProfile.user?.tcKimlikNo || 'bilinmeyen-tc';
-        const ext = path.extname(doc.filePath);
-        zip.addLocalFile(filePath, '', `${studentName}_${tc}${ext}`);
+        const studentName = `${doc.studentProfile.firstName}_${doc.studentProfile.lastName}`
+          .replace(/[^a-zA-Z0-9_ğüşöçİĞÜŞÖÇ]/g, '_');
+        const tc = doc.studentProfile.user?.tcKimlikNo || doc.studentProfile.id.slice(0, 8);
+        const docTypeName = doc.type;
+        const ext = path.extname(doc.filePath) || '.pdf';
+
+        let zipEntryName = `${studentName}_${tc}_${docTypeName}${ext}`;
+        let counter = 1;
+        while (addedFileNames.has(zipEntryName)) {
+          zipEntryName = `${studentName}_${tc}_${docTypeName}_${counter}${ext}`;
+          counter++;
+        }
+        addedFileNames.add(zipEntryName);
+
+        zip.addLocalFile(filePath, '', zipEntryName);
         hasFiles = true;
       }
     }
 
     if (!hasFiles) {
-      throw new AppError(404, 'Dosyalar sunucuda fiziksel olarak bulunamadı.');
+      throw new AppError(404, 'Seçili filtrelere ait dosyalar sunucuda fiziksel olarak bulunamadı.');
     }
 
     const zipBuffer = zip.toBuffer();
-    
+    const safePeriodName = periodLabel ? `${String(periodLabel).replace(/[^a-zA-Z0-9_ğüşöçİĞÜŞÖÇ]/g, '_')}_` : '';
+    const safeDocTypeName = docType && docType !== 'DOCUMENT' && docType !== 'ALL' ? `${docType}_` : '';
+    const filename = `${safePeriodName}${safeDocTypeName}belgeleri.zip` || 'toplu_belgeler.zip';
+
     res.set('Content-Type', 'application/zip');
-    res.set('Content-Disposition', `attachment; filename="${period.type}_belgeleri.zip"`);
+    res.set('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
     res.set('Content-Length', zipBuffer.length.toString());
-    
+
     res.send(zipBuffer);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Graduates Management ─────────────────────────────────────────────
+
+export async function listGraduates(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { search, year, categoryId, page = '1', limit = '20' } = req.query;
+    const where: any = { studentStatus: 'GRADUATED' };
+
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search as string, mode: 'insensitive' } },
+        { lastName: { contains: search as string, mode: 'insensitive' } },
+        { user: { tcKimlikNo: { contains: search as string } } },
+      ];
+    }
+    if (year && year !== 'ALL') {
+      where.graduationYear = parseInt(year as string);
+    }
+    if (categoryId && categoryId !== 'ALL') {
+      where.scholarshipCategoryId = categoryId as string;
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [profiles, total, allGradYears] = await Promise.all([
+      prisma.studentProfile.findMany({
+        where,
+        include: {
+          user: { select: { id: true, tcKimlikNo: true, email: true, isActive: true } },
+          scholarshipCategory: true,
+          mentor: true,
+        },
+        orderBy: [{ graduationYear: 'desc' }, { lastName: 'asc' }, { firstName: 'asc' }],
+        skip,
+        take: Number(limit),
+      }),
+      prisma.studentProfile.count({ where }),
+      prisma.studentProfile.findMany({
+        where: { studentStatus: 'GRADUATED', graduationYear: { not: null } },
+        select: { graduationYear: true },
+        distinct: ['graduationYear'],
+        orderBy: { graduationYear: 'desc' },
+      }),
+    ]);
+
+    const years = allGradYears.map(g => g.graduationYear).filter(Boolean) as number[];
+
+    res.json({
+      data: profiles,
+      years,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function graduateStudents(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { studentIds, graduationYear } = req.body;
+    if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+      throw new AppError(400, 'Lütfen en az bir öğrenci seçiniz.');
+    }
+    const year = graduationYear ? parseInt(graduationYear) : new Date().getFullYear();
+
+    const students = await prisma.studentProfile.findMany({
+      where: { id: { in: studentIds } },
+      select: { id: true, userId: true, firstName: true, lastName: true },
+    });
+
+    const userIds = students.map(s => s.userId);
+
+    await prisma.$transaction([
+      prisma.studentProfile.updateMany({
+        where: { id: { in: studentIds } },
+        data: {
+          studentStatus: 'GRADUATED',
+          enrollmentStatus: 'GRADUATED',
+          graduationYear: year,
+          graduatedAt: new Date(),
+        },
+      }),
+      prisma.user.updateMany({
+        where: { id: { in: userIds } },
+        data: { isActive: false },
+      }),
+    ]);
+
+    if (req.user) {
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: AuditAction.UPDATE,
+          module: 'Graduates',
+          newValue: `${students.length} öğrenci ${year} yılı mezunu olarak işaretlendi ve portal erişimleri kapatıldı.`,
+        },
+      });
+    }
+
+    res.json({ success: true, count: students.length, graduationYear: year });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function revertGraduation(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { studentId } = req.body;
+    if (!studentId) {
+      throw new AppError(400, 'Öğrenci ID belirtilmelidir.');
+    }
+
+    const student = await prisma.studentProfile.findUnique({
+      where: { id: studentId },
+      select: { id: true, userId: true, firstName: true, lastName: true },
+    });
+
+    if (!student) {
+      throw new AppError(404, 'Öğrenci bulunamadı.');
+    }
+
+    await prisma.$transaction([
+      prisma.studentProfile.update({
+        where: { id: studentId },
+        data: {
+          studentStatus: 'ACTIVE',
+          enrollmentStatus: 'ENROLLED',
+          graduationYear: null,
+          graduatedAt: null,
+        },
+      }),
+      prisma.user.update({
+        where: { id: student.userId },
+        data: { isActive: true },
+      }),
+    ]);
+
+    if (req.user) {
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: AuditAction.UPDATE,
+          module: 'Graduates',
+          newValue: `${student.firstName} ${student.lastName} mezunluktan aktif bursiyerliğe geri alındı ve portal erişimi açıldı.`,
+        },
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function exportGraduatesReport(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { year, categoryId } = req.query;
+    const where: any = { studentStatus: 'GRADUATED' };
+    if (year && year !== 'ALL') where.graduationYear = parseInt(year as string);
+    if (categoryId && categoryId !== 'ALL') where.scholarshipCategoryId = categoryId as string;
+
+    const graduates = await prisma.studentProfile.findMany({
+      where,
+      include: {
+        user: { select: { tcKimlikNo: true, email: true } },
+        scholarshipCategory: true,
+        mentor: true,
+      },
+      orderBy: [{ graduationYear: 'desc' }, { lastName: 'asc' }, { firstName: 'asc' }],
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Faydasıçok Eğitim Vakfı';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Mezunlar Listesi');
+    sheet.columns = [
+      { header: 'T.C. Kimlik No', key: 'tc', width: 20 },
+      { header: 'Adı', key: 'firstName', width: 20 },
+      { header: 'Soyadı', key: 'lastName', width: 20 },
+      { header: 'Mezuniyet Yılı', key: 'graduationYear', width: 18 },
+      { header: 'Bursiyer Kategorisi', key: 'category', width: 28 },
+      { header: 'Telefon Numarası', key: 'phone', width: 20 },
+      { header: 'E-Posta Adresi', key: 'email', width: 34 },
+      { header: 'İkametgâh Adresi', key: 'address', width: 40 },
+      { header: 'Nüfusa Kayıtlı İl', key: 'registeredCity', width: 20 },
+      { header: 'Üniversite', key: 'universityName', width: 36 },
+      { header: 'Fakülte', key: 'faculty', width: 30 },
+      { header: 'Bölüm', key: 'department', width: 32 },
+      { header: 'Banka Adı', key: 'bankName', width: 26 },
+      { header: 'IBAN Numarası', key: 'iban', width: 36 },
+      { header: 'Mentör Adı Soyadı', key: 'mentorName', width: 28 },
+      { header: 'Mezuniyete Aktarılma Tarihi', key: 'graduatedAt', width: 26 },
+    ];
+
+    graduates.forEach((g) => {
+      const mentorFullName = g.mentor ? `${g.mentor.firstName} ${g.mentor.lastName}`.trim() : '—';
+      sheet.addRow({
+        tc: g.user?.tcKimlikNo || '',
+        firstName: g.firstName || '',
+        lastName: g.lastName || '',
+        graduationYear: g.graduationYear ? `${g.graduationYear} Mezunu` : 'Belirtilmedi',
+        category: g.scholarshipCategory?.name || 'Genel',
+        phone: g.phone || '',
+        email: g.user?.email || g.email || '',
+        address: g.address || '',
+        registeredCity: g.registeredCity || '',
+        universityName: g.universityName || '',
+        faculty: g.faculty || '',
+        department: g.department || '',
+        bankName: g.bankName || '',
+        iban: g.iban || '',
+        mentorName: mentorFullName,
+        graduatedAt: g.graduatedAt ? format(new Date(g.graduatedAt), 'dd.MM.yyyy HH:mm') : (g.updatedAt ? format(new Date(g.updatedAt), 'dd.MM.yyyy') : '—'),
+      });
+    });
+
+    // Apply professional styling
+    sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
+    sheet.properties.defaultRowHeight = 26;
+    const headerRow = sheet.getRow(1);
+    headerRow.height = 32;
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4338CA' } }; // Indigo header
+      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF94A3B8' } },
+        left: { style: 'thin', color: { argb: 'FF94A3B8' } },
+        bottom: { style: 'medium', color: { argb: 'FF0F172A' } },
+        right: { style: 'thin', color: { argb: 'FF94A3B8' } },
+      };
+    });
+
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      row.height = 24;
+      const isEven = rowNumber % 2 === 0;
+      row.eachCell((cell) => {
+        cell.font = { name: 'Calibri', size: 10 };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        };
+        if (isEven) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+        }
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const safeYear = year && year !== 'ALL' ? `_${year}` : '_tum';
+    res.setHeader('Content-Disposition', `attachment; filename="faydasicok_mezunlar${safeYear}.xlsx"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
   } catch (err) {
     next(err);
   }

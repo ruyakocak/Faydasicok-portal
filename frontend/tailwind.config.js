@@ -62,6 +62,8 @@ export default {
         '22': '5.5rem',
       },
       boxShadow: {
+        '2xs':   '0 1px 2px 0 rgba(0, 0, 0, 0.04)',
+        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
         'card':  '0 1px 2px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06)',
         'card-hover': '0 4px 12px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.08)',
         'modal': '0 20px 60px rgba(0,0,0,0.20)',

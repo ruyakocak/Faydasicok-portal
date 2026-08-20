@@ -166,6 +166,30 @@ export const adminApi = {
   exportStudentsReport: () =>
     api.get('/admin/reports/students-export', { responseType: 'blob' }).then((r) => r.data),
 
+  listGraduates: (params?: { search?: string; year?: string; categoryId?: string; page?: string; limit?: string }): Promise<PaginatedResponse<StudentProfile>> =>
+    api.get('/admin/graduates', { params }).then((r) => r.data),
+
+  graduateStudents: (data: { studentIds: string[]; graduationYear?: number }) =>
+    api.post('/admin/graduates/graduate', data).then((r) => r.data),
+
+  revertGraduation: (studentId: string) =>
+    api.post('/admin/graduates/revert', { studentId }).then((r) => r.data),
+
+  exportGraduatesReport: (params?: { year?: string; categoryId?: string }) =>
+    api.get('/admin/reports/graduates-export', { params, responseType: 'blob' }).then((r) => r.data),
+
+  downloadDocumentsZip: (params: {
+    periodLabel?: string;
+    entity?: string;
+    documentType?: string;
+    status?: string;
+    categoryId?: string;
+  }) =>
+    api.get('/admin/documents/download-zip', {
+      params,
+      responseType: 'blob',
+    }).then((r) => r.data),
+
   bulkRemindStudents: (studentIds: string[]) =>
     api.post('/admin/students/bulk-remind', { studentIds }).then(r => r.data),
 

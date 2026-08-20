@@ -13,7 +13,14 @@ export async function getApprovalQueue(req: Request, res: Response, next: NextFu
       where.status = status as string;
     }
 
-    if (entityType) where.entityType = entityType;
+    if (entityType === 'DOCUMENT') {
+      where.entityType = 'DOCUMENT';
+    } else if (entityType === 'PROFILE' || entityType === 'NON_DOCUMENT') {
+      where.entityType = { not: 'DOCUMENT' };
+    } else if (entityType) {
+      where.entityType = entityType;
+    }
+
     if (documentType || periodLabel) {
       where.entityType = 'DOCUMENT';
       where.document = {};
@@ -25,7 +32,7 @@ export async function getApprovalQueue(req: Request, res: Response, next: NextFu
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const [changes, total] = await Promise.all([
+    const [changes, total, pendingDocsCount, pendingProfilesCount] = await Promise.all([
       prisma.approvableChange.findMany({
         where,
         include: {
@@ -36,6 +43,7 @@ export async function getApprovalQueue(req: Request, res: Response, next: NextFu
               lastName: true,
               universityName: true,
               department: true,
+              scholarshipCategory: { select: { name: true } },
             },
           },
           document: {
@@ -49,6 +57,7 @@ export async function getApprovalQueue(req: Request, res: Response, next: NextFu
               semester: true,
               academicYear: true,
               volunteerOrg: true,
+              period: { select: { label: true } },
             },
           },
           changedBy: { select: { id: true, tcKimlikNo: true, email: true, username: true } },
@@ -59,10 +68,16 @@ export async function getApprovalQueue(req: Request, res: Response, next: NextFu
         take: Number(limit),
       }),
       prisma.approvableChange.count({ where }),
+      prisma.approvableChange.count({ where: { status: 'PENDING', entityType: 'DOCUMENT' } }),
+      prisma.approvableChange.count({ where: { status: 'PENDING', entityType: { not: 'DOCUMENT' } } }),
     ]);
 
     res.json({
       data: changes,
+      counts: {
+        pendingDocuments: pendingDocsCount,
+        pendingProfiles: pendingProfilesCount,
+      },
       pagination: {
         total,
         page: Number(page),

@@ -9,7 +9,10 @@ import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 
 // Student pages
 import StudentLayout from './layouts/StudentLayout';
+import StudentDashboardPage from './pages/student/StudentDashboardPage';
 import StudentProfilePage from './pages/student/StudentProfilePage';
+import StudentDocumentsPage from './pages/student/StudentDocumentsPage';
+import MentorshipPage from './pages/student/MentorshipPage';
 import StudentAnnouncementsPage from './pages/student/StudentAnnouncementsPage';
 import VolunteerFormPage from './pages/student/VolunteerFormPage';
 
@@ -18,6 +21,7 @@ import AdminLayout from './layouts/AdminLayout';
 import DashboardPage from './pages/admin/DashboardPage';
 import StudentsListPage from './pages/admin/StudentsListPage';
 import StudentDetailPage from './pages/admin/StudentDetailPage';
+import GraduatesPage from './pages/admin/GraduatesPage';
 import MentorsPage from './pages/admin/MentorsPage';
 import DocumentCenterPage from './pages/admin/DocumentCenterPage';
 import AuditLogPage from './pages/admin/AuditLogPage';
@@ -64,10 +68,13 @@ export default function App() {
             </PrivateRoute>
           }
         >
+          <Route path="dashboard" element={<StudentDashboardPage />} />
           <Route path="profile" element={<StudentProfilePage />} />
+          <Route path="documents" element={<StudentDocumentsPage />} />
           <Route path="announcements" element={<StudentAnnouncementsPage />} />
+          <Route path="mentor" element={<MentorshipPage />} />
           <Route path="volunteer-form" element={<VolunteerFormPage />} />
-          <Route index element={<Navigate to="profile" replace />} />
+          <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 
         {/* Admin / Reviewer */}
@@ -82,6 +89,7 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="students" element={<StudentsListPage />} />
           <Route path="students/:profileId" element={<StudentDetailPage />} />
+          <Route path="graduates" element={<GraduatesPage />} />
           <Route path="documents" element={<DocumentCenterPage />} />
           <Route path="events" element={<EventsPage />} />
           <Route path="mentors" element={<MentorsPage />} />

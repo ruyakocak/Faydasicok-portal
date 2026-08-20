@@ -73,6 +73,8 @@ export interface StudentProfile {
   highSchoolName?: string;
   highSchoolCity?: string;
   highSchoolGradYear?: number;
+  graduationYear?: number;
+  graduatedAt?: string;
   // Relations
   user?: Partial<User>;
   approvableChanges?: ApprovableChange[];
@@ -201,6 +203,11 @@ export interface AuditLog {
 
 export interface PaginatedResponse<T> {
   data: T[];
+  years?: number[];
+  counts?: {
+    pendingDocuments?: number;
+    pendingProfiles?: number;
+  };
   pagination: {
     total: number;
     page: number;

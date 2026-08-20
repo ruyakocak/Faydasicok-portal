@@ -28,11 +28,15 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
           { username: identifier },
         ],
       },
-      include: { studentProfile: { select: { id: true } } },
+      include: { studentProfile: { select: { id: true, studentStatus: true } } },
     });
 
     if (!user) {
       throw new AppError(401, 'Kullanıcı adı veya şifre hatalı.');
+    }
+
+    if (user.studentProfile?.studentStatus === 'GRADUATED') {
+      throw new AppError(403, 'Mezun statüsünde olduğunuz için öğrenci portalına giriş yetkiniz bulunmamaktadır.');
     }
 
     if (!user.isActive) {
