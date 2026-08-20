@@ -27,12 +27,13 @@ export default function StudentsListPage() {
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [pastedTcs, setPastedTcs] = useState('');
   const [modalGroup, setModalGroup] = useState('');
+  const [isNewStudentBulk, setIsNewStudentBulk] = useState(true);
   const [creating, setCreating] = useState(false);
   const [createdResults, setCreatedResults] = useState<any[]>([]);
 
   // Single Create
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [newStudentForm, setNewStudentForm] = useState({ tcKimlikNo: '', firstName: '', lastName: '', scholarshipCategoryId: '' });
+  const [newStudentForm, setNewStudentForm] = useState({ tcKimlikNo: '', firstName: '', lastName: '', scholarshipCategoryId: '', isNewStudent: true });
   const [createResult, setCreateResult] = useState<{ tcKimlikNo?: string; password?: string; error?: string } | null>(null);
 
   // States for Mentor assignment modal
@@ -80,6 +81,7 @@ export default function StudentsListPage() {
       const res = await adminApi.bulkCreateJson({
         tcs: pastedTcs,
         scholarshipCategoryId: modalGroup,
+        isNewStudent: isNewStudentBulk,
       });
       setCreatedResults(res.data);
       toast.success('Bursiyer oluşturma işlemi tamamlandı.');
@@ -101,6 +103,7 @@ export default function StudentsListPage() {
         firstName: newStudentForm.firstName,
         lastName: newStudentForm.lastName,
         scholarshipCategoryId: newStudentForm.scholarshipCategoryId || undefined,
+        isNewStudent: newStudentForm.isNewStudent,
       });
       setCreateResult({ tcKimlikNo: res.tcKimlikNo, password: res.password });
       load();
@@ -220,7 +223,7 @@ export default function StudentsListPage() {
             <svg viewBox="0 0 24 24" className="w-4 h-4 mr-1" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
             Kategoriler
           </button>
-          <button onClick={() => { setCreateModalOpen(true); setCreateResult(null); setNewStudentForm({ tcKimlikNo: '', firstName: '', lastName: '', scholarshipCategoryId: '' }); }} className="btn-primary btn-sm">
+          <button onClick={() => { setCreateModalOpen(true); setCreateResult(null); setNewStudentForm({ tcKimlikNo: '', firstName: '', lastName: '', scholarshipCategoryId: '', isNewStudent: true }); }} className="btn-primary btn-sm">
             <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
             Bursiyer Ekle
           </button>
@@ -459,6 +462,19 @@ export default function StudentsListPage() {
                   </select>
                 </div>
                 
+                <div className="flex items-center gap-2 mt-3 mb-3">
+                  <input
+                    type="checkbox"
+                    id="isNewStudentBulk"
+                    checked={isNewStudentBulk}
+                    onChange={(e) => setIsNewStudentBulk(e.target.checked)}
+                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <label htmlFor="isNewStudentBulk" className="text-sm font-medium text-gray-700">
+                    Yeni Bursiyerler (İlk Kayıt Belgeleri İstenir)
+                  </label>
+                </div>
+                
                 <div className="flex-1 flex flex-col min-h-0">
                   <label className="form-label mb-1">TC Kimlik Numaraları (Alt alta, her satıra bir adet, maks 150 adet)</label>
                   <textarea
@@ -582,6 +598,18 @@ export default function StudentsListPage() {
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="isNewStudentSingle"
+                      checked={newStudentForm.isNewStudent}
+                      onChange={(e) => setNewStudentForm(prev => ({ ...prev, isNewStudent: e.target.checked }))}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <label htmlFor="isNewStudentSingle" className="text-sm font-medium text-gray-700">
+                      Yeni Bursiyer (İlk Kayıt Belgeleri İstenir)
+                    </label>
                   </div>
                   {createResult?.error && (
                     <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg border border-red-100">

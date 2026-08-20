@@ -745,6 +745,7 @@ _____________________________
   return (
     <div className="space-y-10">
       {/* ── 1. STATİK / İLK KAYIT BELGELERİ ── */}
+      {!profile.isInitialDocsExempt && (
       <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
         <div className="p-6 bg-gradient-to-r from-purple-50 via-white to-blue-50 border-b border-gray-200">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -877,6 +878,7 @@ _____________________________
           )}
         </div>
       </section>
+      )}
 
       {/* ── 2. DÖNEMSEL BELGELER (Transkript, Öğrenci Belgesi vb.) ── */}
       <section className="space-y-6">

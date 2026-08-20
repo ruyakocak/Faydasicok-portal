@@ -314,7 +314,7 @@ export async function bulkRemindStudents(req: Request, res: Response, next: Next
 // ── Create Single Student ──────────────────────────────────────────────
 export async function createStudent(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { tcKimlikNo, firstName, lastName, scholarshipCategoryId } = req.body;
+    const { tcKimlikNo, firstName, lastName, scholarshipCategoryId, isNewStudent = true } = req.body;
     if (!tcKimlikNo || !/^\d{11}$/.test(tcKimlikNo)) {
       throw new AppError(400, 'Geçersiz TC formatı (11 hane olmalı)');
     }
@@ -340,6 +340,7 @@ export async function createStudent(req: Request, res: Response, next: NextFunct
             lastName: lastName || '',
             scholarshipCategoryId: scholarshipCategoryId || null,
             studentStatus: 'INCOMPLETE',
+            isInitialDocsExempt: !isNewStudent,
           },
         },
       },
@@ -536,6 +537,7 @@ export async function bulkCreateStudents(req: Request, res: Response, next: Next
       // Generate random 6-digit numeric password
       const password = Math.floor(100000 + Math.random() * 900000).toString();
       const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      const isNew = req.body.isNewStudent !== undefined ? req.body.isNewStudent : true;
 
       try {
         const user = await prisma.user.create({
@@ -551,6 +553,7 @@ export async function bulkCreateStudents(req: Request, res: Response, next: Next
                 lastName: '',
                 scholarshipCategoryId: group || null,
                 studentStatus: StudentStatus.INCOMPLETE,
+                isInitialDocsExempt: !isNew,
               },
             },
           },

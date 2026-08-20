@@ -134,7 +134,7 @@ export const adminApi = {
   listStudents: (params?: Record<string, string>): Promise<PaginatedResponse<StudentProfile>> =>
     api.get('/admin/students', { params }).then((r) => r.data),
 
-  createStudent: (data: { tcKimlikNo: string; firstName: string; lastName: string; scholarshipCategoryId?: string }) =>
+  createStudent: (data: { tcKimlikNo: string; firstName: string; lastName: string; scholarshipCategoryId?: string; isNewStudent?: boolean }) =>
     api.post('/admin/students', data).then((r) => r.data),
 
   updateStudentProfile: (id: string, data: any) =>
@@ -157,7 +157,7 @@ export const adminApi = {
     }).then((r) => r.data);
   },
 
-  bulkCreateJson: (data: { tcs: string; scholarshipCategoryId: string }) =>
+  bulkCreateJson: (data: { tcs: string; scholarshipCategoryId: string; isNewStudent?: boolean }) =>
     api.post('/admin/students/bulk-create', data).then((r) => r.data),
 
   resetPassword: (id: string): Promise<{ password: string }> =>
