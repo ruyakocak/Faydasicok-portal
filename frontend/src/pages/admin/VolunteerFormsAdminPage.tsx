@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { volunteerApi } from '../../api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -256,8 +256,13 @@ export default function VolunteerFormsAdminPage() {
   const [periodFilter, setPeriodFilter] = useState('');
   const [page, setPage] = useState(1);
   const [selectedForm, setSelectedForm] = useState<VolunteerForm | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const [schema, setSchema] = useState<any>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const toggleRow = (id: string) => {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const loadForms = useCallback(async () => {
     setLoading(true);
@@ -425,6 +430,7 @@ export default function VolunteerFormsAdminPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                <th className="w-10 px-4 py-3"></th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Öğrenci</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Program</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">STK / Proje</th>
@@ -440,8 +446,25 @@ export default function VolunteerFormsAdminPage() {
                 const studentName = form.studentProfile
                   ? `${form.studentProfile.firstName} ${form.studentProfile.lastName}`
                   : form.fullName;
+                const isExpanded = expandedRows[form.id];
+
+                let dynamicFieldsData: any = {};
+                try {
+                  if ((form as any).dynamicFields) {
+                    dynamicFieldsData = JSON.parse((form as any).dynamicFields);
+                  }
+                } catch (e) {}
+
                 return (
-                  <tr key={form.id} className="hover:bg-gray-50 transition-colors">
+                  <React.Fragment key={form.id}>
+                  <tr className={`hover:bg-gray-50 transition-colors ${isExpanded ? 'bg-primary-50/30' : ''}`}>
+                    <td className="px-4 py-3">
+                      <button onClick={() => toggleRow(form.id)} className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors">
+                        <svg viewBox="0 0 24 24" className={`w-5 h-5 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </button>
+                    </td>
                     <td className="px-4 py-3">
                       <p className="font-medium text-gray-900">{studentName}</p>
                       <p className="text-xs text-gray-400">{form.email}</p>
@@ -483,7 +506,34 @@ export default function VolunteerFormsAdminPage() {
                       </button>
                     </td>
                   </tr>
-                );
+                  
+                  {isExpanded && (
+                    <tr className="bg-gray-50/50">
+                      <td colSpan={8} className="p-0">
+                        <div className="px-14 py-4 border-b border-gray-100 shadow-inner">
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Form Yanıtları</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {schema?.fields?.map((f: any) => {
+                              const val = f.isDefault ? (form as any)[f.id] : dynamicFieldsData[f.id];
+                              if (val === undefined || val === null || val === '') return null;
+                              return (
+                                <div key={f.id} className={f.type === 'textarea' ? 'md:col-span-2' : ''}>
+                                  <span className="block text-xs font-medium text-gray-500 mb-1">{f.label}</span>
+                                  <div className="text-sm text-gray-800 bg-white p-2.5 rounded border border-gray-200">
+                                    {val}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {!schema?.fields?.length && (
+                              <div className="text-sm text-gray-500">Bu form için özel soru bulunmuyor.</div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>);
               })}
             </tbody>
           </table>

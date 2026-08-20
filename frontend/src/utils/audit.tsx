@@ -30,7 +30,8 @@ export const moduleLabels: Record<string, string> = {
   Event: 'Eğitim ve Etkinlik',
   Mentor: 'Mentör',
   Announcement: 'Duyuru',
-  ScholarshipCategory: 'Bursiyer Kategorisi'
+  ScholarshipCategory: 'Bursiyer Kategorisi',
+  VolunteerForm: 'Gönüllülük Formu'
 };
 
 export const fieldTranslations: Record<string, string> = {
@@ -115,6 +116,10 @@ export function generateActionSummary(log: AuditLog): React.ReactNode {
     }
   }
   
+  if (log.module === 'VolunteerForm') {
+    if (log.action === 'CREATE') return <>{isStudent ? studentName : (adminName || 'Bir kullanıcı')}, sisteme yeni bir Gönüllülük Formu doldurdu.</>;
+  }
+
   if (log.module === 'Document' || log.action === 'UPLOAD') {
     return <>{isStudent ? studentName : (adminName || 'Bir kullanıcı')}, sisteme yeni bir evrak yükledi.</>;
   }
