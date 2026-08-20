@@ -151,6 +151,22 @@ export default function VolunteerFormPage({ initialProfile }: { isEmbedded?: boo
     return <div className="flex justify-center py-20"><span className="spinner w-8 h-8 border-primary-500" /></div>;
   }
 
+  if (schema && schema.isOpen === false && user?.role === 'STUDENT') {
+    return (
+      <div className="max-w-2xl mx-auto py-12 px-4 sm:px-6 lg:px-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="w-20 h-20 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-6">
+          <svg viewBox="0 0 24 24" className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+        </div>
+        <h2 className="text-2xl font-semibold text-gray-900 mb-2">Form Şu An Açık Değildir</h2>
+        <p className="text-gray-500 mb-6">
+          Şu anda STK gönüllülük formu başvurusu alınmamaktadır. Yeni dönem açıldığında buradan form doldurabilirsiniz.
+        </p>
+      </div>
+    );
+  }
+
   if (submitted) {
     return (
       <div className="max-w-2xl mx-auto py-12 px-4 sm:px-6 lg:px-8 text-center">

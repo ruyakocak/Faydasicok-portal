@@ -116,10 +116,36 @@ export const getVolunteerFormSchema = async (req: Request, res: Response) => {
     const setting = await prisma.systemSetting.findUnique({
       where: { key: 'VOLUNTEER_FORM_SCHEMA' }
     });
-    if (!setting) {
-      return res.status(200).json(DEFAULT_VOLUNTEER_FORM_SCHEMA);
+
+    let schemaData = setting ? JSON.parse(setting.value) : DEFAULT_VOLUNTEER_FORM_SCHEMA;
+    
+    // Check if form is open in any active period
+    const activePeriods = await prisma.documentPeriod.findMany({
+      where: { isVolunteerFormOpen: true, isOpen: true }
+    });
+    
+    let isOpen = false;
+    
+    if (req.user?.role === 'STUDENT') {
+      const profile = await prisma.studentProfile.findUnique({
+        where: { userId: req.user.userId },
+        select: { scholarshipCategoryId: true }
+      });
+      
+      isOpen = activePeriods.some(p => {
+        if (!p.categoryIds) return true;
+        try {
+          const catIds = JSON.parse(p.categoryIds);
+          return profile?.scholarshipCategoryId && catIds.includes(profile.scholarshipCategoryId);
+        } catch {
+          return false;
+        }
+      });
+    } else {
+      isOpen = activePeriods.length > 0;
     }
-    res.status(200).json(JSON.parse(setting.value));
+    
+    res.status(200).json({ ...schemaData, isOpen });
   } catch (error) {
     res.status(500).json({ error: 'Form ayarları getirilirken hata oluştu.' });
   }
