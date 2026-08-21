@@ -79,60 +79,60 @@ export default function StudentDocumentsPage() {
   });
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2.5">
-          <svg viewBox="0 0 24 24" className="w-7 h-7 text-primary-600" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          Belge Yönetim Merkezi
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          İlk kayıt evraklarınızı, dönemlik belgelerinizi ve teslim durumlarını buradan yönetebilirsiniz.
-        </p>
-      </div>
+    <div className="max-w-[1200px] mx-auto space-y-10 pb-20 animate-in fade-in duration-700">
+      
+      {/* ── 1. Clean Header ──────────────────────────────────── */}
+      <section className="relative pt-10 pb-8 border-b border-gray-200/60 flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-4 max-w-2xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-50 border border-primary-100 text-xs font-semibold text-primary-700">
+            <span className="w-2 h-2 rounded-full bg-primary-500 animate-pulse" />
+            Evrak Sistemi
+          </div>
+          <h1 className="text-4xl md:text-5xl font-semibold tracking-tight text-gray-900 leading-tight">
+            Belge Yönetim Merkezi
+          </h1>
+          <p className="text-lg text-gray-500 font-medium">
+            İlk kayıt evraklarınızı, dönemlik belgelerinizi ve teslim durumlarını buradan yönetebilirsiniz.
+          </p>
+        </div>
+      </section>
 
       {/* Deadlines Alert Banner if any pending */}
       {activeDeadlines.length > 0 && (
-        <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-300/80 shadow-xs">
-          <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
-              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <section className="bg-gradient-to-br from-primary-900 to-primary-800 rounded-3xl p-8 md:p-10 text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="space-y-3 max-w-xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-medium text-white/90">
+              Aksiyon Gerekli
             </div>
-            <div className="flex-1">
-              <h2 className="text-sm font-bold text-amber-900">
-                Teslim Edilmesi Gereken {activeDeadlines.length} Açık Belgeniz Bulunuyor
-              </h2>
-              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                {activeDeadlines.map((p) => {
-                  const type = docTypes.find(t => t.code === p.type)?.name || p.type;
-                  const daysLeft = p.endDate ? differenceInDays(new Date(p.endDate), new Date()) : null;
-                  return (
-                    <div key={p.id} className="bg-white/90 p-2.5 rounded-xl border border-amber-200 text-xs">
-                      <div className="font-bold text-gray-900 truncate">{p.label} - {type}</div>
-                      <div className="text-amber-700 font-semibold mt-0.5">
-                        {daysLeft !== null ? `Son ${daysLeft} Gün (${format(new Date(p.endDate!), 'dd.MM.yyyy', { locale: tr })})` : 'Süre devam ediyor'}
-                      </div>
+            <h2 className="text-3xl font-semibold tracking-tight">Teslim Edilmesi Gereken {activeDeadlines.length} Belgeniz Bulunuyor</h2>
+            <div className="mt-4 flex flex-col sm:flex-row gap-3">
+              {activeDeadlines.map((p) => {
+                const type = docTypes.find(t => t.code === p.type)?.name || p.type;
+                const daysLeft = p.endDate ? differenceInDays(new Date(p.endDate), new Date()) : null;
+                return (
+                  <div key={p.id} className="bg-white/10 p-3 rounded-2xl border border-white/20 text-sm">
+                    <div className="font-semibold text-white truncate">{p.label} - {type}</div>
+                    <div className="text-primary-100 font-medium mt-1">
+                      {daysLeft !== null ? `Son ${daysLeft} Gün (${format(new Date(p.endDate!), 'dd.MM.yyyy', { locale: tr })})` : 'Süre devam ediyor'}
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Main Documents Tab Component */}
-      <div className="card overflow-hidden bg-white shadow-xs border border-gray-200">
-        <div className="p-6">
-          <DocumentsTab
-            profile={profile}
-            documents={documents}
-            periods={periods}
-            onUpload={loadData}
-            readOnly={false}
-          />
-        </div>
-      </div>
+      <section className="bg-white rounded-3xl p-8 border border-gray-200/60 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)]">
+        <DocumentsTab
+          profile={profile}
+          documents={documents}
+          periods={periods}
+          onUpload={loadData}
+          readOnly={false}
+        />
+      </section>
     </div>
   );
 }

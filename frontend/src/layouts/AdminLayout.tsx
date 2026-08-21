@@ -185,44 +185,40 @@ export default function AdminLayout() {
         </nav>
 
         {/* Bottom user area */}
-        <div className="border-t border-gray-200/80 p-3 space-y-1 bg-white/40">
-          <div className="flex items-center gap-2.5 mb-2">
-            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm flex-shrink-0">
+        <div className="border-t border-slate-200/70 p-4 space-y-2 bg-white/40">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-sm flex-shrink-0 shadow-sm border border-primary-200">
               {(user?.username || user?.email || 'A')[0].toUpperCase()}
             </div>
             <div className="overflow-hidden">
-              <div className="text-sm font-medium text-gray-900 truncate">
+              <div className="text-sm font-bold text-gray-900 truncate tracking-tight">
                 {user?.username || user?.email || 'Admin'}
               </div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 {user?.role === 'ADMIN' ? 'Yönetici' : 'Değerlendirici'}
               </div>
             </div>
           </div>
           <button
             onClick={() => setIsPasswordModalOpen(true)}
-            className="btn-ghost btn-sm w-full justify-start text-gray-600 text-xs"
+            className="w-full py-2 px-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 text-xs font-bold text-gray-700 transition-all flex items-center justify-center gap-2 shadow-sm"
           >
-            <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 0121 9z" />
-            </svg>
+            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             Şifre Değiştir
           </button>
           <button
             onClick={handleLogout}
-            className="btn-ghost btn-sm w-full justify-start text-gray-600 text-xs"
+            className="w-full py-2 px-3 rounded-xl border border-red-100 bg-red-50 hover:bg-red-100 text-xs font-bold text-red-600 transition-all flex items-center justify-center gap-2 shadow-sm"
           >
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
-            </svg>
-            Çıkış Yap
+            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Güvenli Çıkış
           </button>
         </div>
       </aside>
 
-      {/* Main */}
-      <main className="flex-1 ml-56 min-w-0 overflow-y-auto">
-        <div className="p-6 max-w-full">
+      {/* Main Content */}
+      <main className="flex-1 ml-56 flex flex-col min-w-0 bg-[#FAFAFA] min-h-screen">
+        <div className="flex-1 p-6 md:p-8 lg:p-10 w-full">
           <Outlet />
         </div>
       </main>

@@ -26,7 +26,7 @@ export default function StudentLayout() {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [unreadAnnouncementsCount, setUnreadAnnouncementsCount] = useState(0);
-  const [studentName, setStudentName] = useState<string>('');
+  const [studentProfile, setStudentProfile] = useState<any>(null);
 
   const profileId = user?.profileId;
 
@@ -40,7 +40,7 @@ export default function StudentLayout() {
         ]);
 
         if (profile) {
-          setStudentName(`${profile.firstName} ${profile.lastName}`);
+          setStudentProfile(profile);
         }
 
         // Calculate unread announcements
@@ -181,14 +181,24 @@ export default function StudentLayout() {
         {/* Bottom User Profile Section */}
         <div className="border-t border-slate-200/70 p-3 bg-white/40 backdrop-blur-md space-y-1.5">
           <div className="flex items-center gap-2.5 mb-2 px-1">
-            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-sm flex-shrink-0">
-              {(studentName || user?.username || 'B')[0].toUpperCase()}
+            <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center text-primary-700 font-bold text-sm flex-shrink-0 shadow-sm border border-gray-200 overflow-hidden">
+              {studentProfile?.photoPath ? (
+                <img src={`/${studentProfile.photoPath}`} alt={studentProfile.firstName} className="w-full h-full object-cover" />
+              ) : studentProfile ? (
+                <img 
+                  src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${studentProfile.user?.tcKimlikNo || studentProfile.id}`} 
+                  alt="Avatar" 
+                  className="w-full h-full object-cover" 
+                />
+              ) : (
+                (user?.username || 'B')[0].toUpperCase()
+              )}
             </div>
             <div className="overflow-hidden">
-              <div className="text-xs font-bold text-gray-900 truncate">
-                {studentName || user?.username || 'Bursiyer'}
+              <div className="text-xs font-bold text-gray-900 truncate tracking-tight">
+                {studentProfile ? `${studentProfile.firstName} ${studentProfile.lastName}` : (user?.username || 'Bursiyer')}
               </div>
-              <div className="text-[10px] text-gray-500 font-medium truncate">
+              <div className="text-[10px] text-gray-500 font-medium truncate uppercase tracking-wider">
                 Bursiyer Öğrenci
               </div>
             </div>

@@ -130,6 +130,7 @@ model StudentProfile {
   highSchoolName     String?
   highSchoolCity     String?
   highSchoolGradYear Int?
+  graduationYear     Int? // Mezuniyet yılı
 
   isInitialDocsExempt Boolean  @default(false) // True for existing students who don't need to submit onboarding docs
 
