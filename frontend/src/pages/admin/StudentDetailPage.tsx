@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { studentApi, documentApi, approvalApi, adminApi } from '../../api';
 import type { StudentProfile, Document as DocFile, DocumentPeriod, ApprovableChange } from '../../types';
 import { PersonalTab, EducationTab, DocumentsTab, ActivityTab } from '../../components/ProfileTabs';
@@ -9,6 +9,7 @@ const TABS = ['Kişisel Bilgiler', 'Eğitim Bilgileri', 'Dokümanlar', 'Aktivite
 
 export default function StudentDetailPage() {
   const { profileId } = useParams<{ profileId: string }>();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [documents, setDocuments] = useState<DocFile[]>([]);
   const [periods, setPeriods] = useState<DocumentPeriod[]>([]);
@@ -23,6 +24,21 @@ export default function StudentDetailPage() {
   const [selectedMentorId, setSelectedMentorId] = useState<string>('');
   const [assigningMentor, setAssigningMentor] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function confirmDeleteStudent() {
+    if (!profile) return;
+    setDeleting(true);
+    try {
+      await adminApi.deleteStudent(profile.id);
+      toast.success('Bursiyer ve tüm verileri başarıyla silindi.');
+      navigate('/admin/students');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Bursiyer silinirken hata oluştu.');
+      setDeleting(false);
+    }
+  }
 
   async function handleResetPasswordClick() {
     setShowResetModal(true);
@@ -211,6 +227,12 @@ export default function StudentDetailPage() {
                 {profile.isInitialDocsExempt ? 'Muafiyeti Kaldır' : 'Muaf Olarak İşaretle'}
               </button>
             )}
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="btn-secondary btn-sm text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 py-1 px-2.5 text-xs w-full justify-center"
+            >
+              Bursiyeri Sil
+            </button>
             {newPass && (
               <div className="bg-green-50 text-green-800 border border-green-200 rounded p-2 text-xs font-mono mt-1 text-center w-full">
                 Yeni: <span className="font-bold text-sm bg-white px-1.5 py-0.5 rounded border border-green-300 select-all">{newPass}</span>
@@ -422,6 +444,46 @@ export default function StudentDetailPage() {
               <button onClick={confirmResetPassword} className="btn-primary bg-amber-600 hover:bg-amber-700 focus:ring-amber-500 px-5" disabled={resetting}>
                 {resetting ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Evet, Sıfırla'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Student Confirmation Modal */}
+      {showDeleteModal && profile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+                <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 text-center mb-2">Bursiyeri Silmek İstiyor musunuz?</h3>
+              <p className="text-sm text-gray-500 text-center mb-6">
+                <span className="font-semibold text-gray-800">
+                  {profile.firstName} {profile.lastName}
+                </span>
+                {profile.user?.tcKimlikNo ? ` (TC: ${profile.user.tcKimlikNo})` : ''} adlı bursiyer, giriş hesabı, belgeleri ve tüm profil verileriyle birlikte kalıcı olarak silinecektir. Bu işlem geri alınamaz.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={deleting}
+                  className="btn-secondary flex-1 py-2 text-xs"
+                >
+                  İptal
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteStudent}
+                  disabled={deleting}
+                  className="btn-danger flex-1 bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2 text-xs shadow-xs"
+                >
+                  {deleting ? <span className="spinner border-white/30 border-t-white w-4 h-4 mx-auto" /> : 'Evet, Kalıcı Olarak Sil'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -88,6 +88,13 @@ model StudentProfile {
   studentStatus         String               @default("INCOMPLETE") // INCOMPLETE, ACTIVE, PASSIVE, GRADUATED
   enrollmentStatus      String               @default("ENROLLED") // ENROLLED, ON_LEAVE, GRADUATED, DROPPED
 
+  // ── Ek Kişisel / Sicil Bilgileri ──
+  userType      String? // Tür: Bursiyer / Mentör / Gönüllü vb.
+  sicilNo       String? // Sicil No: (ilk 4 hane giriş yılı, 5. hane tür, 6-8 sıra no)
+  program       String? // Program adı
+  inciName      String? // Otomatik İnci Adı
+  referenceInfo String? // Referans Bilgisi / Hasçelik Çalışanı vb.
+
   // ── Contact (directly editable) ──
   phone   String?
   email   String?
@@ -120,17 +127,47 @@ model StudentProfile {
   homeOwnership       String? // Kira/Mülk
   homeAddress         String?
   familyDescription   String?
+  familyCity          String? // Aile İkamet Şehri
+  parentsStatus       String? // Anne/Baba Sağlık/Durum Bilgisi
+  familyPhone         String? // Aile İletişim Telefonu
 
   // ── Education Info ──
-  universityName     String?
-  faculty            String?
-  department         String?
-  grade              Int? // Sınıf: 1,2,3,4,5,6
-  universityType     String? // Devlet/Vakıf
-  highSchoolName     String?
-  highSchoolCity     String?
-  highSchoolGradYear Int?
-  graduationYear     Int? // Mezuniyet yılı
+  universityName          String?
+  faculty                 String?
+  department              String?
+  grade                   Int? // Sınıf: 1,2,3,4,5,6
+  universityType          String? // Devlet/Vakıf
+  universityStartYear     Int? // Okul Başlangıç Yılı
+  universityPlacementRank Int? // Üniversite Yerleştirme Sırası
+  hadPrepClass            String? // Üni Hazırlık Okudu mu? (Evet/Hayır)
+  universityCity          String? // Okul Şehri
+  accommodationType       String? // Konaklama (Yurt, Öğrenci Evi, Aile Yanı vb.)
+  isContractSigned        Boolean? @default(false) // Bursiyer Sözleşmesini İmzaladı mı?
+  highSchoolName          String?
+  highSchoolCity          String?
+  highSchoolGradYear      Int?
+  graduationYear          Int? // Mezuniyet yılı
+  graduatedAt             DateTime? // Mezuniyete aktarılma tarihi
+
+  // ── Askı Bilgisi Alanı ──
+  suspensionStartDate DateTime? // Askı Başlangıcı
+  suspensionEndDate   DateTime? // Askı Sonu
+  suspensionNote      String? // Askı Notu
+
+  // ── Erasmus Bilgileri ──
+  erasmusStartDate     DateTime? // Erasmus'a Gidiş Tarihi
+  erasmusEndDate       DateTime? // Erasmus'dan Dönüş Tarihi
+  erasmusSchoolCountry String? // Erasmus Ülkesi / Okulu
+
+  // ── Mezun İletişimi ──
+  graduateCity    String? // Mezun Şehri
+  graduateCompany String? // Mezun Şirketi
+  linkedinUrl     String? // Linkedin Bağlantı
+  graduateNote    String? // MZN NOT
+
+  // ── Mentörlük & İlgi Alanları ──
+  interests         String? // İlgi Alanları
+  mentorExpectation String? // Nasıl Bir Mentör İster
 
   isInitialDocsExempt Boolean  @default(false) // True for existing students who don't need to submit onboarding docs
 

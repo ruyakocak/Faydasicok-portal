@@ -44,6 +44,12 @@ export interface StudentProfile {
   photoPath?: string;
   iban?: string;
   bankName?: string;
+  // ── Ek Kişisel / Sicil Bilgileri ──
+  userType?: string;
+  sicilNo?: string;
+  program?: string;
+  inciName?: string;
+  referenceInfo?: string;
   // Family
   fatherName?: string;
   fatherAge?: number;
@@ -64,17 +70,42 @@ export interface StudentProfile {
   homeOwnership?: string;
   homeAddress?: string;
   familyDescription?: string;
+  familyCity?: string;
+  parentsStatus?: string;
+  familyPhone?: string;
   // Education
   universityName?: string;
   faculty?: string;
   department?: string;
   grade?: number;
   universityType?: string;
+  universityStartYear?: number;
+  universityPlacementRank?: number;
+  hadPrepClass?: string;
+  universityCity?: string;
+  accommodationType?: string;
+  isContractSigned?: boolean;
   highSchoolName?: string;
   highSchoolCity?: string;
   highSchoolGradYear?: number;
   graduationYear?: number;
   graduatedAt?: string;
+  // Askı Bilgisi
+  suspensionStartDate?: string;
+  suspensionEndDate?: string;
+  suspensionNote?: string;
+  // Erasmus
+  erasmusStartDate?: string;
+  erasmusEndDate?: string;
+  erasmusSchoolCountry?: string;
+  // Mezun
+  graduateCity?: string;
+  graduateCompany?: string;
+  linkedinUrl?: string;
+  graduateNote?: string;
+  // Mentörlük & İlgi Alanları
+  interests?: string;
+  mentorExpectation?: string;
   // Relations
   user?: Partial<User>;
   approvableChanges?: ApprovableChange[];

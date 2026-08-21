@@ -6,8 +6,11 @@ import {
   createStudent,
   bulkCreateStudents,
   updateStudentProfile,
+  deleteStudent,
   uploadStudentPhoto,
   getCsvTemplate,
+  importStudentsFromExcel,
+  getExcelTemplate,
   listPeriods,
   createPeriod,
   updatePeriod,
@@ -58,11 +61,14 @@ adminRouter.get('/dashboard', requireAdminOrReviewer, getDashboard);
 adminRouter.get('/students', requireAdminOrReviewer, listStudents);
 adminRouter.post('/students', requireAdmin, createStudent);
 adminRouter.patch('/students/:id', requireAdminOrReviewer, updateStudentProfile);
+adminRouter.delete('/students/:id', requireAdmin, deleteStudent);
 adminRouter.post('/students/:id/photo', requireAdminOrReviewer, upload.single('file'), uploadStudentPhoto);
 adminRouter.post('/students/:id/reset-password', requireAdminOrReviewer, resetStudentPassword);
 adminRouter.post('/students/bulk-remind', requireAdminOrReviewer, bulkRemindStudents);
 adminRouter.post('/students/bulk-create', requireAdmin, multer({ storage: multer.memoryStorage() }).single('file'), bulkCreateStudents);
 adminRouter.get('/students/csv-template', requireAdmin, getCsvTemplate);
+adminRouter.post('/students/import-excel', requireAdmin, multer({ storage: multer.memoryStorage() }).single('file'), importStudentsFromExcel);
+adminRouter.get('/students/excel-template', requireAdmin, getExcelTemplate);
 adminRouter.get('/reports/students-export', requireAdminOrReviewer, exportStudentsReport);
 
 // Graduates — admin + reviewer

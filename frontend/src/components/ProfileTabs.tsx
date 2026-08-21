@@ -171,14 +171,19 @@ export function PersonalTab({ profile, onSave, readOnly }: {
 
       <dl>
         <FieldRow label="TC Kimlik No" value={profile.user?.tcKimlikNo} />
-        <FieldRow label="Ad" value={profile.firstName} editing={editing} name="firstName" onChange={handleChange} />
-        <FieldRow label="Soyad" value={profile.lastName} editing={editing} name="lastName" onChange={handleChange} />
-        <FieldRow label="Cinsiyet" value={profile.gender} editing={editing} name="gender" onChange={handleChange}
+        <FieldRow label="Sicil No" value={profile.sicilNo} editing={editing && isAdmin} name="sicilNo" onChange={handleChange} />
+        <FieldRow label="Üye / Bursiyer Türü" value={profile.userType} editing={editing && isAdmin} name="userType" onChange={handleChange} />
+        <FieldRow label="Program" value={profile.program} editing={editing && isAdmin} name="program" onChange={handleChange} />
+        <FieldRow label="Otomatik İnci Adı" value={profile.inciName} editing={editing && isAdmin} name="inciName" onChange={handleChange} />
+        <FieldRow label="Referans Bilgisi" value={profile.referenceInfo} editing={editing && isAdmin} name="referenceInfo" onChange={handleChange} />
+        <FieldRow label="Ad" value={profile.firstName} editing={editing && isAdmin} name="firstName" onChange={handleChange} />
+        <FieldRow label="Soyad" value={profile.lastName} editing={editing && isAdmin} name="lastName" onChange={handleChange} />
+        <FieldRow label="Cinsiyet" value={profile.gender} editing={editing && isAdmin} name="gender" onChange={handleChange}
           options={[{ value: '', label: 'Seçiniz' }, { value: 'Erkek', label: 'Erkek' }, { value: 'Kadın', label: 'Kadın' }]} />
         <FieldRow label="Doğum Tarihi" value={profile.birthDate ? format(new Date(profile.birthDate), 'dd.MM.yyyy') : null}
           editing={editing} name="birthDate" type="date" onChange={handleChange} />
         <FieldRow label="Doğum Yeri" value={profile.birthPlace} editing={editing} name="birthPlace" onChange={handleChange} />
-        {editing ? (
+        {editing && isAdmin ? (
           <FieldRow 
             label="Bursiyer Kategorisi" 
             value={formData.scholarshipCategoryId || profile.scholarshipCategoryId || ''} 
@@ -193,6 +198,14 @@ export function PersonalTab({ profile, onSave, readOnly }: {
         ) : (
           <FieldRow label="Bursiyer Kategorisi" value={profile.scholarshipCategory?.name || 'Belirtilmemiş'} />
         )}
+        <FieldRow 
+          label="Bursiyer Sözleşmesi" 
+          value={profile.isContractSigned ? 'İmzalandı' : 'İmzalanmadı'} 
+          editing={editing && isAdmin} 
+          name="isContractSigned" 
+          onChange={handleChange}
+          options={[{ value: 'true', label: 'İmzalandı' }, { value: 'false', label: 'İmzalanmadı' }]} 
+        />
         {isAdmin ? (
           <FieldRow label="Kayıt Durumu" value={profile.studentStatus} editing={editing} name="studentStatus" onChange={handleChange}
             options={[{ value: 'INCOMPLETE', label: 'Tamamlanmadı' }, { value: 'ACTIVE', label: 'Aktif' }, { value: 'PASSIVE', label: 'Pasif' }, { value: 'GRADUATED', label: 'Mezun' }]} />
@@ -578,6 +591,9 @@ export function FamilyTab({ profile, onSave, readOnly }: {
       <div className="mt-6">
         <h4 className="text-sm font-semibold text-gray-700 mb-3 pb-2 border-b border-gray-200">Aile Genel Bilgileri</h4>
         <dl>
+          <FieldRow label="Aile İkamet Şehri" value={profile.familyCity} editing={editing} name="familyCity" onChange={handleChange} />
+          <FieldRow label="Anne/Baba Durumu" value={profile.parentsStatus} editing={editing} name="parentsStatus" onChange={handleChange} />
+          <FieldRow label="Aile İletişim Telefonu" value={profile.familyPhone} editing={editing} name="familyPhone" onChange={handleChange} />
           <FieldRow label="Aile Birey Sayısı" value={profile.familyMemberCount} editing={editing} name="familyMemberCount" type="number" onChange={handleChange} />
           <FieldRow label="Kardeş Sayısı" value={profile.siblingCount} editing={editing} name="siblingCount" type="number" onChange={handleChange} />
           <FieldRow label="Öğrenimdeki Kardeş" value={profile.siblingsInEducation} editing={editing} name="siblingsInEducation" type="number" onChange={handleChange} />
@@ -598,6 +614,8 @@ export function EducationTab({ profile, onSave, readOnly }: {
   onSave?: (data: Partial<StudentProfile>) => Promise<void>;
   readOnly?: boolean;
 }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'REVIEWER';
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<Partial<StudentProfile>>({});
@@ -618,12 +636,19 @@ export function EducationTab({ profile, onSave, readOnly }: {
     }
   }
 
+  const hasSuspensionInfo = !!(profile.suspensionStartDate || profile.suspensionEndDate || profile.suspensionNote);
+  const hasErasmusInfo = !!(profile.erasmusStartDate || profile.erasmusEndDate || profile.erasmusSchoolCountry);
+  const hasGraduateInfo = !!(profile.graduateCity || profile.graduateCompany || profile.linkedinUrl || profile.graduateNote || profile.studentStatus === 'GRADUATED');
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-medium">Eğitim Bilgileri</h3>
+        <h3 className="font-medium text-gray-900">Eğitim Bilgileri</h3>
         {!readOnly && !editing && (
-          <button onClick={() => setEditing(true)} className="btn-secondary btn-sm">Düzenle</button>
+          <button onClick={() => setEditing(true)} className="btn-secondary btn-sm">
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+            Düzenle
+          </button>
         )}
         {!readOnly && editing && (
           <div className="flex gap-2">
@@ -644,7 +669,76 @@ export function EducationTab({ profile, onSave, readOnly }: {
           options={[1, 2, 3, 4, 5, 6].map(n => ({ value: String(n), label: `${n}. Sınıf` }))} />
         <FieldRow label="Üniversite Türü" value={profile.universityType} editing={editing} name="universityType" onChange={handleChange}
           options={[{ value: '', label: 'Seçiniz' }, { value: 'Devlet', label: 'Devlet' }, { value: 'Vakıf', label: 'Vakıf' }]} />
+        <FieldRow label="Okul Şehri" value={profile.universityCity} editing={editing} name="universityCity" onChange={handleChange} />
+        <FieldRow label="Okul Başlangıç Yılı" value={profile.universityStartYear} editing={editing} name="universityStartYear" type="number" onChange={handleChange} />
+        <FieldRow label="YKS Yerleştirme Sırası" value={profile.universityPlacementRank} editing={editing} name="universityPlacementRank" type="number" onChange={handleChange} />
+        <FieldRow label="Hazırlık Okudu Mu?" value={profile.hadPrepClass} editing={editing} name="hadPrepClass" onChange={handleChange}
+          options={[{ value: '', label: 'Seçiniz' }, { value: 'Evet', label: 'Evet' }, { value: 'Hayır', label: 'Hayır' }]} />
+        <FieldRow label="Konaklama Türü" value={profile.accommodationType} editing={editing} name="accommodationType" onChange={handleChange} />
       </dl>
+
+      {/* Askı Bilgisi (Sadece Admin düzenleyebilir; varsa öğrenci görüntüleyebilir) */}
+      {(isAdmin || hasSuspensionInfo) && (
+        <div className="mt-6">
+          <h4 className="text-sm font-semibold text-gray-700 mb-3 pb-2 border-b border-gray-200 flex items-center justify-between">
+            <span className="flex items-center gap-2"><span>⏸️</span> Askı / İzin Durumu</span>
+            {!isAdmin && <span className="text-[11px] font-normal text-gray-400">Yalnızca yönetici tarafından güncellenebilir</span>}
+          </h4>
+          <dl>
+            <FieldRow label="Askı Başlangıcı" value={profile.suspensionStartDate ? format(new Date(profile.suspensionStartDate), 'dd.MM.yyyy') : null}
+              editing={editing && isAdmin} name="suspensionStartDate" type="date" onChange={handleChange} />
+            <FieldRow label="Askı Sonu" value={profile.suspensionEndDate ? format(new Date(profile.suspensionEndDate), 'dd.MM.yyyy') : null}
+              editing={editing && isAdmin} name="suspensionEndDate" type="date" onChange={handleChange} />
+            <FieldRow label="Askı Notu" value={profile.suspensionNote} editing={editing && isAdmin} name="suspensionNote" type="textarea" onChange={handleChange} />
+          </dl>
+        </div>
+      )}
+
+      {/* Erasmus Bilgileri (Sadece Admin düzenleyebilir; varsa öğrenci görüntüleyebilir) */}
+      {(isAdmin || hasErasmusInfo) && (
+        <div className="mt-6">
+          <h4 className="text-sm font-semibold text-gray-700 mb-3 pb-2 border-b border-gray-200 flex items-center justify-between">
+            <span className="flex items-center gap-2"><span>🌍</span> Erasmus Bilgileri</span>
+            {!isAdmin && <span className="text-[11px] font-normal text-gray-400">Yalnızca yönetici tarafından güncellenebilir</span>}
+          </h4>
+          <dl>
+            <FieldRow label="Erasmus Ülkesi / Okulu" value={profile.erasmusSchoolCountry} editing={editing && isAdmin} name="erasmusSchoolCountry" onChange={handleChange} />
+            <FieldRow label="Erasmus'a Gidiş Tarihi" value={profile.erasmusStartDate ? format(new Date(profile.erasmusStartDate), 'dd.MM.yyyy') : null}
+              editing={editing && isAdmin} name="erasmusStartDate" type="date" onChange={handleChange} />
+            <FieldRow label="Erasmus'dan Dönüş Tarihi" value={profile.erasmusEndDate ? format(new Date(profile.erasmusEndDate), 'dd.MM.yyyy') : null}
+              editing={editing && isAdmin} name="erasmusEndDate" type="date" onChange={handleChange} />
+          </dl>
+        </div>
+      )}
+
+      {/* Mezuniyet & İş Bilgileri (Sadece Admin düzenleyebilir; varsa öğrenci görüntüleyebilir) */}
+      {(isAdmin || hasGraduateInfo) && (
+        <div className="mt-6">
+          <h4 className="text-sm font-semibold text-gray-700 mb-3 pb-2 border-b border-gray-200 flex items-center justify-between">
+            <span className="flex items-center gap-2"><span>🎓</span> Mezun İletişimi & Kariyer</span>
+            {!isAdmin && <span className="text-[11px] font-normal text-gray-400">Yalnızca yönetici tarafından güncellenebilir</span>}
+          </h4>
+          <dl>
+            <FieldRow label="Mezun Şehri" value={profile.graduateCity} editing={editing && isAdmin} name="graduateCity" onChange={handleChange} />
+            <FieldRow label="Mezun Şirketi" value={profile.graduateCompany} editing={editing && isAdmin} name="graduateCompany" onChange={handleChange} />
+            <FieldRow label="Linkedin Bağlantısı" value={profile.linkedinUrl ? (
+              <a href={profile.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">{profile.linkedinUrl}</a>
+            ) : null} editing={editing && isAdmin} name="linkedinUrl" onChange={handleChange} />
+            <FieldRow label="Mezun Notu (MZN NOT)" value={profile.graduateNote} editing={editing && isAdmin} name="graduateNote" type="textarea" onChange={handleChange} />
+          </dl>
+        </div>
+      )}
+
+      {/* Mentörlük & İlgi Alanları */}
+      <div className="mt-6">
+        <h4 className="text-sm font-semibold text-gray-700 mb-3 pb-2 border-b border-gray-200 flex items-center gap-2">
+          <span>🤝</span> Mentörlük & İlgi Alanları
+        </h4>
+        <dl>
+          <FieldRow label="İlgi Alanları" value={profile.interests} editing={editing} name="interests" type="textarea" onChange={handleChange} />
+          <FieldRow label="Nasıl Bir Mentör İster?" value={profile.mentorExpectation} editing={editing} name="mentorExpectation" type="textarea" onChange={handleChange} />
+        </dl>
+      </div>
     </div>
   );
 }

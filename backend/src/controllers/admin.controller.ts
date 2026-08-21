@@ -399,7 +399,7 @@ export async function updateStudentProfile(req: Request, res: Response, next: Ne
     });
 
     // Parse numeric fields
-    ['grade', 'fatherAge', 'fatherIncome', 'motherAge', 'motherIncome', 'familyMemberCount', 'siblingCount', 'siblingsInEducation', 'highSchoolGradYear'].forEach(key => {
+    ['grade', 'fatherAge', 'fatherIncome', 'motherAge', 'motherIncome', 'familyMemberCount', 'siblingCount', 'siblingsInEducation', 'highSchoolGradYear', 'graduationYear'].forEach(key => {
       if (profileData[key] !== undefined) {
         profileData[key] = profileData[key] === '' ? null : Number(profileData[key]);
       }
@@ -1228,7 +1228,50 @@ export async function assignMentor(req: Request, res: Response, next: NextFuncti
 // ── Export Students Report ───────────────────────────────────────────
 export async function exportStudentsReport(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const {
+      search, university, grade, studentStatus, enrollmentStatus,
+      hasPending, scholarshipGroup, includeGraduates,
+    } = req.query;
+
+    const where: any = {};
+
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search as string, mode: 'insensitive' } },
+        { lastName: { contains: search as string, mode: 'insensitive' } },
+        { user: { tcKimlikNo: { contains: search as string } } },
+      ];
+    }
+    if (university) where.universityName = { contains: university as string, mode: 'insensitive' };
+    if (grade) where.grade = parseInt(grade as string);
+    
+    if (studentStatus) {
+      where.studentStatus = studentStatus;
+    } else {
+      if (includeGraduates !== 'true') {
+        where.studentStatus = { not: 'GRADUATED' };
+      }
+    }
+    
+    if (enrollmentStatus) where.enrollmentStatus = enrollmentStatus;
+    if (scholarshipGroup) where.scholarshipCategoryId = scholarshipGroup;
+
+    if (hasPending === 'true') {
+      const withPending = await prisma.approvableChange.findMany({
+        where: { status: 'PENDING' },
+        select: { studentProfileId: true },
+        distinct: ['studentProfileId'],
+      });
+      const profileIds = withPending.map((p) => p.studentProfileId);
+      if (profileIds.length === 0) {
+         where.id = { in: [] };
+      } else {
+         where.id = { in: profileIds };
+      }
+    }
+
     const students = await prisma.studentProfile.findMany({
+      where,
       include: {
         user: { select: { tcKimlikNo: true, email: true, isActive: true } },
         scholarshipCategory: true,
@@ -1309,58 +1352,85 @@ export async function exportStudentsReport(req: Request, res: Response, next: Ne
     // ───────────────────────────────────────────────
     const allStudentsSheet = workbook.addWorksheet('Tüm Bursiyerler');
     allStudentsSheet.columns = [
-      { header: 'T.C. Kimlik No', key: 'tc', width: 20 },
+      { header: 'Sicil No', key: 'sicilNo', width: 40 },
+      { header: 'Program', key: 'program', width: 25 },
       { header: 'Adı', key: 'firstName', width: 20 },
       { header: 'Soyadı', key: 'lastName', width: 20 },
-      { header: 'Bursiyer Kategorisi', key: 'category', width: 28 },
-      { header: 'Burs Durumu', key: 'studentStatus', width: 18 },
-      { header: 'İlk Kayıt Muafiyeti', key: 'initialDocsExempt', width: 24 },
-      { header: 'Burs Başlangıç Tarihi', key: 'scholarshipDate', width: 24 },
-      { header: 'Telefon Numarası', key: 'phone', width: 20 },
-      { header: 'E-Posta Adresi', key: 'email', width: 34 },
-      { header: 'İkametgâh Adresi', key: 'address', width: 42 },
-      { header: 'Nüfusa Kayıtlı İl', key: 'registeredCity', width: 22 },
-      { header: 'Cinsiyet', key: 'gender', width: 14 },
-      { header: 'Doğum Tarihi', key: 'birthDate', width: 18 },
-      { header: 'Doğum Yeri', key: 'birthPlace', width: 20 },
-      { header: 'Banka Adı', key: 'bankName', width: 26 },
-      { header: 'IBAN Numarası', key: 'iban', width: 36 },
-      { header: 'Üniversite', key: 'universityName', width: 36 },
-      { header: 'Üniversite Türü', key: 'universityType', width: 20 },
-      { header: 'Fakülte', key: 'faculty', width: 30 },
-      { header: 'Bölüm', key: 'department', width: 32 },
-      { header: 'Sınıf', key: 'grade', width: 14 },
-      { header: 'Mentör Adı Soyadı', key: 'mentorName', width: 28 },
-      { header: 'Sisteme Kayıt Tarihi', key: 'createdAt', width: 24 },
+      { header: 'Cinsiyet', key: 'gender', width: 15 },
+      { header: 'TCKN', key: 'tc', width: 20 },
+      { header: 'IBAN', key: 'iban', width: 35 },
+      { header: 'Email', key: 'email', width: 35 },
+      { header: 'Telefon', key: 'phone', width: 20 },
+      { header: 'Otomatik İnci Adı', key: 'inciName', width: 25 },
+      { header: 'Doğum Tarihi', key: 'birthDate', width: 20 },
+      { header: 'Aile İkamet Şehri', key: 'familyCity', width: 25 },
+      { header: 'Anne/Baba Sağ', key: 'parentsStatus', width: 25 },
+      { header: 'Referans Bilgisi / Hasçelik Çalışanı vb.', key: 'referenceInfo', width: 40 },
+      { header: 'Aile İletişim Telefonu', key: 'familyPhone', width: 25 },
+      { header: 'Okulu', key: 'universityName', width: 35 },
+      { header: 'Bölümü', key: 'department', width: 30 },
+      { header: 'Sınıfı', key: 'grade', width: 15 },
+      { header: 'Okul Başlangıç Yılı', key: 'universityStartYear', width: 20 },
+      { header: 'Üniversite Yerleştirme Sırası', key: 'universityPlacementRank', width: 25 },
+      { header: 'Üni.Haz.Okudu mu?', key: 'hadPrepClass', width: 20 },
+      { header: 'Okul Şehri', key: 'universityCity', width: 20 },
+      { header: 'Konaklama', key: 'accommodationType', width: 25 },
+      { header: 'Bursiyer Sözleşmesini İmzaladı mı?', key: 'isContractSigned', width: 25 },
+      { header: 'Son Durumu', key: 'studentStatus', width: 20 },
+      { header: 'Askı Baslangıcı', key: 'suspensionStartDate', width: 20 },
+      { header: 'Askı Sonu', key: 'suspensionEndDate', width: 20 },
+      { header: 'Askı notu', key: 'suspensionNote', width: 30 },
+      { header: 'Erasmus\'a Gidiş Tarihi', key: 'erasmusStartDate', width: 20 },
+      { header: 'Erasmus\'dan Dönüş Tarihi', key: 'erasmusEndDate', width: 20 },
+      { header: 'Erasmus Ülkesi/ Okulu', key: 'erasmusSchoolCountry', width: 25 },
+      { header: 'Mezun Şehri', key: 'graduateCity', width: 20 },
+      { header: 'Mezun Şirketi', key: 'graduateCompany', width: 25 },
+      { header: 'Linkedin Bağlantı', key: 'linkedinUrl', width: 35 },
+      { header: 'MZN NOT', key: 'graduateNote', width: 30 },
+      { header: 'İlgi Alanları', key: 'interests', width: 35 },
+      { header: 'Nasıl Bir Mentör İster', key: 'mentorExpectation', width: 35 }
     ];
 
-    students.forEach((s) => {
-      const mentorFullName = s.mentor ? `${s.mentor.firstName} ${s.mentor.lastName}`.trim() : 'Atama Yapılmadı';
-
+        students.forEach((s) => {
       allStudentsSheet.addRow({
-        tc: s.user?.tcKimlikNo || '',
+        userType: s.userType || '',
+        sicilNo: s.sicilNo || '',
+        program: s.scholarshipCategory?.name || s.program || 'Tanımsız / Genel',
         firstName: s.firstName || '',
         lastName: s.lastName || '',
-        category: s.scholarshipCategory?.name || 'Tanımsız / Genel',
-        studentStatus: statusTranslations[s.studentStatus] || s.studentStatus || '—',
-        initialDocsExempt: s.isInitialDocsExempt ? 'Muaf (Eski Bursiyer)' : 'Zorunlu',
-        scholarshipDate: s.scholarshipDate ? format(new Date(s.scholarshipDate), 'dd.MM.yyyy') : '—',
-        phone: s.phone || '',
-        email: s.user?.email || s.email || '',
-        address: s.address || '',
-        registeredCity: s.registeredCity || '',
         gender: s.gender || '',
-        birthDate: s.birthDate ? format(new Date(s.birthDate), 'dd.MM.yyyy') : '',
-        birthPlace: s.birthPlace || '',
-        bankName: s.bankName || '',
+        tc: s.user?.tcKimlikNo || '',
         iban: s.iban || '',
+        email: s.user?.email || s.email || '',
+        phone: s.phone || '',
+        inciName: s.inciName || '',
+        birthDate: s.birthDate ? format(new Date(s.birthDate), 'dd.MM.yyyy') : '',
+        familyCity: s.familyCity || '',
+        parentsStatus: s.parentsStatus || '',
+        referenceInfo: s.referenceInfo || '',
+        familyPhone: s.familyPhone || '',
         universityName: s.universityName || '',
-        universityType: s.universityType || '',
-        faculty: s.faculty || '',
         department: s.department || '',
-        grade: s.grade ? `${s.grade}. Sınıf` : '',
-        mentorName: mentorFullName,
-        createdAt: s.createdAt ? format(new Date(s.createdAt), 'dd.MM.yyyy HH:mm') : '',
+        grade: s.grade || '',
+        universityStartYear: s.universityStartYear || '',
+        universityPlacementRank: s.universityPlacementRank || '',
+        hadPrepClass: s.hadPrepClass || '',
+        universityCity: s.universityCity || '',
+        accommodationType: s.accommodationType || '',
+        isContractSigned: s.isContractSigned ? 'Evet' : 'Hayır',
+        studentStatus: statusTranslations[s.studentStatus] || s.studentStatus || '—',
+        suspensionStartDate: s.suspensionStartDate ? format(new Date(s.suspensionStartDate), 'dd.MM.yyyy') : '',
+        suspensionEndDate: s.suspensionEndDate ? format(new Date(s.suspensionEndDate), 'dd.MM.yyyy') : '',
+        suspensionNote: s.suspensionNote || '',
+        erasmusStartDate: s.erasmusStartDate ? format(new Date(s.erasmusStartDate), 'dd.MM.yyyy') : '',
+        erasmusEndDate: s.erasmusEndDate ? format(new Date(s.erasmusEndDate), 'dd.MM.yyyy') : '',
+        erasmusSchoolCountry: s.erasmusSchoolCountry || '',
+        graduateCity: s.graduateCity || '',
+        graduateCompany: s.graduateCompany || '',
+        linkedinUrl: s.linkedinUrl || '',
+        graduateNote: s.graduateNote || '',
+        interests: s.interests || '',
+        mentorExpectation: s.mentorExpectation || '',
       });
     });
 
@@ -2105,83 +2175,141 @@ export async function exportGraduatesReport(req: Request, res: Response, next: N
     workbook.creator = 'Faydasıçok Eğitim Vakfı';
     workbook.created = new Date();
 
+    const statusTranslations: Record<string, string> = {
+      ACTIVE: 'Aktif',
+      PASSIVE: 'Pasif',
+      GRADUATED: 'Mezun',
+      INCOMPLETE: 'İlk Kayıt / Eksik',
+    };
+
+    function applyProfessionalStyle(sheet: ExcelJS.Worksheet, headerColorArgb = 'FF1E3A8A') {
+      sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
+      sheet.properties.defaultRowHeight = 26;
+      const headerRow = sheet.getRow(1);
+      headerRow.height = 32;
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerColorArgb } };
+        cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF94A3B8' } },
+          left: { style: 'thin', color: { argb: 'FF94A3B8' } },
+          bottom: { style: 'medium', color: { argb: 'FF0F172A' } },
+          right: { style: 'thin', color: { argb: 'FF94A3B8' } },
+        };
+      });
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+        row.height = 24;
+        const isEven = rowNumber % 2 === 0;
+        row.eachCell((cell) => {
+          cell.font = { name: 'Calibri', size: 10 };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          };
+          if (isEven) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+          }
+        });
+      });
+    }
+
     const sheet = workbook.addWorksheet('Mezunlar Listesi');
     sheet.columns = [
-      { header: 'T.C. Kimlik No', key: 'tc', width: 20 },
+      { header: 'Sicil No', key: 'sicilNo', width: 40 },
+      { header: 'Program', key: 'program', width: 25 },
       { header: 'Adı', key: 'firstName', width: 20 },
       { header: 'Soyadı', key: 'lastName', width: 20 },
-      { header: 'Mezuniyet Yılı', key: 'graduationYear', width: 18 },
-      { header: 'Bursiyer Kategorisi', key: 'category', width: 28 },
-      { header: 'Telefon Numarası', key: 'phone', width: 20 },
-      { header: 'E-Posta Adresi', key: 'email', width: 34 },
-      { header: 'İkametgâh Adresi', key: 'address', width: 40 },
-      { header: 'Nüfusa Kayıtlı İl', key: 'registeredCity', width: 20 },
-      { header: 'Üniversite', key: 'universityName', width: 36 },
-      { header: 'Fakülte', key: 'faculty', width: 30 },
-      { header: 'Bölüm', key: 'department', width: 32 },
-      { header: 'Banka Adı', key: 'bankName', width: 26 },
-      { header: 'IBAN Numarası', key: 'iban', width: 36 },
+      { header: 'Cinsiyet', key: 'gender', width: 15 },
+      { header: 'TCKN', key: 'tc', width: 20 },
+      { header: 'IBAN', key: 'iban', width: 35 },
+      { header: 'Email', key: 'email', width: 35 },
+      { header: 'Telefon', key: 'phone', width: 20 },
+      { header: 'Otomatik İnci Adı', key: 'inciName', width: 25 },
+      { header: 'Doğum Tarihi', key: 'birthDate', width: 20 },
+      { header: 'Aile İkamet Şehri', key: 'familyCity', width: 25 },
+      { header: 'Anne/Baba Sağ', key: 'parentsStatus', width: 25 },
+      { header: 'Referans Bilgisi / Hasçelik Çalışanı vb.', key: 'referenceInfo', width: 40 },
+      { header: 'Aile İletişim Telefonu', key: 'familyPhone', width: 25 },
+      { header: 'Okulu', key: 'universityName', width: 35 },
+      { header: 'Bölümü', key: 'department', width: 30 },
+      { header: 'Sınıfı', key: 'grade', width: 15 },
+      { header: 'Okul Başlangıç Yılı', key: 'universityStartYear', width: 20 },
+      { header: 'Üniversite Yerleştirme Sırası', key: 'universityPlacementRank', width: 25 },
+      { header: 'Üni.Haz.Okudu mu?', key: 'hadPrepClass', width: 20 },
+      { header: 'Okul Şehri', key: 'universityCity', width: 20 },
+      { header: 'Konaklama', key: 'accommodationType', width: 25 },
+      { header: 'Bursiyer Sözleşmesini İmzaladı mı?', key: 'isContractSigned', width: 25 },
+      { header: 'Son Durumu', key: 'studentStatus', width: 20 },
+      { header: 'Askı Baslangıcı', key: 'suspensionStartDate', width: 20 },
+      { header: 'Askı Sonu', key: 'suspensionEndDate', width: 20 },
+      { header: 'Askı notu', key: 'suspensionNote', width: 30 },
+      { header: 'Erasmus\'a Gidiş Tarihi', key: 'erasmusStartDate', width: 20 },
+      { header: 'Erasmus\'dan Dönüş Tarihi', key: 'erasmusEndDate', width: 20 },
+      { header: 'Erasmus Ülkesi/ Okulu', key: 'erasmusSchoolCountry', width: 25 },
+      { header: 'Mezuniyet Yılı', key: 'graduationYear', width: 20 },
+      { header: 'Mezun Şehri', key: 'graduateCity', width: 20 },
+      { header: 'Mezun Şirketi', key: 'graduateCompany', width: 25 },
+      { header: 'Linkedin Bağlantı', key: 'linkedinUrl', width: 35 },
+      { header: 'MZN NOT', key: 'graduateNote', width: 30 },
+      { header: 'İlgi Alanları', key: 'interests', width: 35 },
+      { header: 'Nasıl Bir Mentör İster', key: 'mentorExpectation', width: 35 },
       { header: 'Mentör Adı Soyadı', key: 'mentorName', width: 28 },
       { header: 'Mezuniyete Aktarılma Tarihi', key: 'graduatedAt', width: 26 },
     ];
 
-    graduates.forEach((g) => {
-      const mentorFullName = g.mentor ? `${g.mentor.firstName} ${g.mentor.lastName}`.trim() : '—';
+    graduates.forEach((s) => {
+      const mentorFullName = s.mentor ? `${s.mentor.firstName} ${s.mentor.lastName}`.trim() : '—';
       sheet.addRow({
-        tc: g.user?.tcKimlikNo || '',
-        firstName: g.firstName || '',
-        lastName: g.lastName || '',
-        graduationYear: g.graduationYear ? `${g.graduationYear} Mezunu` : 'Belirtilmedi',
-        category: g.scholarshipCategory?.name || 'Genel',
-        phone: g.phone || '',
-        email: g.user?.email || g.email || '',
-        address: g.address || '',
-        registeredCity: g.registeredCity || '',
-        universityName: g.universityName || '',
-        faculty: g.faculty || '',
-        department: g.department || '',
-        bankName: g.bankName || '',
-        iban: g.iban || '',
+        userType: s.userType || '',
+        sicilNo: s.sicilNo || '',
+        program: s.scholarshipCategory?.name || s.program || 'Tanımsız / Genel',
+        firstName: s.firstName || '',
+        lastName: s.lastName || '',
+        gender: s.gender || '',
+        tc: s.user?.tcKimlikNo || '',
+        iban: s.iban || '',
+        email: s.user?.email || s.email || '',
+        phone: s.phone || '',
+        inciName: s.inciName || '',
+        birthDate: s.birthDate ? format(new Date(s.birthDate), 'dd.MM.yyyy') : '',
+        familyCity: s.familyCity || '',
+        parentsStatus: s.parentsStatus || '',
+        referenceInfo: s.referenceInfo || '',
+        familyPhone: s.familyPhone || '',
+        universityName: s.universityName || '',
+        department: s.department || '',
+        grade: s.grade || '',
+        universityStartYear: s.universityStartYear || '',
+        universityPlacementRank: s.universityPlacementRank || '',
+        hadPrepClass: s.hadPrepClass || '',
+        universityCity: s.universityCity || '',
+        accommodationType: s.accommodationType || '',
+        isContractSigned: s.isContractSigned ? 'Evet' : 'Hayır',
+        studentStatus: statusTranslations[s.studentStatus] || s.studentStatus || '—',
+        suspensionStartDate: s.suspensionStartDate ? format(new Date(s.suspensionStartDate), 'dd.MM.yyyy') : '',
+        suspensionEndDate: s.suspensionEndDate ? format(new Date(s.suspensionEndDate), 'dd.MM.yyyy') : '',
+        suspensionNote: s.suspensionNote || '',
+        erasmusStartDate: s.erasmusStartDate ? format(new Date(s.erasmusStartDate), 'dd.MM.yyyy') : '',
+        erasmusEndDate: s.erasmusEndDate ? format(new Date(s.erasmusEndDate), 'dd.MM.yyyy') : '',
+        erasmusSchoolCountry: s.erasmusSchoolCountry || '',
+        graduationYear: s.graduationYear ? `${s.graduationYear} Mezunu` : 'Belirtilmedi',
+        graduateCity: s.graduateCity || '',
+        graduateCompany: s.graduateCompany || '',
+        linkedinUrl: s.linkedinUrl || '',
+        graduateNote: s.graduateNote || '',
+        interests: s.interests || '',
+        mentorExpectation: s.mentorExpectation || '',
         mentorName: mentorFullName,
-        graduatedAt: g.graduatedAt ? format(new Date(g.graduatedAt), 'dd.MM.yyyy HH:mm') : (g.updatedAt ? format(new Date(g.updatedAt), 'dd.MM.yyyy') : '—'),
+        graduatedAt: s.graduatedAt ? format(new Date(s.graduatedAt), 'dd.MM.yyyy HH:mm') : (s.updatedAt ? format(new Date(s.updatedAt), 'dd.MM.yyyy') : '—'),
       });
     });
 
-    // Apply professional styling
-    sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
-    sheet.properties.defaultRowHeight = 26;
-    const headerRow = sheet.getRow(1);
-    headerRow.height = 32;
-    headerRow.eachCell((cell) => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4338CA' } }; // Indigo header
-      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      cell.border = {
-        top: { style: 'thin', color: { argb: 'FF94A3B8' } },
-        left: { style: 'thin', color: { argb: 'FF94A3B8' } },
-        bottom: { style: 'medium', color: { argb: 'FF0F172A' } },
-        right: { style: 'thin', color: { argb: 'FF94A3B8' } },
-      };
-    });
-
-    sheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return;
-      row.height = 24;
-      const isEven = rowNumber % 2 === 0;
-      row.eachCell((cell) => {
-        cell.font = { name: 'Calibri', size: 10 };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-          right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-        };
-        if (isEven) {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
-        }
-      });
-    });
+    applyProfessionalStyle(sheet, 'FF1E3A8A'); // Indigo Header for graduates
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     const safeYear = year && year !== 'ALL' ? `_${year}` : '_tum';
@@ -2189,6 +2317,323 @@ export async function exportGraduatesReport(req: Request, res: Response, next: N
 
     await workbook.xlsx.write(res);
     res.end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Excel Column Mapping ──────────────────────────────────────────────
+type ExcelColumnDef = {
+  header: string;
+  aliases: string[];
+  dbField: string;
+  section: string;
+  type: string;
+  sample1?: any;
+  sample2?: any;
+};
+
+const EXCEL_COLUMN_MAP: ExcelColumnDef[] = [
+  // KİŞİSEL BİLGİLER
+  { header: 'Sicil No', aliases: ['sicil', 'sicilno'], dbField: 'sicilNo', section: 'profile', type: 'string' },
+  { header: 'Program', aliases: ['programi', 'bursprogrami', 'programadi', 'kategori'], dbField: 'program', section: 'profile', type: 'string' },
+  
+  // AİLE BİLGİLERİ
+  { header: 'Adı', aliases: ['adi', 'isim', 'ogrenciadi'], dbField: 'firstName', section: 'profile', type: 'string' },
+  { header: 'Soyadı', aliases: ['soyadi', 'ogrencisoyadi'], dbField: 'lastName', section: 'profile', type: 'string' },
+  { header: 'Cinsiyet', aliases: ['gender'], dbField: 'gender', section: 'profile', type: 'string' },
+  { header: 'TCKN', aliases: ['tc', 'tckn', 'tckimlik', 'tckimlikno', 'tcno'], dbField: 'tcKimlikNo', section: 'user', type: 'string' },
+  { header: 'IBAN', aliases: ['ibanno', 'bankaiban'], dbField: 'iban', section: 'profile', type: 'string' },
+  { header: 'Email', aliases: ['email', 'mail', 'eposta'], dbField: 'email', section: 'profile', type: 'string' },
+  { header: 'Telefon', aliases: ['tel', 'cep', 'ceptel'], dbField: 'phone', section: 'profile', type: 'string' },
+  { header: 'Otomatik İnci Adı', aliases: ['inciladi', 'inciadi', 'otomatikinci'], dbField: 'inciName', section: 'profile', type: 'string' },
+  { header: 'Doğum Tarihi', aliases: ['dogum', 'dtarih'], dbField: 'birthDate', section: 'profile', type: 'date' },
+  { header: 'Aile İkamet Şehri', aliases: ['aileikamet', 'ailesehir'], dbField: 'familyCity', section: 'profile', type: 'string' },
+  { header: 'Anne/Baba Sağ', aliases: ['annebabasag', 'sağ', 'saglik', 'parentsstatus'], dbField: 'parentsStatus', section: 'profile', type: 'string' },
+  { header: 'Referans Bilgisi / Hasçelik Çalışanı vb.', aliases: ['referansbilgisi', 'referans'], dbField: 'referenceInfo', section: 'profile', type: 'string' },
+  { header: 'Aile İletişim Telefonu', aliases: ['ailetel', 'ailetelefonu'], dbField: 'familyPhone', section: 'profile', type: 'string' },
+  
+  // OKUL BİLGİLERİ
+  { header: 'Okulu', aliases: ['okul', 'uni', 'üniversite', 'universityname'], dbField: 'universityName', section: 'profile', type: 'string' },
+  { header: 'Bölümü', aliases: ['bolumu', 'department', 'fakulte', 'fakültesi'], dbField: 'department', section: 'profile', type: 'string' },
+  { header: 'Sınıfı', aliases: ['sinifi', 'grade'], dbField: 'grade', section: 'profile', type: 'int' },
+  { header: 'Okul Başlangıç Yılı', aliases: ['okulbaslangic', 'unibaslangic'], dbField: 'universityStartYear', section: 'profile', type: 'int' },
+  { header: 'Üniversite Yerleştirme Sırası', aliases: ['uniyerlestirme', 'yerlestirmesirasi'], dbField: 'universityPlacementRank', section: 'profile', type: 'int' },
+  { header: 'Üni.Haz.Okudu mu?', aliases: ['hazirlikokudumu', 'hazirlik'], dbField: 'hadPrepClass', section: 'profile', type: 'string' },
+  { header: 'Okul Şehri', aliases: ['okulsehri', 'unisehri'], dbField: 'universityCity', section: 'profile', type: 'string' },
+  { header: 'Konaklama', aliases: ['konaklamaturu', 'konaklama'], dbField: 'accommodationType', section: 'profile', type: 'string' },
+  { header: 'Bursiyer Sözleşmesini İmzaladı mı?', aliases: ['sozlesme', 'sozlesmeimzaladimi'], dbField: 'isContractSigned', section: 'profile', type: 'boolean' },
+  { header: 'Son Durumu', aliases: ['sondurumu', 'durumu', 'ogrencidurumu', 'bursiyerdurumu', 'statü', 'statu'], dbField: 'studentStatus', section: 'profile', type: 'string' },
+
+  // ASKI BİLGİSİ ALANI
+  { header: 'Askı Baslangıcı', aliases: ['askibaslangic', 'askibasi'], dbField: 'suspensionStartDate', section: 'profile', type: 'date' },
+  { header: 'Askı Sonu', aliases: ['askisonu'], dbField: 'suspensionEndDate', section: 'profile', type: 'date' },
+  { header: 'Askı notu', aliases: ['askinotu', 'askiaciklama'], dbField: 'suspensionNote', section: 'profile', type: 'string' },
+
+  // ERASMUS BİLGİLERİ
+  { header: 'Erasmus\'a Gidiş Tarihi', aliases: ['erasmusgidis'], dbField: 'erasmusStartDate', section: 'profile', type: 'date' },
+  { header: 'Erasmus\'dan Dönüş Tarihi', aliases: ['erasmusdonus'], dbField: 'erasmusEndDate', section: 'profile', type: 'date' },
+  { header: 'Erasmus Ülkesi/ Okulu', aliases: ['erasmusulke', 'erasmusokul'], dbField: 'erasmusSchoolCountry', section: 'profile', type: 'string' },
+
+  // MEZUN İLETİŞİMİ
+  { header: 'Mezun Şehri', aliases: ['mezunsehri'], dbField: 'graduateCity', section: 'profile', type: 'string' },
+  { header: 'Mezun Şirketi', aliases: ['mezunsirket'], dbField: 'graduateCompany', section: 'profile', type: 'string' },
+  { header: 'Linkedin Bağlantı', aliases: ['linkedin', 'linkedinurl'], dbField: 'linkedinUrl', section: 'profile', type: 'string' },
+  { header: 'MZN NOT', aliases: ['mznnot', 'mezunnot'], dbField: 'graduateNote', section: 'profile', type: 'string' },
+
+  // DİĞER
+  { header: 'İlgi Alanları', aliases: ['ilgi'], dbField: 'interests', section: 'profile', type: 'string' },
+  { header: 'Nasıl Bir Mentör İster', aliases: ['mentorister', 'mentorexpectation'], dbField: 'mentorExpectation', section: 'profile', type: 'string' }
+];
+
+function normalizeHeader(str: string): string {
+  return str
+    .replace(/i/g, 'i')
+    .replace(/ı/g, 'i')
+    .replace(/ş/g, 's')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/İ/g, 'I')
+    .replace(/I/g, 'i')
+    .replace(/Ş/g, 's')
+    .replace(/Ğ/g, 'g')
+    .replace(/Ü/g, 'u')
+    .replace(/Ö/g, 'o')
+    .replace(/Ç/g, 'c')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function parseExcelCellValue(value: any, type: string): any {
+  if (value === undefined || value === null || value === '') return null;
+  const str = String(value).trim();
+  if (str === '') return null;
+
+  switch (type) {
+    case 'int': {
+      const n = parseInt(str.replace(/\\D/g, ''), 10);
+      return isNaN(n) ? null : n;
+    }
+    case 'float': {
+      const f = parseFloat(str.replace(',', '.').replace(/[^\\d.]/g, ''));
+      return isNaN(f) ? null : f;
+    }
+    case 'date': {
+      if (value instanceof Date) return value;
+      if (/^\\d{1,2}[./-]\\d{1,2}[./-]\\d{4}$/.test(str)) {
+        const parts = str.split(/[./-]/);
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        return isNaN(d.getTime()) ? null : d;
+      }
+      const d = new Date(str);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    case 'boolean': {
+      const lower = str.toLowerCase();
+      if (['evet', 'yes', 'true', '1', 'e'].includes(lower)) return true;
+      if (['hayır', 'hayir', 'no', 'false', '0', 'h'].includes(lower)) return false;
+      return false;
+    }
+    default:
+      return str;
+  }
+}
+
+
+export async function importStudentsFromExcel(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!req.file) throw new AppError(400, 'Excel dosyası yüklenmedi.');
+
+    const scholarshipCategoryId = String(req.body.scholarshipCategoryId || '').trim() || null;
+    const isNewStudent = req.body.isNewStudent !== 'false' && req.body.isNewStudent !== false;
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer as unknown as ExcelJS.Buffer);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet || worksheet.rowCount < 2) throw new AppError(400, 'Excel dosyası boş veya geçersiz.');
+
+    const headerRow = worksheet.getRow(1);
+    const colToMapping = new Map<number, ExcelColumnDef>();
+    let tcColNum: number | null = null;
+    let firstNameColNum: number | null = null;
+    let lastNameColNum: number | null = null;
+
+    headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      const rawHeader = String(cell.value || '').trim();
+      const norm = normalizeHeader(rawHeader);
+      if (!norm) return;
+
+      for (const colDef of EXCEL_COLUMN_MAP) {
+        const matchesCanonical = normalizeHeader(colDef.header) === norm;
+        const matchesAlias = colDef.aliases.some(a => norm.includes(normalizeHeader(a)) || normalizeHeader(a).includes(norm));
+        if (matchesCanonical || matchesAlias) {
+          colToMapping.set(colNumber, colDef);
+          if (colDef.dbField === 'tcKimlikNo') tcColNum = colNumber;
+          if (colDef.dbField === 'firstName') firstNameColNum = colNumber;
+          if (colDef.dbField === 'lastName') lastNameColNum = colNumber;
+          break;
+        }
+      }
+    });
+
+    if (!tcColNum) throw new AppError(400, 'Excel dosyasında "TC Kimlik No" sütunu bulunamadı.');
+
+    const categoryCache = new Map<string, string>();
+    const allCategories = await prisma.scholarshipCategory.findMany();
+    for (const cat of allCategories) {
+      categoryCache.set(normalizeHeader(cat.name), cat.id);
+    }
+
+    const results: Array<any> = [];
+
+    for (let rowIdx = 2; rowIdx <= worksheet.rowCount; rowIdx++) {
+      const row = worksheet.getRow(rowIdx);
+      const tcRaw = row.getCell(tcColNum).value;
+      const tc = String(tcRaw || '').trim().replace(/\\D/g, '');
+      if (!tc) continue;
+
+      const firstName = firstNameColNum ? String(row.getCell(firstNameColNum).value || '').trim() : '';
+      const lastName = lastNameColNum ? String(row.getCell(lastNameColNum).value || '').trim() : '';
+
+      if (tc.length !== 11) {
+        results.push({ row: rowIdx, tcKimlikNo: tc, firstName, lastName, password: '', status: 'error', error: 'Geçersiz TC formatı (11 hane olmalı)' });
+        continue;
+      }
+
+      const existing = await prisma.user.findUnique({ where: { tcKimlikNo: tc } });
+      if (existing) {
+        results.push({ row: rowIdx, tcKimlikNo: tc, firstName, lastName, password: '', status: 'existing' });
+        continue;
+      }
+
+      let rowCategoryId = scholarshipCategoryId;
+      const profileData: any = {
+        firstName: firstName || '',
+        lastName: lastName || '',
+        studentStatus: 'ACTIVE',
+        isInitialDocsExempt: !isNewStudent,
+      };
+
+      let emailValue: string | null = null;
+
+      for (const [colNum, colDef] of colToMapping.entries()) {
+        if (colDef.section !== 'profile') continue;
+        const cellValue = row.getCell(colNum).value;
+        const parsed = parseExcelCellValue(cellValue, colDef.type);
+        if (parsed !== null && parsed !== undefined) {
+          if (colDef.dbField === 'program' && typeof parsed === 'string' && parsed.trim() !== '') {
+            const cleanProgram = parsed.trim();
+            profileData.program = cleanProgram;
+            const normProgram = normalizeHeader(cleanProgram);
+            if (categoryCache.has(normProgram)) {
+              rowCategoryId = categoryCache.get(normProgram)!;
+            } else {
+              try {
+                const newCat = await prisma.scholarshipCategory.create({ data: { name: cleanProgram, isActive: true } });
+                categoryCache.set(normProgram, newCat.id);
+                rowCategoryId = newCat.id;
+              } catch {
+                const existingCat = await prisma.scholarshipCategory.findFirst({ where: { name: cleanProgram } });
+                if (existingCat) {
+                  categoryCache.set(normProgram, existingCat.id);
+                  rowCategoryId = existingCat.id;
+                }
+              }
+            }
+          } else if (colDef.dbField === 'studentStatus' && typeof parsed === 'string') {
+            const normStatus = normalizeHeader(parsed);
+            if (['aktif', 'active'].includes(normStatus)) profileData.studentStatus = 'ACTIVE';
+            else if (['mezun', 'graduated'].includes(normStatus)) profileData.studentStatus = 'GRADUATED';
+            else if (['pasif', 'passive'].includes(normStatus)) profileData.studentStatus = 'PASSIVE';
+            else if (['tamamlanmadi', 'incomplete'].includes(normStatus)) profileData.studentStatus = 'INCOMPLETE';
+            else profileData.studentStatus = parsed;
+          } else {
+            profileData[colDef.dbField] = parsed;
+          }
+
+          if (colDef.dbField === 'email') emailValue = String(parsed).trim();
+        }
+      }
+
+      profileData.scholarshipCategoryId = rowCategoryId || scholarshipCategoryId || null;
+
+      const password = Math.floor(100000 + Math.random() * 900000).toString();
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      try {
+        if (emailValue) {
+          const existingEmail = await prisma.user.findFirst({ where: { email: emailValue } });
+          if (existingEmail) {
+            emailValue = null;
+            profileData.email = null;
+          }
+        }
+
+        const user = await prisma.user.create({
+          data: {
+            tcKimlikNo: tc,
+            passwordHash,
+            role: Role.STUDENT,
+            isActive: true,
+            forcePasswordChange: true,
+            email: emailValue,
+            studentProfile: { create: profileData },
+          },
+        });
+        results.push({ row: rowIdx, tcKimlikNo: tc, firstName, lastName, password, status: 'created' });
+      } catch (e: any) {
+        results.push({ row: rowIdx, tcKimlikNo: tc, firstName, lastName, password: '', status: 'error', error: e.message || 'Veritabanına eklenemedi' });
+      }
+    }
+
+    res.json({
+      summary: {
+        total: results.length,
+        created: results.filter(r => r.status === 'created').length,
+        existing: results.filter(r => r.status === 'existing').length,
+        errors: results.filter(r => r.status === 'error').length,
+      },
+      data: results,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Excel Template ───────────────────────────────────────────────────
+export async function getExcelTemplate(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const workbook = new ExcelJS.Workbook();
+    const ws = workbook.addWorksheet('Bursiyer Şablonu');
+    const headers = EXCEL_COLUMN_MAP.map(c => c.header);
+    ws.addRow(headers);
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="bursiyer-excel-sablonu.xlsx"');
+    res.send(Buffer.from(buffer));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Delete Student ───────────────────────────────────────────────────
+export async function deleteStudent(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const student = await prisma.studentProfile.findUnique({ where: { id } });
+    if (!student) throw new AppError(404, 'Öğrenci bulunamadı.');
+
+    await prisma.$transaction([
+      prisma.studentProfile.delete({ where: { id } }),
+      prisma.user.delete({ where: { id: student.userId } })
+    ]);
+
+    res.json({ success: true, message: 'Öğrenci başarıyla silindi.' });
   } catch (err) {
     next(err);
   }

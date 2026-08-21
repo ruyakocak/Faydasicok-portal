@@ -160,11 +160,27 @@ export const adminApi = {
   bulkCreateJson: (data: { tcs: string; scholarshipCategoryId: string; isNewStudent?: boolean }) =>
     api.post('/admin/students/bulk-create', data).then((r) => r.data),
 
+  importExcel: (file: File, isNewStudent: boolean = true, scholarshipCategoryId?: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (scholarshipCategoryId) {
+      fd.append('scholarshipCategoryId', scholarshipCategoryId);
+    }
+    fd.append('isNewStudent', String(isNewStudent));
+    return api.post('/admin/students/import-excel', fd).then((r) => r.data);
+  },
+
+  getExcelTemplate: () =>
+    api.get('/admin/students/excel-template', { responseType: 'blob' }).then((r) => r.data),
+
   resetPassword: (id: string): Promise<{ password: string }> =>
     api.post(`/admin/students/${id}/reset-password`).then((r) => r.data),
 
-  exportStudentsReport: () =>
-    api.get('/admin/reports/students-export', { responseType: 'blob' }).then((r) => r.data),
+  deleteStudent: (id: string): Promise<{ message: string }> =>
+    api.delete(`/admin/students/${id}`).then((r) => r.data),
+
+  exportStudentsReport: (params?: any) =>
+    api.get('/admin/reports/students-export', { params, responseType: 'blob' }).then((r) => r.data),
 
   listGraduates: (params?: { search?: string; year?: string; categoryId?: string; page?: string; limit?: string }): Promise<PaginatedResponse<StudentProfile>> =>
     api.get('/admin/graduates', { params }).then((r) => r.data),

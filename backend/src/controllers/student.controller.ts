@@ -237,9 +237,10 @@ export async function updatePersonalInfo(req: Request, res: Response, next: Next
     if (!profile) throw new AppError(404, 'Profil bulunamadı.');
     if (!canAccessProfile(req, id, profile.userId)) throw new AppError(403, 'Erişim reddedildi.');
 
-    const fields = ['firstName', 'lastName', 'gender', 'birthDate', 'birthPlace', 'registeredCity', 'scholarshipSources', 'scholarshipDate', 'scholarshipCategoryId', 'email', 'phone', 'address'];
-    if (req.user?.role === Role.ADMIN || req.user?.role === Role.REVIEWER) {
-      fields.push('studentStatus');
+    const isAdmin = req.user?.role === Role.ADMIN || req.user?.role === Role.REVIEWER;
+    const fields = ['birthDate', 'birthPlace', 'registeredCity', 'scholarshipSources', 'scholarshipDate', 'email', 'phone', 'address'];
+    if (isAdmin) {
+      fields.push('firstName', 'lastName', 'gender', 'sicilNo', 'userType', 'program', 'inciName', 'referenceInfo', 'scholarshipCategoryId', 'isContractSigned', 'studentStatus');
     }
 
     const updateData: any = {};
@@ -251,6 +252,8 @@ export async function updatePersonalInfo(req: Request, res: Response, next: Next
         let newVal = req.body[field];
         if (field === 'birthDate' || field === 'scholarshipDate') {
           newVal = newVal ? new Date(newVal) : null;
+        } else if (field === 'isContractSigned') {
+          newVal = newVal === true || newVal === 'true';
         }
         
         const oldStr = oldVal instanceof Date ? oldVal.toISOString() : (oldVal ? String(oldVal) : null);
@@ -333,6 +336,7 @@ export async function updateFamilyInfo(req: Request, res: Response, next: NextFu
       'motherName', 'motherAge', 'motherAlive', 'motherMaritalStatus', 'motherOccupation', 'motherIncome',
       'familyMemberCount', 'siblingCount', 'siblingsInEducation', 'socialSecurity',
       'homeOwnership', 'homeAddress', 'familyDescription',
+      'familyCity', 'parentsStatus', 'familyPhone',
     ];
     const updateData: any = {};
     const auditLogs: any[] = [];
@@ -389,7 +393,20 @@ export async function updateEducationInfo(req: Request, res: Response, next: Nex
     if (!profile) throw new AppError(404, 'Profil bulunamadı.');
     if (!canAccessProfile(req, id, profile.userId)) throw new AppError(403, 'Erişim reddedildi.');
 
-    const eduFields = ['universityName', 'faculty', 'department', 'grade', 'universityType', 'highSchoolName', 'highSchoolCity', 'highSchoolGradYear'];
+    const isAdmin = req.user?.role === Role.ADMIN || req.user?.role === Role.REVIEWER;
+    const eduFields = [
+      'universityName', 'faculty', 'department', 'grade', 'universityType',
+      'universityStartYear', 'universityPlacementRank', 'hadPrepClass', 'universityCity', 'accommodationType',
+      'highSchoolName', 'highSchoolCity', 'highSchoolGradYear', 'interests', 'mentorExpectation',
+    ];
+    if (isAdmin) {
+      eduFields.push(
+        'suspensionStartDate', 'suspensionEndDate', 'suspensionNote',
+        'erasmusStartDate', 'erasmusEndDate', 'erasmusSchoolCountry',
+        'graduateCity', 'graduateCompany', 'linkedinUrl', 'graduateNote'
+      );
+    }
+
     const updateData: any = {};
     const auditLogs: any[] = [];
 
@@ -398,12 +415,14 @@ export async function updateEducationInfo(req: Request, res: Response, next: Nex
         const oldVal = (profile as any)[field];
         let newVal = req.body[field];
 
-        if (field === 'grade' || field === 'highSchoolGradYear') {
-          newVal = newVal !== '' ? Number(newVal) : null;
+        if (field === 'grade' || field === 'highSchoolGradYear' || field === 'universityStartYear' || field === 'universityPlacementRank') {
+          newVal = newVal !== '' && newVal !== null ? Number(newVal) : null;
+        } else if (field === 'suspensionStartDate' || field === 'suspensionEndDate' || field === 'erasmusStartDate' || field === 'erasmusEndDate') {
+          newVal = newVal ? new Date(newVal) : null;
         }
 
-        const oldStr = oldVal !== null && oldVal !== undefined ? String(oldVal) : null;
-        const newStr = newVal !== null && newVal !== undefined ? String(newVal) : null;
+        const oldStr = oldVal instanceof Date ? oldVal.toISOString() : (oldVal !== null && oldVal !== undefined ? String(oldVal) : null);
+        const newStr = newVal instanceof Date ? newVal.toISOString() : (newVal !== null && newVal !== undefined ? String(newVal) : null);
 
         if (oldStr !== newStr) {
           updateData[field] = newVal;

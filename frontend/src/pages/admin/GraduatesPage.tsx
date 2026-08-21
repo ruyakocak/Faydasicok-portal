@@ -19,6 +19,12 @@ export default function GraduatesPage() {
   const [revertingStudent, setRevertingStudent] = useState<StudentProfile | null>(null);
   const [reverting, setReverting] = useState(false);
 
+  // Edit Year Modal State
+  const [editingYearStudent, setEditingYearStudent] = useState<StudentProfile | null>(null);
+  const [newGraduationYear, setNewGraduationYear] = useState('');
+  const [savingYear, setSavingYear] = useState(false);
+
+
   // Fetch Categories on mount
   useEffect(() => {
     adminApi.listScholarshipCategories().then(setCategories).catch(console.error);
@@ -72,6 +78,23 @@ export default function GraduatesPage() {
       setExporting(false);
     }
   }
+
+  
+  async function handleSaveYear() {
+    if (!editingYearStudent) return;
+    setSavingYear(true);
+    try {
+      await adminApi.updateStudentProfile(editingYearStudent.id, { graduationYear: newGraduationYear ? parseInt(newGraduationYear) : null });
+      toast.success('Mezuniyet yılı güncellendi.');
+      setEditingYearStudent(null);
+      loadGraduates();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Güncellenirken hata oluştu.');
+    } finally {
+      setSavingYear(false);
+    }
+  }
+
 
   async function handleConfirmRevert() {
     if (!revertingStudent) return;
@@ -279,6 +302,16 @@ export default function GraduatesPage() {
                         >
                           İncele
                         </Link>
+                        
+                        <button
+                          type="button"
+                          onClick={() => { setEditingYearStudent(profile); setNewGraduationYear(String(profile.graduationYear || '')); }}
+                          className="btn-sm bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors whitespace-nowrap"
+                          title="Mezuniyet Yılını Düzenle"
+                        >
+                          ✏️ Yılı Düzenle
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => setRevertingStudent(profile)}
@@ -310,6 +343,67 @@ export default function GraduatesPage() {
       </div>
 
       {/* ── Revert Graduation Modal ── */}
+      
+      {/* ── Edit Year Modal ── */}
+      {editingYearStudent && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in border border-gray-200">
+            <div className="p-5 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0 font-bold">
+                  ✏️
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm">Mezuniyet Yılını Düzenle</h3>
+                  <p className="text-[11px] text-blue-800">
+                    {editingYearStudent.firstName} {editingYearStudent.lastName}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingYearStudent(null)}
+                className="w-7 h-7 rounded-lg hover:bg-blue-200/50 text-gray-400 hover:text-gray-700 flex items-center justify-center transition-colors text-lg"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Mezuniyet Yılı
+                </label>
+                <input
+                  type="number"
+                  className="form-input w-full text-sm"
+                  placeholder="Örn: 2024"
+                  value={newGraduationYear}
+                  onChange={(e) => setNewGraduationYear(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-gray-100 mt-5">
+                <button
+                  type="button"
+                  onClick={() => setEditingYearStudent(null)}
+                  className="btn-secondary flex-1 text-xs"
+                >
+                  İptal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveYear}
+                  disabled={savingYear}
+                  className="btn-primary flex-1 text-xs flex items-center justify-center"
+                >
+                  {savingYear ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Kaydet'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {revertingStudent && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in border border-gray-200">
