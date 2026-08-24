@@ -79,7 +79,7 @@ export default function StudentAnnouncementsPage() {
               <div 
                 key={ann.id} 
                 onClick={() => setSelectedAnn(ann)}
-                className="group cursor-pointer p-6 md:p-8 rounded-3xl bg-white border border-gray-200/60 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] hover:border-gray-300 transition-all duration-300 flex flex-col"
+                className="group cursor-pointer p-6 md:p-8 rounded-3xl bg-white border border-gray-200/60 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] hover:border-gray-300 transition-all duration-300 flex flex-col overflow-hidden w-full"
               >
                 <div className="flex justify-between items-start gap-4 mb-4">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gray-50 text-gray-500 shrink-0 border border-gray-100">
@@ -89,10 +89,10 @@ export default function StudentAnnouncementsPage() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                   </div>
                 </div>
-                <h2 className="text-xl font-semibold text-gray-900 group-hover:text-black transition-colors line-clamp-2 tracking-tight leading-tight mb-3">
+                <h2 className="text-xl font-semibold text-gray-900 group-hover:text-black transition-colors line-clamp-2 tracking-tight leading-tight mb-3 break-all">
                   {ann.title}
                 </h2>
-                <div className="text-gray-500 font-medium line-clamp-3 leading-relaxed text-sm">
+                <div className="text-gray-500 font-medium line-clamp-3 leading-relaxed text-sm break-all">
                   {ann.content}
                 </div>
               </div>
@@ -116,8 +116,8 @@ export default function StudentAnnouncementsPage() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
-            <div className="p-8 md:p-10 max-h-[60vh] overflow-y-auto">
-              <div className="text-gray-600 leading-relaxed whitespace-pre-wrap font-medium">
+            <div className="p-8 md:p-10 max-h-[60vh] overflow-y-auto overflow-x-hidden custom-scrollbar">
+              <div className="text-gray-600 leading-relaxed whitespace-pre-wrap font-medium break-words">
                 {selectedAnn.content}
               </div>
             </div>

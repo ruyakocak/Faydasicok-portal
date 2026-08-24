@@ -42,6 +42,7 @@ const NAV_GROUPS: NavGroup[] = [
     icon: <SidebarIcon path="M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />,
     items: [
       { to: '/admin/documents', label: 'Belge Yönetimi', icon: <SidebarIcon path="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6" /> },
+      { to: '/admin/volunteer-forms', label: 'STK Raporları', icon: <SidebarIcon path="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /> },
       { to: '/admin/events', label: 'Eğitim & Etkinlikler', icon: <SidebarIcon path="M19 4h-1V3c0-.55-.45-1-1-1s-1 .45-1 1v1H8V3c0-.55-.45-1-1-1s-1 .45-1 1v1H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2zm-7 5h5v5h-5z" />, adminOnly: true },
       { to: '/admin/announcements', label: 'Duyurular', icon: <SidebarIcon path="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />, adminOnly: true },
     ]
@@ -101,13 +102,12 @@ export default function AdminLayout() {
       {/* Sidebar */}
       <aside className={`w-56 bg-white/60 backdrop-blur-2xl border-r border-white/50 flex flex-col fixed inset-y-0 left-0 z-40 shadow-[0_8px_32px_0_rgba(31,38,135,0.05)] transition-transform duration-200 ease-in-out lg:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         {/* Logo */}
-        <div className="px-5 h-[72px] flex items-center justify-between border-b border-white/50 bg-white/30 backdrop-blur-md">
-          <div className="h-9 flex items-center flex-shrink-0 cursor-pointer" onClick={() => navigate('/admin/dashboard')}>
+        <div className="px-4 h-[72px] flex items-center gap-2 border-b border-white/50 bg-white/30 backdrop-blur-md overflow-hidden">
+          <div className="h-8 flex-shrink-0 flex items-center cursor-pointer" onClick={() => navigate('/admin/dashboard')}>
             <img src="/logo.png" alt="Logo" className="h-full object-contain drop-shadow-sm" />
           </div>
-          <div className="text-[10px] font-extrabold text-slate-500 uppercase flex flex-col items-end leading-tight tracking-widest ml-2">
-            <span>Yönetim</span>
-            <span>Paneli</span>
+          <div className="text-[11px] font-extrabold text-slate-500 uppercase flex items-center justify-center leading-tight tracking-wide whitespace-normal break-words">
+            YÖNETİM PANELİ
           </div>
         </div>
 

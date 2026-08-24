@@ -79,7 +79,7 @@ export default function PeriodsTab() {
         adminApi.listScholarshipCategories(),
       ]);
       setPeriods(periodsData);
-      setDocTypes(typesData);
+      setDocTypes(typesData.filter((t: any) => !t.isStatic));
       setCategories(categoriesData);
       
       // Group by label to find unique semesters
@@ -708,7 +708,7 @@ export default function PeriodsTab() {
               {/* Category selection for new semester */}
               <div>
                 <label className="form-label mb-1.5">Bursiyer Kategorileri</label>
-                <p className="text-[11px] text-gray-400 mb-2">Bu dönem hangi kategorilere açık olsun? Hiçbiri seçilmezse tüm kategorilere açık olur.</p>
+                <p className="text-[11px] text-gray-400 mb-2">Bu dönem hangi kategorilere açık olsun? Hiçbiri seçilmezse kimseye açık olmaz.</p>
                 <div className="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
                   {activeCategories.length === 0 ? (
                     <p className="text-xs text-gray-400">Henüz kategori tanımlanmamış.</p>
@@ -813,7 +813,7 @@ export default function PeriodsTab() {
               <div>
                 <label className="form-label mb-1.5 mt-2">Kimlere Açık Olsun? (Toplu Uygulanır)</label>
                 <p className="text-[11px] text-gray-500 mb-2">
-                  Hiçbiri seçilmezse tüm evraklar <strong>tüm kategorilere</strong> açık olur.
+                  Hiçbiri seçilmezse evraklar <strong>kimseye açık olmaz</strong>.
                 </p>
                 <div className="border border-gray-200 rounded-lg p-3 max-h-32 overflow-y-auto space-y-1">
                   {activeCategories.length === 0 ? (
@@ -963,7 +963,7 @@ export default function PeriodsTab() {
               <div>
                 <label className="form-label mb-1.5 mt-2">Kimlere Açık Olsun?</label>
                 <p className="text-[11px] text-gray-500 mb-2">
-                  Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse tüm kategorilerden istenir.
+                  Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse kimseden istenmez.
                 </p>
                 <div className="border border-gray-200 rounded-lg p-3 max-h-32 overflow-y-auto space-y-1">
                   {activeCategories.length === 0 ? (
@@ -1086,7 +1086,7 @@ export default function PeriodsTab() {
               <div>
                 <label className="form-label mb-1.5 mt-2">Kimlere Açık Olsun?</label>
                 <p className="text-[11px] text-gray-500 mb-2">
-                  Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse tüm kategorilerden istenir.
+                  Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse kimseden istenmez.
                 </p>
                 <div className="border border-gray-200 rounded-lg p-3 max-h-32 overflow-y-auto space-y-1">
                   {activeCategories.length === 0 ? (
@@ -1188,7 +1188,7 @@ export default function PeriodsTab() {
               <div>
                 <label className="form-label mb-1.5 mt-2">Kimlere Açık Olsun?</label>
                 <p className="text-[11px] text-gray-500 mb-2">
-                  Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse tüm kategorilerden istenir.
+                  Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse kimseden istenmez.
                 </p>
                 <div className="border border-gray-200 rounded-lg p-3 max-h-32 overflow-y-auto space-y-1">
                   {activeCategories.length === 0 ? (
@@ -1311,7 +1311,7 @@ export default function PeriodsTab() {
               <div>
                 <label className="form-label mb-1.5 mt-2">Kimlere Açık Olsun?</label>
                 <p className="text-[11px] text-gray-500 mb-2">
-                  Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse tüm kategorilerden istenir.
+                  Seçili kategoriler dışındaki bursiyerlerden bu evrak talep edilmez. Hiçbiri seçilmezse kimseden istenmez.
                 </p>
                 <div className="border border-gray-200 rounded-lg p-3 max-h-32 overflow-y-auto space-y-1">
                   {activeCategories.length === 0 ? (

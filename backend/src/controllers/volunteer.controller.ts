@@ -239,6 +239,7 @@ export async function adminListVolunteerForms(req: Request, res: Response, next:
         orderBy: { createdAt: 'desc' },
         include: {
           scholarshipCategory: { select: { id: true, name: true } },
+          period: { select: { id: true, label: true } },
           studentProfile: {
             select: {
               id: true,

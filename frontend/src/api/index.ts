@@ -224,8 +224,11 @@ export const adminApi = {
   updateSemester: (data: { oldLabel: string; label?: string; semester?: string; academicYear?: string; startDate?: string | null; endDate?: string | null; grades?: number[]; categoryIds?: string[]; isVolunteerFormOpen?: boolean }) =>
     api.patch('/admin/semesters', data).then((r) => r.data),
 
-  deleteSemester: (label: string) =>
-    api.post('/admin/semesters/delete', { label }).then((r) => r.data),
+  deleteSemester: (label: string, force: boolean = false) =>
+    api.post('/admin/semesters/delete', { label, force }).then((r) => r.data),
+
+  deleteDocument: (id: string) =>
+    api.delete(`/admin/documents/${id}`).then((r) => r.data),
 
   updatePeriodCategories: (id: string, categoryIds: string[]) =>
     api.patch(`/admin/periods/${id}`, { categoryIds }).then((r) => r.data),

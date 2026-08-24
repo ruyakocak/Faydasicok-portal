@@ -450,7 +450,7 @@ export default function StudentsListPage() {
                     />
                   </th>
                   <th>Ad Soyad</th>
-                  <th className="text-center">TC Kimlik No</th>
+                  <th className="text-center">Sicil No</th>
                   <th>Üniversite / Bölüm</th>
                   <th className="text-center">Sınıf</th>
                   <th className="text-center">Kategori</th>
@@ -480,7 +480,7 @@ export default function StudentsListPage() {
                       </Link>
                     </td>
                     <td className="text-center text-gray-600 font-mono text-xs whitespace-nowrap">
-                      {profile.user?.tcKimlikNo || '—'}
+                      {profile.sicilNo || '—'}
                     </td>
                     <td>
                       <div className="text-gray-900 text-xs font-semibold leading-tight">{profile.universityName || '—'}</div>

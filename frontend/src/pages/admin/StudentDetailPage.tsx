@@ -549,7 +549,16 @@ function PendingChangeRow({ change, onApprove, onReject }: {
         </span>
       </td>
       <td className="text-sm font-medium">
-        {isDoc ? change.document?.type : (change.fieldName === 'bankInfo' ? 'Banka & IBAN' : change.fieldName)}
+        {isDoc ? (
+          <div className="flex flex-col">
+            <span>{change.document?.type}</span>
+            {change.document?.period?.label && (
+              <span className="text-xs text-gray-500 font-normal mt-0.5">{change.document.period.label}</span>
+            )}
+          </div>
+        ) : (
+          change.fieldName === 'bankInfo' ? 'Banka & IBAN' : change.fieldName
+        )}
       </td>
       <td className="text-sm">
         {change.entityType === 'BANK_INFO' ? (

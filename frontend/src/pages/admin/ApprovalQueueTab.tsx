@@ -10,7 +10,6 @@ import DocumentPreviewDrawer from '../../components/DocumentPreviewDrawer';
 
 const documentTypeLabels: Record<string, string> = {
   TRANSCRIPT: 'Transkript',
-  VOLUNTEER_REPORT: 'STK Raporu',
   STUDENT_CERTIFICATE: 'Öğrenci Belgesi',
 };
 
@@ -124,6 +123,7 @@ export default function ApprovalQueueTab() {
   const [rejectingChange, setRejectingChange] = useState<ApprovableChange | null>(null);
   const [rejectionNote, setRejectionNote] = useState('');
   const [rejecting, setRejecting] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
 
   useEffect(() => {
     adminApi.listPeriods().then(setPeriods).catch(console.error);
@@ -219,6 +219,26 @@ export default function ApprovalQueueTab() {
       // Handled by axios interceptor
     } finally {
       setRejecting(false);
+    }
+  }
+
+  async function handleDeleteDocument(documentId: string) {
+    if (!window.confirm('Bu belgeyi sistemden tamamen silmek istediğinize emin misiniz? (Bu işlem geri alınamaz)')) {
+      return;
+    }
+    try {
+      setDeletingDocumentId(documentId);
+      await adminApi.deleteDocument(documentId);
+      toast.success('Belge başarıyla silindi.');
+      if (previewDocument?.document?.id === documentId) {
+        setDrawerOpen(false);
+        setPreviewDocument(null);
+      }
+      load();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Belge silinirken hata oluştu');
+    } finally {
+      setDeletingDocumentId(null);
     }
   }
 
@@ -557,7 +577,7 @@ export default function ApprovalQueueTab() {
 
                     {statusFilter === 'PENDING' && (
                       <td>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {queueMode === 'DOCUMENT' && change.document?.filePath && (
                             <button
                               onClick={() => { setPreviewDocument(change); setDrawerOpen(true); }}
@@ -580,20 +600,41 @@ export default function ApprovalQueueTab() {
                           >
                             ✗ Reddet
                           </button>
+                          {queueMode === 'DOCUMENT' && change.document && change.document.id && (
+                            <button
+                              onClick={() => handleDeleteDocument(change.document!.id!)}
+                              disabled={deletingDocumentId === change.document!.id}
+                              className="px-2.5 py-1 text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"
+                              title="Belgeyi Sil"
+                            >
+                              Sil
+                            </button>
+                          )}
                         </div>
                       </td>
                     )}
 
                     {statusFilter !== 'PENDING' && (
                       <td className="w-32 pr-6">
-                        {change.status === 'PENDING' ? (
-                          <span className="badge badge-gray text-yellow-700 bg-yellow-50">Onay Bekliyor</span>
-                        ) : (
-                          <span className={`badge ${change.status === 'APPROVED' ? 'badge-approved' : 'badge-gray text-rose-700 bg-rose-50 border border-rose-200'}`}>
-                            {change.status === 'APPROVED' ? 'Onaylandı' : 'Reddedildi'}
-                          </span>
-                        )}
-                        {change.reviewNote && <div className="text-[11px] text-rose-700 mt-1 font-medium">{change.reviewNote}</div>}
+                        <div className="flex flex-col items-start gap-1">
+                          {change.status === 'PENDING' ? (
+                            <span className="badge badge-gray text-yellow-700 bg-yellow-50">Onay Bekliyor</span>
+                          ) : (
+                            <span className={`badge ${change.status === 'APPROVED' ? 'badge-approved' : 'badge-gray text-rose-700 bg-rose-50 border border-rose-200'}`}>
+                              {change.status === 'APPROVED' ? 'Onaylandı' : 'Reddedildi'}
+                            </span>
+                          )}
+                          {change.reviewNote && <div className="text-[11px] text-rose-700 font-medium">{change.reviewNote}</div>}
+                          {queueMode === 'DOCUMENT' && change.document && change.document.id && (
+                            <button
+                              onClick={() => handleDeleteDocument(change.document!.id!)}
+                              disabled={deletingDocumentId === change.document!.id}
+                              className="mt-1 px-2 py-0.5 text-[10px] font-semibold bg-gray-50 text-gray-500 border border-gray-200 rounded hover:bg-red-50 hover:text-red-600 transition-colors"
+                            >
+                              {deletingDocumentId === change.document!.id ? 'Siliniyor...' : 'Belgeyi Sil'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>

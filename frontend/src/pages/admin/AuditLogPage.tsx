@@ -50,8 +50,8 @@ export default function AuditLogPage() {
 
     return (
       <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50 shrink-0">
             <div>
               <h2 className="text-lg font-bold text-gray-900">İşlem Detayları</h2>
               <p className="text-sm text-gray-500 mt-0.5">{generateActionSummary(selectedLog)}</p>
@@ -61,7 +61,7 @@ export default function AuditLogPage() {
             </button>
           </div>
           
-          <div className="p-6 overflow-y-auto">
+          <div className="p-6 overflow-y-auto flex-1 min-h-0">
             <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
               <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
                 <span className="block text-xs font-medium text-gray-500 mb-1">Tarih - Saat</span>
@@ -111,7 +111,7 @@ export default function AuditLogPage() {
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end">
+          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end shrink-0">
             <button onClick={() => setSelectedLog(null)} className="btn-secondary">Kapat</button>
           </div>
         </div>

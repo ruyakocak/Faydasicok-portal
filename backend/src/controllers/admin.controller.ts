@@ -33,7 +33,7 @@ function cancelPeriodEmail(periodId: string) {
 
 function schedulePeriodEmail(periodId: string, delayMs: number = 300000) {
   cancelPeriodEmail(periodId);
-  
+
   const timeout = setTimeout(async () => {
     periodEmailTimeouts.delete(periodId);
     try {
@@ -62,7 +62,7 @@ function schedulePeriodEmail(periodId: string, delayMs: number = 300000) {
       console.error('[Email] Delayed period email error:', e);
     }
   }, delayMs);
-  
+
   periodEmailTimeouts.set(periodId, timeout);
 }
 
@@ -82,21 +82,21 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
         select: { label: true }
       }),
       prisma.auditLog.findMany({
-        where: { 
+        where: {
           action: { in: ['APPROVE', 'REJECT', 'UPLOAD'] },
           user: { role: 'STUDENT' }
         },
         take: 15,
         orderBy: { createdAt: 'desc' },
         include: {
-          user: { 
-            select: { 
-              tcKimlikNo: true, 
-              email: true, 
-              username: true, 
+          user: {
+            select: {
+              tcKimlikNo: true,
+              email: true,
+              username: true,
               role: true,
               studentProfile: { select: { id: true, firstName: true, lastName: true } }
-            } 
+            }
           },
           approver: { select: { email: true, username: true } },
         },
@@ -203,17 +203,17 @@ export async function listStudents(req: Request, res: Response, next: NextFuncti
             if (catIds.length > 0 && profile.scholarshipCategoryId && !catIds.includes(profile.scholarshipCategoryId)) {
               applies = false;
             }
-          } catch {}
+          } catch { }
         }
-        
+
         if (applies) {
           const doc = profile.documents.find(d => d.type === p.type && d.periodId === p.id);
           if (!doc) {
-             missingCount++;
+            missingCount++;
           } else if (doc.status === 'PENDING') {
-             pendingCount++;
+            pendingCount++;
           } else if (doc.status === 'REJECTED') {
-             missingCount++;
+            missingCount++;
           }
         }
       });
@@ -270,7 +270,7 @@ export async function bulkRemindStudents(req: Request, res: Response, next: Next
 
     // Send emails
     const { sendMissingDocumentReminderEmail } = await import('../lib/email.service');
-    
+
     let sentCount = 0;
     const sentEmails: string[] = [];
     const missingEmails: string[] = [];
@@ -333,7 +333,7 @@ export async function createStudent(req: Request, res: Response, next: NextFunct
     if (!tcKimlikNo || !/^\d{11}$/.test(tcKimlikNo)) {
       throw new AppError(400, 'Geçersiz TC formatı (11 hane olmalı)');
     }
-    
+
     const existing = await prisma.user.findUnique({ where: { tcKimlikNo } });
     if (existing) {
       throw new AppError(400, 'Bu TC Kimlik No ile kayıtlı bir kullanıcı zaten var.');
@@ -383,7 +383,7 @@ export async function updateStudentProfile(req: Request, res: Response, next: Ne
   try {
     const { id } = req.params; // StudentProfile ID
     const data = req.body;
-    
+
     // Convert string empty values to null or valid data
     const profileData: any = { ...data };
 
@@ -399,7 +399,7 @@ export async function updateStudentProfile(req: Request, res: Response, next: Ne
     });
 
     // Parse numeric fields
-    ['grade', 'fatherAge', 'fatherIncome', 'motherAge', 'motherIncome', 'familyMemberCount', 'siblingCount', 'siblingsInEducation', 'highSchoolGradYear', 'graduationYear'].forEach(key => {
+    ['grade', 'fatherAge', 'fatherIncome', 'motherAge', 'motherIncome', 'familyMemberCount', 'siblingCount', 'siblingsInEducation', 'highSchoolGradYear', 'graduationYear', 'universityStartYear', 'universityPlacementRank'].forEach(key => {
       if (profileData[key] !== undefined) {
         profileData[key] = profileData[key] === '' ? null : Number(profileData[key]);
       }
@@ -411,7 +411,16 @@ export async function updateStudentProfile(req: Request, res: Response, next: Ne
         profileData[key] = profileData[key] ? new Date(profileData[key]) : null;
       }
     });
-    
+
+    if (profileData.sicilNo && profileData.sicilNo.trim() !== '') {
+      const existingSicil = await prisma.studentProfile.findFirst({
+        where: { sicilNo: profileData.sicilNo.trim(), id: { not: id } }
+      });
+      if (existingSicil) {
+        throw new AppError(400, 'Bu Sicil No başka bir öğrenci tarafından kullanılıyor.');
+      }
+    }
+
     const updated = await prisma.studentProfile.update({
       where: { id },
       data: profileData
@@ -433,7 +442,7 @@ export async function updateStudentProfile(req: Request, res: Response, next: Ne
           throw new AppError(400, 'Bu e-posta adresi sistemde başka bir hesap tarafından kullanılmaktadır.');
         }
       }
-      
+
       await prisma.user.update({
         where: { id: updated.userId },
         data: { email: cleanEmail }
@@ -688,11 +697,11 @@ export async function updatePeriod(req: Request, res: Response, next: NextFuncti
 
     // Build update data, including categoryIds if provided
     const updateData: any = { isOpen, label, startDate, endDate, grade, semester, academicYear };
-    
+
     if (isVolunteerFormOpen !== undefined) {
       updateData.isVolunteerFormOpen = isVolunteerFormOpen;
     }
-    
+
     if (grades !== undefined) {
       updateData.grades = Array.isArray(grades) && grades.length > 0
         ? JSON.stringify(grades)
@@ -735,7 +744,7 @@ export async function updatePeriod(req: Request, res: Response, next: NextFuncti
 
 export async function deleteSemester(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { label } = req.body;
+    const { label, force } = req.body;
     if (!label) throw new AppError(400, 'Silinecek dönemin adı (label) gerekli.');
 
     // Find all periods with this label
@@ -753,7 +762,38 @@ export async function deleteSemester(req: Request, res: Response, next: NextFunc
     });
 
     if (documentCount > 0) {
-      throw new AppError(400, 'Bu döneme (tüm alt evraklarına) yüklenmiş belgeler var. Önce öğrencilerin yüklediği belgeleri silmelisiniz veya dönemi pasife almalısınız.');
+      if (!force) {
+        throw new AppError(400, 'Bu döneme (tüm alt evraklarına) yüklenmiş belgeler var. Önce öğrencilerin yüklediği belgeleri silmelisiniz veya zorla silme seçeneğini işaretlemelisiniz.');
+      }
+
+      // Find documents to delete files from storage
+      const documents = await prisma.document.findMany({
+        where: { periodId: { in: periodIds } },
+        select: { id: true, filePath: true }
+      });
+
+      const docIds = documents.map(d => d.id);
+
+      // Delete files from storage
+      for (const doc of documents) {
+        if (doc.filePath) {
+          try {
+            await storageService.delete(doc.filePath);
+          } catch (err) {
+            console.error(`Belge silinemedi (ID: ${doc.id}, Yol: ${doc.filePath}):`, err);
+          }
+        }
+      }
+
+      // Delete ApprovableChanges
+      await prisma.approvableChange.deleteMany({
+        where: { documentId: { in: docIds } }
+      });
+
+      // Delete Documents
+      await prisma.document.deleteMany({
+        where: { periodId: { in: periodIds } }
+      });
     }
 
     await prisma.documentPeriod.deleteMany({
@@ -767,7 +807,7 @@ export async function deleteSemester(req: Request, res: Response, next: NextFunc
         module: 'Semester',
         entityId: label,
         entityType: 'DocumentPeriodGroup',
-        newValue: JSON.stringify({ deleted: true, count: periods.length }),
+        newValue: JSON.stringify({ deleted: true, count: periods.length, forceDeletedDocs: documentCount }),
       },
     });
 
@@ -812,7 +852,7 @@ export async function updateSemester(req: Request, res: Response, next: NextFunc
         const dt = docTypes.find(d => d.code === p.type);
         let nativeCats: string[] = [];
         if (dt && dt.categoryIds) {
-          try { nativeCats = JSON.parse(dt.categoryIds); } catch {}
+          try { nativeCats = JSON.parse(dt.categoryIds); } catch { }
         }
 
         let finalCatIds = categoryIds.length > 0 ? [...categoryIds] : [];
@@ -965,14 +1005,14 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
   try {
     const { id } = req.params;
     const { email, username, role, password, isActive } = req.body;
-    
+
     if (role === Role.STUDENT || role === Role.MENTOR) {
       throw new AppError(400, 'Bu yetki rolüne güncellenemez.');
     }
 
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) throw new AppError(404, 'Kullanıcı bulunamadı.');
-    
+
     if (email && email !== user.email) {
       const existingUser = await prisma.user.findUnique({ where: { email } });
       if (existingUser) throw new AppError(400, 'Bu e-posta adresi zaten kullanımda.');
@@ -984,7 +1024,7 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
     if (role) dataToUpdate.role = role;
     if (isActive !== undefined) dataToUpdate.isActive = isActive;
     if (password) {
-       dataToUpdate.passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      dataToUpdate.passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     }
 
     const updatedUser = await prisma.user.update({
@@ -1163,9 +1203,9 @@ export async function deleteMentor(req: Request, res: Response, next: NextFuncti
 export async function assignMentor(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { studentId, mentorId } = req.body;
-    
+
     if (!studentId) throw new AppError(400, 'Öğrenci profil ID gerekli.');
-    
+
     // Check if student exists
     const student = await prisma.studentProfile.findUnique({ where: { id: studentId } });
     if (!student) throw new AppError(404, 'Öğrenci bulunamadı.');
@@ -1244,7 +1284,7 @@ export async function exportStudentsReport(req: Request, res: Response, next: Ne
     }
     if (university) where.universityName = { contains: university as string, mode: 'insensitive' };
     if (grade) where.grade = parseInt(grade as string);
-    
+
     if (studentStatus) {
       where.studentStatus = studentStatus;
     } else {
@@ -1252,7 +1292,7 @@ export async function exportStudentsReport(req: Request, res: Response, next: Ne
         where.studentStatus = { not: 'GRADUATED' };
       }
     }
-    
+
     if (enrollmentStatus) where.enrollmentStatus = enrollmentStatus;
     if (scholarshipGroup) where.scholarshipCategoryId = scholarshipGroup;
 
@@ -1264,9 +1304,9 @@ export async function exportStudentsReport(req: Request, res: Response, next: Ne
       });
       const profileIds = withPending.map((p) => p.studentProfileId);
       if (profileIds.length === 0) {
-         where.id = { in: [] };
+        where.id = { in: [] };
       } else {
-         where.id = { in: profileIds };
+        where.id = { in: profileIds };
       }
     }
 
@@ -1284,7 +1324,7 @@ export async function exportStudentsReport(req: Request, res: Response, next: Ne
     });
 
     const activePeriods = await prisma.documentPeriod.findMany({ where: { isOpen: true } });
-    
+
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Faydasıçok Eğitim Vakfı';
     workbook.created = new Date();
@@ -1391,7 +1431,7 @@ export async function exportStudentsReport(req: Request, res: Response, next: Ne
       { header: 'Nasıl Bir Mentör İster', key: 'mentorExpectation', width: 35 }
     ];
 
-        students.forEach((s) => {
+    students.forEach((s) => {
       allStudentsSheet.addRow({
         userType: s.userType || '',
         sicilNo: s.sicilNo || '',
@@ -2337,7 +2377,7 @@ const EXCEL_COLUMN_MAP: ExcelColumnDef[] = [
   // KİŞİSEL BİLGİLER
   { header: 'Sicil No', aliases: ['sicil', 'sicilno'], dbField: 'sicilNo', section: 'profile', type: 'string' },
   { header: 'Program', aliases: ['programi', 'bursprogrami', 'programadi', 'kategori'], dbField: 'program', section: 'profile', type: 'string' },
-  
+
   // AİLE BİLGİLERİ
   { header: 'Adı', aliases: ['adi', 'isim', 'ogrenciadi'], dbField: 'firstName', section: 'profile', type: 'string' },
   { header: 'Soyadı', aliases: ['soyadi', 'ogrencisoyadi'], dbField: 'lastName', section: 'profile', type: 'string' },
@@ -2352,7 +2392,7 @@ const EXCEL_COLUMN_MAP: ExcelColumnDef[] = [
   { header: 'Anne/Baba Sağ', aliases: ['annebabasag', 'sağ', 'saglik', 'parentsstatus'], dbField: 'parentsStatus', section: 'profile', type: 'string' },
   { header: 'Referans Bilgisi / Hasçelik Çalışanı vb.', aliases: ['referansbilgisi', 'referans'], dbField: 'referenceInfo', section: 'profile', type: 'string' },
   { header: 'Aile İletişim Telefonu', aliases: ['ailetel', 'ailetelefonu'], dbField: 'familyPhone', section: 'profile', type: 'string' },
-  
+
   // OKUL BİLGİLERİ
   { header: 'Okulu', aliases: ['okul', 'uni', 'üniversite', 'universityname'], dbField: 'universityName', section: 'profile', type: 'string' },
   { header: 'Bölümü', aliases: ['bolumu', 'department', 'fakulte', 'fakültesi'], dbField: 'department', section: 'profile', type: 'string' },
@@ -2625,15 +2665,74 @@ export async function getExcelTemplate(req: Request, res: Response, next: NextFu
 export async function deleteStudent(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
-    const student = await prisma.studentProfile.findUnique({ where: { id } });
+    const student = await prisma.studentProfile.findUnique({
+      where: { id },
+      include: { documents: true }
+    });
     if (!student) throw new AppError(404, 'Öğrenci bulunamadı.');
 
+    // 1. Delete physical files from disk
+    if (student.documents && student.documents.length > 0) {
+      for (const doc of student.documents) {
+        if (doc.filePath) {
+          await storageService.delete(doc.filePath).catch((err) => {
+            console.error(`Belge silinemedi (ID: ${doc.id}):`, err);
+          });
+        }
+      }
+    }
+
+    // 2. Transaction to delete database records safely
     await prisma.$transaction([
       prisma.studentProfile.delete({ where: { id } }),
       prisma.user.delete({ where: { id: student.userId } })
     ]);
 
     res.json({ success: true, message: 'Öğrenci başarıyla silindi.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Delete Document ───────────────────────────────────────────────────
+export async function deleteDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const document = await prisma.document.findUnique({ where: { id } });
+
+    if (!document) {
+      throw new AppError(404, 'Belge bulunamadı.');
+    }
+
+    // 1. Delete physical file if exists
+    if (document.filePath) {
+      try {
+        await storageService.delete(document.filePath);
+      } catch (err) {
+        console.error(`Belge dosyası silinemedi (ID: ${document.id}):`, err);
+      }
+    }
+
+    // 2. Delete ApprovableChange relation if it exists
+    await prisma.approvableChange.deleteMany({
+      where: { documentId: id }
+    });
+
+    // 3. Delete Document record
+    await prisma.document.delete({ where: { id } });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: AuditAction.DELETE,
+        module: 'Document',
+        entityId: id,
+        entityType: 'Document',
+        newValue: `Belge silindi: ${document.originalFileName}`,
+      },
+    });
+
+    res.json({ success: true, message: 'Belge başarıyla silindi.' });
   } catch (err) {
     next(err);
   }

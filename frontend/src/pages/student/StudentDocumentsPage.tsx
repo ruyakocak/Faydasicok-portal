@@ -3,8 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { studentApi, documentApi } from '../../api';
 import type { StudentProfile, Document as DocFile, DocumentPeriod } from '../../types';
 import { DocumentsTab } from '../../components/ProfileTabs';
-import { differenceInDays, format } from 'date-fns';
-import { tr } from 'date-fns/locale';
+import { differenceInDays } from 'date-fns';
 
 export default function StudentDocumentsPage() {
   const { user } = useAuth();
@@ -57,6 +56,7 @@ export default function StudentDocumentsPage() {
   // Active deadlines calculation
   const activeDeadlines = periods.filter(p => {
     if (!p.isOpen) return false;
+    if (p.type === 'VOLUNTEER_REPORT') return false;
 
     const docTypeObj = docTypes.find(dt => dt.code === p.type);
     if (docTypeObj) {
@@ -64,8 +64,9 @@ export default function StudentDocumentsPage() {
       try {
         dtCatIds = docTypeObj.categoryIds ? JSON.parse(docTypeObj.categoryIds) : [];
         if (!Array.isArray(dtCatIds)) dtCatIds = [];
-      } catch {}
+      } catch { }
 
+      // if dtCatIds is empty, it means open to all categories
       if (dtCatIds.length > 0 && profile.scholarshipCategoryId && !dtCatIds.includes(profile.scholarshipCategoryId)) {
         return false;
       }
@@ -80,7 +81,7 @@ export default function StudentDocumentsPage() {
 
   return (
     <div className="max-w-[1200px] mx-auto space-y-10 pb-20 animate-in fade-in duration-700">
-      
+
       {/* ── 1. Clean Header ──────────────────────────────────── */}
       <section className="relative pt-10 pb-8 border-b border-gray-200/60 flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-4 max-w-2xl">
@@ -99,26 +100,48 @@ export default function StudentDocumentsPage() {
 
       {/* Deadlines Alert Banner if any pending */}
       {activeDeadlines.length > 0 && (
-        <section className="bg-gradient-to-br from-primary-900 to-primary-800 rounded-3xl p-8 md:p-10 text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="space-y-3 max-w-xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-medium text-white/90">
-              Aksiyon Gerekli
+        <section className="bg-gradient-to-br from-primary-900 to-primary-800 rounded-3xl p-6 text-white shadow-xl">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
             </div>
-            <h2 className="text-3xl font-semibold tracking-tight">Teslim Edilmesi Gereken {activeDeadlines.length} Belgeniz Bulunuyor</h2>
-            <div className="mt-4 flex flex-col sm:flex-row gap-3">
-              {activeDeadlines.map((p) => {
-                const type = docTypes.find(t => t.code === p.type)?.name || p.type;
-                const daysLeft = p.endDate ? differenceInDays(new Date(p.endDate), new Date()) : null;
-                return (
-                  <div key={p.id} className="bg-white/10 p-3 rounded-2xl border border-white/20 text-sm">
-                    <div className="font-semibold text-white truncate">{p.label} - {type}</div>
-                    <div className="text-primary-100 font-medium mt-1">
-                      {daysLeft !== null ? `Son ${daysLeft} Gün (${format(new Date(p.endDate!), 'dd.MM.yyyy', { locale: tr })})` : 'Süre devam ediyor'}
-                    </div>
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 border border-white/20 text-[10px] font-semibold text-white/80 mb-1">
+                Aksiyon Gerekli
+              </div>
+              <h2 className="text-lg font-semibold tracking-tight leading-tight">
+                Teslim Edilmesi Gereken {activeDeadlines.length} Belgeniz Bulunuyor
+              </h2>
+            </div>
+          </div>
+
+          {/* Compact scrollable list */}
+          <div className="max-h-52 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+            {activeDeadlines.map((p) => {
+              const type = docTypes.find(t => t.code === p.type)?.name || p.type;
+              const daysLeft = p.endDate ? differenceInDays(new Date(p.endDate), new Date()) : null;
+              const isUrgent = daysLeft !== null && daysLeft <= 3;
+              return (
+                <div key={p.id} className="flex items-center justify-between gap-3 bg-white/10 hover:bg-white/15 transition-colors rounded-xl px-4 py-2.5 border border-white/15">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/60 flex-shrink-0" />
+                    <span className="text-sm font-medium text-white truncate">
+                      {p.label} — {type}
+                    </span>
                   </div>
-                );
-              })}
-            </div>
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${isUrgent
+                      ? 'bg-rose-400/40 text-rose-100 border border-rose-300/30'
+                      : 'bg-white/10 text-white/70 border border-white/15'
+                    }`}>
+                    {daysLeft !== null
+                      ? `Son ${daysLeft} gün`
+                      : 'Süre devam ediyor'}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}

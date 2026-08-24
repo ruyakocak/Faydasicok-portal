@@ -144,13 +144,12 @@ export default function StudentLayout() {
         }`}
       >
         {/* Logo Section */}
-        <div className="px-5 h-[72px] flex items-center justify-between border-b border-white/50 bg-white/30 backdrop-blur-md">
-          <div className="h-9 flex items-center flex-shrink-0 cursor-pointer" onClick={() => navigate('/student/dashboard')}>
+        <div className="px-4 h-[72px] flex items-center gap-2 border-b border-white/50 bg-white/30 backdrop-blur-md overflow-hidden">
+          <div className="h-8 flex items-center flex-shrink-0 cursor-pointer" onClick={() => navigate('/student/dashboard')}>
             <img src="/logo.png" alt="Logo" className="h-full object-contain drop-shadow-sm" />
           </div>
-          <div className="text-[10px] font-extrabold text-slate-500 uppercase flex flex-col items-end leading-tight tracking-widest ml-2">
-            <span>Öğrenci</span>
-            <span>Paneli</span>
+          <div className="text-[11px] font-extrabold text-slate-500 uppercase flex items-center justify-center leading-tight tracking-wide whitespace-normal break-words">
+            ÖĞRENCİ PANELİ
           </div>
         </div>
 

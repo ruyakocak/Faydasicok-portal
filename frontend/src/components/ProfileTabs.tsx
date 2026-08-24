@@ -4,6 +4,7 @@ import type { StudentProfile, Document as DocFile, DocumentPeriod, AuditLog } fr
 import { studentApi, documentApi, auditApi, adminApi } from '../api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import { generateActionSummary, tryParseJSON, fieldTranslations, formatValue, actionLabels } from '../utils/audit';
 import { UNIVERSITIES } from '../constants/universities';
 
 // ── Status Badge ──────────────────────────────────────────────────────
@@ -172,8 +173,6 @@ export function PersonalTab({ profile, onSave, readOnly }: {
       <dl>
         <FieldRow label="TC Kimlik No" value={profile.user?.tcKimlikNo} />
         <FieldRow label="Sicil No" value={profile.sicilNo} editing={editing && isAdmin} name="sicilNo" onChange={handleChange} />
-        <FieldRow label="Üye / Bursiyer Türü" value={profile.userType} editing={editing && isAdmin} name="userType" onChange={handleChange} />
-        <FieldRow label="Program" value={profile.program} editing={editing && isAdmin} name="program" onChange={handleChange} />
         <FieldRow label="Otomatik İnci Adı" value={profile.inciName} editing={editing && isAdmin} name="inciName" onChange={handleChange} />
         <FieldRow label="Referans Bilgisi" value={profile.referenceInfo} editing={editing && isAdmin} name="referenceInfo" onChange={handleChange} />
         <FieldRow label="Ad" value={profile.firstName} editing={editing && isAdmin} name="firstName" onChange={handleChange} />
@@ -184,11 +183,11 @@ export function PersonalTab({ profile, onSave, readOnly }: {
           editing={editing} name="birthDate" type="date" onChange={handleChange} />
         <FieldRow label="Doğum Yeri" value={profile.birthPlace} editing={editing} name="birthPlace" onChange={handleChange} />
         {editing && isAdmin ? (
-          <FieldRow 
-            label="Bursiyer Kategorisi" 
-            value={formData.scholarshipCategoryId || profile.scholarshipCategoryId || ''} 
-            editing={true} 
-            name="scholarshipCategoryId" 
+          <FieldRow
+            label="Bursiyer Kategorisi"
+            value={formData.scholarshipCategoryId || profile.scholarshipCategoryId || ''}
+            editing={true}
+            name="scholarshipCategoryId"
             onChange={handleChange}
             options={[
               { value: '', label: 'Seçiniz' },
@@ -198,13 +197,13 @@ export function PersonalTab({ profile, onSave, readOnly }: {
         ) : (
           <FieldRow label="Bursiyer Kategorisi" value={profile.scholarshipCategory?.name || 'Belirtilmemiş'} />
         )}
-        <FieldRow 
-          label="Bursiyer Sözleşmesi" 
-          value={profile.isContractSigned ? 'İmzalandı' : 'İmzalanmadı'} 
-          editing={editing && isAdmin} 
-          name="isContractSigned" 
+        <FieldRow
+          label="Bursiyer Sözleşmesi"
+          value={profile.isContractSigned ? 'İmzalandı' : 'İmzalanmadı'}
+          editing={editing && isAdmin}
+          name="isContractSigned"
           onChange={handleChange}
-          options={[{ value: 'true', label: 'İmzalandı' }, { value: 'false', label: 'İmzalanmadı' }]} 
+          options={[{ value: 'true', label: 'İmzalandı' }, { value: 'false', label: 'İmzalanmadı' }]}
         />
         {isAdmin ? (
           <FieldRow label="Kayıt Durumu" value={profile.studentStatus} editing={editing} name="studentStatus" onChange={handleChange}
@@ -220,7 +219,7 @@ export function PersonalTab({ profile, onSave, readOnly }: {
         <div className="flex items-center justify-between mb-3">
           <h4 className="font-medium text-gray-900 flex items-center gap-2">
             <svg viewBox="0 0 24 24" className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.4 19.79 19.79 0 0 1 1.61 4.74 2 2 0 0 1 3.6 2.54h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.1a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7a2 2 0 0 1 1.72 2.03z"/>
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.4 19.79 19.79 0 0 1 1.61 4.74 2 2 0 0 1 3.6 2.54h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.1a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7a2 2 0 0 1 1.72 2.03z" />
             </svg>
             İletişim Bilgileri
           </h4>
@@ -448,7 +447,7 @@ function BankInfoForm({ profile, onClose }: { profile: StudentProfile; onClose: 
       if (isAdmin) {
         await adminApi.updateStudentProfile(profile.id, { iban: cleanIban, bankName: bankName.trim() });
         toast.success('Banka bilgisi güncellendi.');
-        window.location.reload(); 
+        window.location.reload();
       } else {
         await studentApi.updateBankInfo(profile.id, cleanIban, bankName.trim());
         toast.success('Banka bilgisi güncelleme talebi gönderildi.');
@@ -769,14 +768,42 @@ export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }
     return <div className="py-10 text-center"><span className="spinner w-8 h-8" /></div>;
   }
 
+  // Helper to check if a period matches student's category
+  function isPeriodMatchingCategory(p: DocumentPeriod) {
+    if (!p.categoryIds) return true;
+    try {
+      const pCatIds: string[] = JSON.parse(p.categoryIds);
+      if (!Array.isArray(pCatIds) || pCatIds.length === 0) return true;
+      return profile.scholarshipCategoryId ? pCatIds.includes(profile.scholarshipCategoryId) : false;
+    } catch {
+      return true;
+    }
+  }
+
+  // Ensure standard types exist if periods refer to them
+  const allDocTypes = [...docTypes];
+  const standardTypes = [
+    { code: 'TRANSCRIPT', name: 'Transkript', isStatic: false, isRequired: true },
+    { code: 'STUDENT_CERTIFICATE', name: 'Öğrenci Belgesi', isStatic: false, isRequired: true },
+  ];
+  standardTypes.forEach(st => {
+    if (!allDocTypes.some(dt => dt.code === st.code)) {
+      allDocTypes.push(st);
+    }
+  });
+
   // Filter doc types by student's category if restricted
-  const applicableDocTypes = docTypes.filter(docType => {
+  const applicableDocTypes = allDocTypes.filter(docType => {
+    if (!docType.categoryIds) return true;
     let dtCatIds: string[] = [];
     try {
-      dtCatIds = docType.categoryIds ? JSON.parse(docType.categoryIds) : [];
+      dtCatIds = JSON.parse(docType.categoryIds);
       if (!Array.isArray(dtCatIds)) dtCatIds = [];
     } catch {}
 
+    if (dtCatIds.length === 0) {
+      return true;
+    }
     if (dtCatIds.length > 0 && profile.scholarshipCategoryId && !dtCatIds.includes(profile.scholarshipCategoryId)) {
       return false;
     }
@@ -795,7 +822,7 @@ export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }
     const doc = documents.find(d => d.type === dt.code);
     return doc && doc.status !== 'REJECTED';
   }).length;
-  
+
   const completionPercentage = requiredStaticTypes.length > 0
     ? Math.round((uploadedRequiredCount / requiredStaticTypes.length) * 100)
     : 100;
@@ -803,7 +830,7 @@ export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }
   function handleDownloadTemplate(dt: any) {
     const isTaahhut = dt.code === 'TAAHHUTNAME';
     const isAydinlatma = dt.code === 'AYDINLATMA_METNI';
-    
+
     let textContent = '';
     const dateStr = format(new Date(), 'dd.MM.yyyy');
     const studentFullName = `${profile.firstName} ${profile.lastName}`.trim();
@@ -864,142 +891,140 @@ _____________________________
     <div className="space-y-10">
       {/* ── 1. STATİK / İLK KAYIT BELGELERİ ── */}
       {!profile.isInitialDocsExempt && (
-      <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-        <div className="p-6 bg-gradient-to-r from-purple-50 via-white to-blue-50 border-b border-gray-200">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2.5 mb-1">
-                <span className="p-2 bg-purple-600 text-white rounded-lg shadow-sm">
-                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                </span>
-                <h3 className="text-lg font-bold text-gray-900">İlk Kayıt & Başvuru Belgeleri</h3>
+        <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+          <div className="p-6 bg-gradient-to-r from-purple-50 via-white to-blue-50 border-b border-gray-200">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2.5 mb-1">
+                  <span className="p-2 bg-purple-600 text-white rounded-lg shadow-sm">
+                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
+                  </span>
+                  <h3 className="text-lg font-bold text-gray-900">İlk Kayıt & Başvuru Belgeleri</h3>
+                </div>
+                <p className="text-xs text-gray-600">
+                  Sisteme yeni kaydedilen bursiyerlerin yalnızca ilk kayıtta bir defaya mahsus yüklemesi gereken evraklar.
+                </p>
               </div>
-              <p className="text-xs text-gray-600">
-                Sisteme yeni kaydedilen bursiyerlerin yalnızca ilk kayıtta bir defaya mahsus yüklemesi gereken evraklar.
-              </p>
+
+              {/* Muafiyet / İlerleme Durumu */}
+              {profile.isInitialDocsExempt ? (
+                <div className="px-4 py-2 bg-emerald-100 text-emerald-900 rounded-xl border border-emerald-300 flex items-center gap-2 text-xs font-semibold shadow-xs">
+                  <span>🛡️</span>
+                  <span>Mevcut Bursiyer (Arşivde Kayıtlı / Muaf)</span>
+                </div>
+              ) : (
+                <div className="min-w-[200px] bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
+                  <div className="flex items-center justify-between text-xs mb-1.5">
+                    <span className="font-semibold text-gray-700">Tamamlanma</span>
+                    <span className="font-bold text-purple-700">{uploadedRequiredCount} / {requiredStaticTypes.length} Zorunlu</span>
+                  </div>
+                  <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${completionPercentage === 100 ? 'bg-emerald-500' : 'bg-purple-600'
+                        }`}
+                      style={{ width: `${completionPercentage}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Muafiyet / İlerleme Durumu */}
-            {profile.isInitialDocsExempt ? (
-              <div className="px-4 py-2 bg-emerald-100 text-emerald-900 rounded-xl border border-emerald-300 flex items-center gap-2 text-xs font-semibold shadow-xs">
-                <span>🛡️</span>
-                <span>Mevcut Bursiyer (Arşivde Kayıtlı / Muaf)</span>
-              </div>
-            ) : (
-              <div className="min-w-[200px] bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
-                <div className="flex items-center justify-between text-xs mb-1.5">
-                  <span className="font-semibold text-gray-700">Tamamlanma</span>
-                  <span className="font-bold text-purple-700">{uploadedRequiredCount} / {requiredStaticTypes.length} Zorunlu</span>
-                </div>
-                <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-500 ${
-                      completionPercentage === 100 ? 'bg-emerald-500' : 'bg-purple-600'
-                    }`}
-                    style={{ width: `${completionPercentage}%` }}
-                  />
-                </div>
+            {profile.isInitialDocsExempt && (
+              <div className="mt-4 p-3 bg-white/80 rounded-xl border border-emerald-200 text-xs text-emerald-800 flex items-start gap-2.5">
+                <span className="text-base leading-none">ℹ️</span>
+                <p>
+                  <strong>Muafiyet Bilgisi:</strong> Vakfımızın mevcut bursiyeri olduğunuz için ilk kayıt evraklarınız vakıf arşivimizde mevcuttur. Sistem tarafından onaylı kabul edilmiştir; yalnızca her dönem yenilenen dönemsel evraklarınızı yüklemeniz gerekmektedir.
+                </p>
               </div>
             )}
           </div>
 
-          {profile.isInitialDocsExempt && (
-            <div className="mt-4 p-3 bg-white/80 rounded-xl border border-emerald-200 text-xs text-emerald-800 flex items-start gap-2.5">
-              <span className="text-base leading-none">ℹ️</span>
-              <p>
-                <strong>Muafiyet Bilgisi:</strong> Vakfımızın mevcut bursiyeri olduğunuz için ilk kayıt evraklarınız vakıf arşivimizde mevcuttur. Sistem tarafından onaylı kabul edilmiştir; yalnızca her dönem yenilenen dönemsel evraklarınızı yüklemeniz gerekmektedir.
-              </p>
-            </div>
-          )}
-        </div>
+          {/* Static Document Items */}
+          <div className="p-6 divide-y divide-gray-100">
+            {staticDocTypes.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-6">Tanımlı ilk kayıt belgesi bulunmuyor.</p>
+            ) : (
+              staticDocTypes.map((dt) => {
+                const uploadedDoc = documents.find(d => d.type === dt.code);
+                const isRequired = dt.isRequired !== false;
+                const isUploaded = !!uploadedDoc;
 
-        {/* Static Document Items */}
-        <div className="p-6 divide-y divide-gray-100">
-          {staticDocTypes.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">Tanımlı ilk kayıt belgesi bulunmuyor.</p>
-          ) : (
-            staticDocTypes.map((dt) => {
-              const uploadedDoc = documents.find(d => d.type === dt.code);
-              const isRequired = dt.isRequired !== false;
-              const isUploaded = !!uploadedDoc;
+                return (
+                  <div key={dt.code} className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-gray-50/50 p-2.5 rounded-xl transition-colors">
+                    <div className="space-y-1 max-w-xl">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-gray-900">{dt.name}</span>
+                        {isRequired ? (
+                          <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md text-[10px] font-semibold">
+                            Zorunlu
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-md text-[10px] font-semibold">
+                            Opsiyonel (Varsa)
+                          </span>
+                        )}
+                        {uploadedDoc && (
+                          <StatusBadge
+                            status={uploadedDoc.status}
+                            note={uploadedDoc.rejectionNote}
+                            onShowNote={setSelectedRejectionNote}
+                          />
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">{dt.description || 'Açıklama belirtilmemiş.'}</p>
 
-              return (
-                <div key={dt.code} className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-gray-50/50 p-2.5 rounded-xl transition-colors">
-                  <div className="space-y-1 max-w-xl">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-sm text-gray-900">{dt.name}</span>
-                      {isRequired ? (
-                        <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md text-[10px] font-semibold">
-                          Zorunlu
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-md text-[10px] font-semibold">
-                          Opsiyonel (Varsa)
-                        </span>
-                      )}
                       {uploadedDoc && (
-                        <StatusBadge
-                          status={uploadedDoc.status}
-                          note={uploadedDoc.rejectionNote}
-                          onShowNote={setSelectedRejectionNote}
-                        />
+                        <div className="flex items-center gap-3 text-xs text-gray-500 pt-1">
+                          <a
+                            href={`/${uploadedDoc.filePath}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary-600 hover:text-primary-800 hover:underline flex items-center gap-1 font-medium truncate max-w-xs"
+                          >
+                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+                            {uploadedDoc.originalFileName}
+                          </a>
+                          <span>•</span>
+                          <span>{format(new Date(uploadedDoc.uploadedAt), 'dd.MM.yyyy HH:mm')}</span>
+                        </div>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500">{dt.description || 'Açıklama belirtilmemiş.'}</p>
-                    
-                    {uploadedDoc && (
-                      <div className="flex items-center gap-3 text-xs text-gray-500 pt-1">
-                        <a
-                          href={`/${uploadedDoc.filePath}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary-600 hover:text-primary-800 hover:underline flex items-center gap-1 font-medium truncate max-w-xs"
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {dt.hasTemplate && (
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadTemplate(dt)}
+                          className="btn-secondary btn-sm text-xs flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100"
+                          title="İmzalanacak boş şablonu indirir"
                         >
-                          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                          {uploadedDoc.originalFileName}
-                        </a>
-                        <span>•</span>
-                        <span>{format(new Date(uploadedDoc.uploadedAt), 'dd.MM.yyyy HH:mm')}</span>
-                      </div>
-                    )}
-                  </div>
+                          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+                          Şablonu İndir
+                        </button>
+                      )}
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {dt.hasTemplate && (
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadTemplate(dt)}
-                        className="btn-secondary btn-sm text-xs flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100"
-                        title="İmzalanacak boş şablonu indirir"
-                      >
-                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                        Şablonu İndir
-                      </button>
-                    )}
-
-                    {!readOnly && (
-                      <button
-                        type="button"
-                        onClick={() => setActiveUploadDocType(dt)}
-                        className={`btn-sm text-xs flex items-center gap-1.5 ${
-                          isUploaded
-                            ? 'btn-secondary text-gray-700'
-                            : isRequired
-                            ? 'btn-primary'
-                            : 'btn-secondary text-primary-700 bg-primary-50 border-primary-200'
-                        }`}
-                      >
-                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-                        {isUploaded ? 'Yeniden Yükle' : 'Belge Yükle'}
-                      </button>
-                    )}
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveUploadDocType(dt)}
+                          className={`btn-sm text-xs flex items-center gap-1.5 ${isUploaded
+                              ? 'btn-secondary text-gray-700'
+                              : isRequired
+                                ? 'btn-primary'
+                                : 'btn-secondary text-primary-700 bg-primary-50 border-primary-200'
+                            }`}
+                        >
+                          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
+                          {isUploaded ? 'Yeniden Yükle' : 'Belge Yükle'}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </section>
+                );
+              })
+            )}
+          </div>
+        </section>
       )}
 
       {/* ── 2. DÖNEMSEL BELGELER (Transkript, Öğrenci Belgesi vb.) ── */}
@@ -1009,7 +1034,7 @@ _____________________________
             <div>
               <div className="flex items-center gap-2.5 mb-1">
                 <span className="p-2 bg-blue-600 text-white rounded-lg shadow-sm">
-                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
                 </span>
                 <h3 className="text-lg font-bold text-gray-900">Dönemsel Belgeler</h3>
               </div>
@@ -1020,85 +1045,121 @@ _____________________________
           </div>
         </div>
 
-        {/* Periodic Document Items (Identical design to static documents) */}
+        {/* Periodic Document Items */}
         <div className="p-6 divide-y divide-gray-100">
-          {periodicDocTypes.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">Tanımlı dönemsel belge bulunmuyor.</p>
-          ) : (
-            periodicDocTypes.map((dt) => {
-              const typePeriods = periods.filter(p => p.type === dt.code);
-              const openPeriod = typePeriods.find(p => p.isOpen);
-              const typeDocs = documents.filter(d => d.type === dt.code);
-              
-              const uploadedInOpenPeriod = openPeriod ? typeDocs.find(d => d.periodId === openPeriod.id) : null;
-              const latestDoc = uploadedInOpenPeriod || typeDocs[0];
-              const isUploaded = !!latestDoc;
+          {(() => {
+            const visiblePeriodicDocTypes = readOnly
+              ? periodicDocTypes
+              : periodicDocTypes.filter(dt =>
+                periods.some(p => p.type === dt.code && p.isOpen && isPeriodMatchingCategory(p)) ||
+                documents.some(d => d.type === dt.code)
+              );
 
-              return (
-                <div key={dt.code} className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-gray-50/50 p-2.5 rounded-xl transition-colors">
-                  <div className="space-y-1 max-w-xl">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-sm text-gray-900">{dt.name}</span>
-                      {openPeriod ? (
-                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-md text-[10px] font-semibold">
-                          {openPeriod.label}
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 border border-gray-200 rounded-md text-[10px] font-semibold">
-                          Dönem Kapalı
-                        </span>
+            if (visiblePeriodicDocTypes.length === 0) {
+              return <p className="text-sm text-gray-400 text-center py-6">Tanımlı veya aktif dönemsel belge bulunmuyor.</p>;
+            }
+
+            return visiblePeriodicDocTypes.flatMap((dt) => {
+              const typePeriods = periods.filter(p => p.type === dt.code && (readOnly || isPeriodMatchingCategory(p)));
+              const typeDocs = documents.filter(d => d.type === dt.code).sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+
+              const periodsToDisplayMap = new Map();
+              typePeriods.forEach(p => {
+                if (p.isOpen) periodsToDisplayMap.set(p.id, p);
+              });
+              typeDocs.forEach(d => {
+                if (d.periodId) {
+                  const p = typePeriods.find(tp => tp.id === d.periodId);
+                  if (p) periodsToDisplayMap.set(p.id, p);
+                }
+              });
+
+              const periodsToDisplay = Array.from(periodsToDisplayMap.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+              const legacyDocs = typeDocs.filter(d => !d.periodId);
+
+              const items: any[] = [];
+              periodsToDisplay.forEach(p => {
+                const docForPeriod = typeDocs.find(d => d.periodId === p.id);
+                items.push({ key: `${dt.code}-${p.id}`, dt, period: p, doc: docForPeriod, isUploaded: !!docForPeriod });
+              });
+              legacyDocs.forEach(d => {
+                items.push({ key: `${dt.code}-legacy-${d.id}`, dt, period: null, doc: d, isUploaded: true });
+              });
+
+              if (items.length === 0 && readOnly) {
+                items.push({ key: `${dt.code}-empty`, dt, period: null, doc: null, isUploaded: false });
+              }
+
+              return items.map(item => {
+                const { key, dt, period, doc, isUploaded } = item;
+                const isOpen = period?.isOpen;
+
+                return (
+                  <div key={key} className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-gray-50/50 p-2.5 rounded-xl transition-colors">
+                    <div className="space-y-1 max-w-xl">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-gray-900">{dt.name}</span>
+                        {period ? (
+                          <span className={`px-2 py-0.5 border rounded-md text-[10px] font-semibold ${isOpen ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                            {period.label} {isOpen ? '' : '(Kapalı)'}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 border border-gray-200 rounded-md text-[10px] font-semibold">
+                            Dönem Kapalı
+                          </span>
+                        )}
+                        {doc && (
+                          <StatusBadge
+                            status={doc.status}
+                            note={doc.rejectionNote}
+                            onShowNote={setSelectedRejectionNote}
+                          />
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">{dt.description || 'Açıklama belirtilmemiş.'}</p>
+
+                      {doc && (
+                        <div className="flex items-center gap-3 text-xs text-gray-500 pt-1 flex-wrap">
+                          <a
+                            href={`/${doc.filePath}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary-600 hover:text-primary-800 hover:underline flex items-center gap-1 font-medium truncate max-w-xs"
+                          >
+                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+                            {doc.originalFileName}
+                          </a>
+                          <span>•</span>
+                          <span>{format(new Date(doc.uploadedAt), 'dd.MM.yyyy HH:mm')}</span>
+                          {typeDocs.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setHistoryModalDocType(dt)}
+                              className="text-primary-600 hover:underline font-semibold ml-1 text-[11px] cursor-pointer inline-flex items-center gap-0.5"
+                            >
+                              Tüm Yükleme Geçmişi ({typeDocs.length}) &rarr;
+                            </button>
+                          )}
+                        </div>
                       )}
-                      {latestDoc && (
-                        <StatusBadge
-                          status={latestDoc.status}
-                          note={latestDoc.rejectionNote}
-                          onShowNote={setSelectedRejectionNote}
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {!readOnly && period && isOpen && (
+                        <PeriodUploadButton
+                          periods={[period]}
+                          profileId={profile.id}
+                          docType={dt}
+                          onUploaded={onUpload}
+                          isUploaded={isUploaded}
                         />
                       )}
                     </div>
-                    <p className="text-xs text-gray-500">{dt.description || 'Açıklama belirtilmemiş.'}</p>
-
-                    {latestDoc && (
-                      <div className="flex items-center gap-3 text-xs text-gray-500 pt-1 flex-wrap">
-                        <a
-                          href={`/${latestDoc.filePath}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary-600 hover:text-primary-800 hover:underline flex items-center gap-1 font-medium truncate max-w-xs"
-                        >
-                          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                          {latestDoc.originalFileName}
-                        </a>
-                        <span>•</span>
-                        <span>{format(new Date(latestDoc.uploadedAt), 'dd.MM.yyyy HH:mm')}</span>
-                        {typeDocs.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => setHistoryModalDocType(dt)}
-                            className="text-primary-600 hover:underline font-semibold ml-1 text-[11px] cursor-pointer inline-flex items-center gap-0.5"
-                          >
-                            Tüm Yükleme Geçmişi ({typeDocs.length}) &rarr;
-                          </button>
-                        )}
-                      </div>
-                    )}
                   </div>
-
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {!readOnly && (
-                      <PeriodUploadButton
-                        periods={typePeriods}
-                        profileId={profile.id}
-                        docType={dt}
-                        onUploaded={onUpload}
-                        isUploaded={isUploaded}
-                      />
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
+                );
+              });
+            });
+          })()}
         </div>
       </section>
 
@@ -1203,7 +1264,7 @@ function StaticUploadModal({ docType, profileId, onClose, onUploaded }: {
   let customFields: any[] = [];
   try {
     customFields = docType.customFields ? JSON.parse(docType.customFields) : [];
-  } catch (e) {}
+  } catch (e) { }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1232,7 +1293,7 @@ function StaticUploadModal({ docType, profileId, onClose, onUploaded }: {
             <p className="text-xs text-gray-500 mt-0.5">İlk Kayıt / Başvuru Evrakı</p>
           </div>
           <button onClick={onClose} className="w-7 h-7 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 flex items-center justify-center">
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
         </div>
 
@@ -1293,11 +1354,11 @@ function DocumentTable({ docs, docType, onShowRejectionNote }: { docs: DocFile[]
   if (!docs.length) {
     return <p className="text-sm text-gray-400 text-center py-4">Henüz belge yüklenmedi.</p>;
   }
-  
+
   let customFields: any[] = [];
   try {
     customFields = docType.customFields ? JSON.parse(docType.customFields) : [];
-  } catch (e) {}
+  } catch (e) { }
 
   return (
     <div className="overflow-x-auto">
@@ -1316,10 +1377,9 @@ function DocumentTable({ docs, docType, onShowRejectionNote }: { docs: DocFile[]
         <tbody>
           {docs.map(doc => {
             let answers: any = {};
-            try { answers = doc.dynamicFields ? JSON.parse(doc.dynamicFields) : {}; } catch (e) {}
+            try { answers = doc.dynamicFields ? JSON.parse(doc.dynamicFields) : {}; } catch (e) { }
             if (docType.code === 'TRANSCRIPT' && doc.grade) answers['Sınıf'] = doc.grade;
-            if (docType.code === 'VOLUNTEER_REPORT' && doc.volunteerOrg) answers['Kurum'] = doc.volunteerOrg;
-            
+
             return (
               <tr key={doc.id}>
                 <td>{doc.period?.label || (doc.academicYear ? `${doc.academicYear} ${doc.semester === 'GUZ' ? 'Güz' : doc.semester === 'BAHAR' ? 'Bahar' : ''}` : '—')}</td>
@@ -1363,7 +1423,7 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded, isUp
   const [file, setFile] = useState<File | null>(null);
 
   let customFields: any[] = [];
-  try { customFields = docType.customFields ? JSON.parse(docType.customFields) : []; } catch(e) {}
+  try { customFields = docType.customFields ? JSON.parse(docType.customFields) : []; } catch (e) { }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1396,7 +1456,7 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded, isUp
               <p className="text-xs text-gray-500 mt-0.5">Dönemsel Evrak</p>
             </div>
             <button onClick={() => setOpen(false)} className="w-7 h-7 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 flex items-center justify-center">
-              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           </div>
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
@@ -1408,7 +1468,7 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded, isUp
                 ))}
               </select>
             </div>
-            
+
             {customFields.map(field => (
               <div key={field.id}>
                 <label className="form-label text-xs">{field.label} {field.required && <span className="text-primary-500">*</span>}</label>
@@ -1450,11 +1510,10 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded, isUp
   return (
     <button
       onClick={() => setOpen(true)}
-      className={`btn-sm text-xs flex items-center gap-1.5 ${
-        isUploaded
+      className={`btn-sm text-xs flex items-center gap-1.5 ${isUploaded
           ? 'btn-secondary text-gray-700'
           : 'btn-primary'
-      }`}
+        }`}
     >
       <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
       {isUploaded ? 'Yeniden Yükle' : 'Belge Yükle'}
@@ -1470,6 +1529,75 @@ interface ActivityTabProps {
 export function ActivityTab({ profileId }: ActivityTabProps) {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+
+  const renderLogDetails = () => {
+    if (!selectedLog) return null;
+    
+    const oldObj = tryParseJSON(selectedLog.oldValue) || {};
+    const newObj = tryParseJSON(selectedLog.newValue) || {};
+    
+    // Auto-infer opposites for boolean flags if old is missing
+    if (newObj.isOpen !== undefined && oldObj.isOpen === undefined) {
+      oldObj.isOpen = !newObj.isOpen;
+    }
+    if (newObj.isActive !== undefined && oldObj.isActive === undefined) {
+      oldObj.isActive = !newObj.isActive;
+    }
+
+    const keys = Array.from(new Set([...Object.keys(oldObj), ...Object.keys(newObj)]));
+
+    return (
+      <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50 shrink-0">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">İşlem Detayları</h2>
+              <p className="text-sm text-gray-500 mt-0.5">{generateActionSummary(selectedLog)}</p>
+            </div>
+            <button onClick={() => setSelectedLog(null)} className="text-gray-400 hover:text-gray-600 transition-colors p-2 -mr-2">
+              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          
+          <div className="p-6 overflow-y-auto flex-1 min-h-0">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Değişen Veriler</h3>
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200 text-gray-500">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">Alan</th>
+                    <th className="px-4 py-2 font-medium">Eski Değer</th>
+                    <th className="px-4 py-2 font-medium">Yeni Değer</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {keys.map((k) => (
+                    <tr key={k} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-2.5 font-medium text-gray-900">{fieldTranslations[k] || k}</td>
+                      <td className="px-4 py-2.5 text-gray-500 break-all">{formatValue(k, oldObj[k])}</td>
+                      <td className={`px-4 py-2.5 break-all ${newObj[k] !== oldObj[k] ? 'text-primary-600 font-medium' : 'text-gray-500'}`}>
+                        {formatValue(k, newObj[k])}
+                      </td>
+                    </tr>
+                  ))}
+                  {keys.length === 0 && (
+                     <tr>
+                       <td colSpan={3} className="px-4 py-6 text-center text-gray-500">Değişen yapısal bir veri bulunmuyor.</td>
+                     </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end shrink-0">
+            <button onClick={() => setSelectedLog(null)} className="btn-secondary">Kapat</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -1486,15 +1614,6 @@ export function ActivityTab({ profileId }: ActivityTabProps) {
     return <p className="text-sm text-gray-400 text-center py-4">Henüz bir işlem geçmişi bulunmamaktadır.</p>;
   }
 
-  const actionLabels: Record<string, string> = {
-    CREATE: 'Oluşturuldu',
-    UPDATE: 'Güncellendi',
-    DELETE: 'Silindi',
-    APPROVE: 'Onaylandı',
-    REJECT: 'Reddedildi',
-    UPLOAD: 'Belge Yüklendi',
-  };
-
   const moduleLabels: Record<string, string> = {
     PERSONAL_INFO: 'Kişisel Bilgiler',
     FAMILY_INFO: 'Aile Bilgileri',
@@ -1509,19 +1628,18 @@ export function ActivityTab({ profileId }: ActivityTabProps) {
       <table className="data-table">
         <thead>
           <tr>
-            <th>Tarih</th>
+            <th>Tarih-Saat</th>
             <th>Modül</th>
             <th>İşlem</th>
-            <th>Detay</th>
-            <th>Eski Değer</th>
-            <th>Yeni Değer</th>
+            <th>Açıklama (Özet)</th>
+            <th className="!text-right pr-6">Detaylar</th>
           </tr>
         </thead>
         <tbody>
           {logs.map(log => (
             <tr key={log.id}>
               <td className="text-xs text-gray-500 font-mono whitespace-nowrap">
-                {format(new Date(log.createdAt), 'dd.MM.yyyy HH:mm')}
+                {format(new Date(log.createdAt), 'dd.MM.yyyy HH:mm:ss')}
               </td>
               <td className="text-sm font-medium text-gray-700">
                 {moduleLabels[log.module] || log.module}
@@ -1535,19 +1653,22 @@ export function ActivityTab({ profileId }: ActivityTabProps) {
                   {actionLabels[log.action] || log.action}
                 </span>
               </td>
-              <td className="text-sm text-gray-600 font-mono">
-                {log.entityId === log.newValue || log.entityId === log.oldValue || !log.entityId ? '—' : log.entityId}
+              <td className="text-sm text-gray-600">
+                {generateActionSummary(log)}
               </td>
-              <td className="text-xs text-gray-500 max-w-32 truncate" title={log.oldValue || undefined}>
-                {log.oldValue || '—'}
-              </td>
-              <td className="text-xs text-gray-700 max-w-32 truncate" title={log.newValue || undefined}>
-                {log.newValue || '—'}
+              <td className="!text-right pr-4">
+                <button
+                  onClick={() => setSelectedLog(log)}
+                  className="btn-ghost btn-sm text-primary-600 font-medium text-xs rounded hover:bg-primary-50 py-1.5 px-3"
+                >
+                  Logu Görüntüle &rarr;
+                </button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+      {renderLogDetails()}
     </div>
   );
 }

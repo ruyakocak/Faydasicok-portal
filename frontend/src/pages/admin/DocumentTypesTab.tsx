@@ -19,6 +19,11 @@ export default function DocumentTypesTab() {
   const [syncing, setSyncing] = useState(false);
   const [filterType, setFilterType] = useState<'ALL' | 'STATIC' | 'PERIODIC'>('ALL');
   
+  // Delete modal state
+  const [deleteModalId, setDeleteModalId] = useState<string | null>(null);
+  const [deleteModalLabel, setDeleteModalLabel] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  
   const [form, setForm] = useState<{
     id?: string;
     code: string;
@@ -76,15 +81,25 @@ export default function DocumentTypesTab() {
     }
   }
 
-  async function handleDelete(id: string, name: string) {
-    if (!window.confirm(`"${name}" belge türünü silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) return;
+  function handleDelete(id: string, name: string) {
+    setDeleteModalId(id);
+    setDeleteModalLabel(name);
+  }
+
+  async function confirmDelete() {
+    if (!deleteModalId) return;
+    setDeleting(true);
     try {
-      await adminApi.deleteDocumentType(id);
+      await adminApi.deleteDocumentType(deleteModalId);
       toast.success('Belge türü silindi.');
       if (showModal) setShowModal(false);
+      setDeleteModalId(null);
+      setDeleteModalLabel(null);
       load();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Belge türü silinemedi.');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -586,6 +601,39 @@ export default function DocumentTypesTab() {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* ── Delete Confirmation Modal ── */}
+      {deleteModalId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl border border-gray-100 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Belge Türünü Sil</h3>
+            <p className="text-gray-500 text-sm mb-6">
+              <span className="font-semibold text-gray-700">{deleteModalLabel}</span> adlı belge türünü silmek istediğinize emin misiniz? Bu işlem geri alınamaz.
+            </p>
+            <div className="flex items-center gap-3 w-full">
+              <button 
+                onClick={() => {
+                  setDeleteModalId(null);
+                  setDeleteModalLabel(null);
+                }}
+                className="flex-1 py-2.5 px-4 rounded-xl text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+                disabled={deleting}
+              >
+                İptal
+              </button>
+              <button 
+                onClick={confirmDelete}
+                className="flex-1 py-2.5 px-4 rounded-xl text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors"
+                disabled={deleting}
+              >
+                {deleting ? 'Siliniyor...' : 'Evet, Sil'}
+              </button>
+            </div>
           </div>
         </div>
       )}

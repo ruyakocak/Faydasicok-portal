@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { volunteerApi } from '../../api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -10,6 +11,7 @@ interface VolunteerForm {
   id: string;
   fullName: string;
   email: string;
+  period?: { id: string; label: string };
   scholarshipCategoryId?: string;
   scholarshipCategory?: { id: string; name: string };
   schoolAndDepartment: string;
@@ -82,10 +84,15 @@ function FormDetailModal({ form, categories, schema, onClose, onDeleted }: {
   onDeleted: (id: string) => void;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   async function handleDelete() {
-    if (!window.confirm('Bu formu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return;
+    setShowDeleteConfirm(true);
+  }
+
+  async function confirmDelete() {
     setDeleting(true);
+    setShowDeleteConfirm(false);
     try {
       await volunteerApi.adminDelete(form.id);
       toast.success('Form silindi.');
@@ -169,12 +176,22 @@ function FormDetailModal({ form, categories, schema, onClose, onDeleted }: {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
               {/* Program */}
-              <div className="md:col-span-2">
+              <div className="md:col-span-1">
                 <p className="text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">Gelişim Programı</p>
                 <span className={`inline-block text-xs font-semibold px-3 py-1.5 rounded-full ${getCategoryColor(categories.findIndex(c => c.id === form.scholarshipCategoryId) || 0)}`}>
                   {form.scholarshipCategory?.name || 'Belirtilmemiş'}
                 </span>
               </div>
+              
+              {/* TC Kimlik No */}
+              {form.studentProfile?.user?.tcKimlikNo && (
+                <div className="md:col-span-1">
+                  <p className="text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wider">T.C. Kimlik No</p>
+                  <div className="text-sm text-gray-800 font-medium">
+                    {form.studentProfile.user.tcKimlikNo}
+                  </div>
+                </div>
+              )}
 
               {/* Dynamic Fields from Schema */}
               {schema?.fields?.map((f: any) => {
@@ -238,6 +255,30 @@ function FormDetailModal({ form, categories, schema, onClose, onDeleted }: {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 overflow-hidden">
+            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4 text-red-600">
+              <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Formu Sil</h3>
+            <p className="text-sm text-gray-500 mb-6">Bu STK Gönüllülük Formunu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowDeleteConfirm(false)} className="btn-secondary px-4 py-2" disabled={deleting}>
+                İptal
+              </button>
+              <button onClick={confirmDelete} disabled={deleting} className="btn-primary bg-red-600 hover:bg-red-700 px-4 py-2 text-white border-transparent">
+                {deleting ? 'Siliniyor...' : 'Sil'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -436,6 +477,7 @@ export default function VolunteerFormsAdminPage() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">STK / Proje</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Saat</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Belgeler</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Dönem</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Gönderim</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -466,7 +508,13 @@ export default function VolunteerFormsAdminPage() {
                       </button>
                     </td>
                     <td className="px-4 py-3">
-                      <p className="font-medium text-gray-900">{studentName}</p>
+                      {form.studentProfile ? (
+                        <Link to={`/admin/students/${form.studentProfile.id}`} className="font-medium text-primary-600 hover:text-primary-800 hover:underline">
+                          {studentName}
+                        </Link>
+                      ) : (
+                        <p className="font-medium text-gray-900">{studentName}</p>
+                      )}
                       <p className="text-xs text-gray-400">{form.email}</p>
                     </td>
                     <td className="px-4 py-3">
@@ -493,6 +541,9 @@ export default function VolunteerFormsAdminPage() {
                         ))}
                         {docCount === 0 && <span className="text-gray-300 text-xs">—</span>}
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {form.period?.label || <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
                       {format(new Date(form.createdAt), 'dd MMM yyyy', { locale: tr })}

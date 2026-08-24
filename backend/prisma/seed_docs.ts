@@ -173,12 +173,14 @@ export async function seedStandardDocumentTypes() {
   console.log('✅ Standard document types seeded successfully!');
 }
 
-if (require.main === module) {
+// @ts-ignore
+if (typeof require !== 'undefined' && require.main === module) {
   seedStandardDocumentTypes()
     .then(() => prisma.$disconnect())
     .catch((err) => {
       console.error(err);
       prisma.$disconnect();
+      // @ts-ignore
       process.exit(1);
     });
 }

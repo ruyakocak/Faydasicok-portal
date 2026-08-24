@@ -340,8 +340,8 @@ model ApprovableChange {
 
 model AuditLog {
   id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation("AuditLogUser", fields: [userId], references: [id])
+  userId     String?
+  user       User?    @relation("AuditLogUser", fields: [userId], references: [id], onDelete: SetNull)
   action     String // CREATE, UPDATE, DELETE, APPROVE, REJECT, LOGIN, LOGOUT, UPLOAD
   module     String // e.g. "BankInfo", "Transcript", "Login"
   entityId   String?
@@ -349,7 +349,7 @@ model AuditLog {
   oldValue   String?
   newValue   String?
   approverId String?
-  approver   User?    @relation("AuditLogApprover", fields: [approverId], references: [id])
+  approver   User?    @relation("AuditLogApprover", fields: [approverId], references: [id], onDelete: SetNull)
   ipAddress  String?
   createdAt  DateTime @default(now())
 

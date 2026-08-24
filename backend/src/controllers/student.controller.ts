@@ -110,6 +110,26 @@ async function createApprovableChange(
   oldValue: string | null | undefined,
   newValue: string,
 ) {
+  // If there's an existing PENDING change for this field, delete it first
+  // so the admin only sees the latest one.
+  const existingPendingChanges = await prisma.approvableChange.findMany({
+    where: {
+      studentProfileId,
+      entityType,
+      fieldName,
+      status: 'PENDING',
+    },
+    select: { id: true }
+  });
+
+  if (existingPendingChanges.length > 0) {
+    await prisma.approvableChange.deleteMany({
+      where: {
+        id: { in: existingPendingChanges.map(c => c.id) }
+      }
+    });
+  }
+
   await prisma.approvableChange.create({
     data: {
       entityType,

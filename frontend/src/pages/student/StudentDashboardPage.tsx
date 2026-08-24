@@ -77,6 +77,7 @@ export default function StudentDashboardPage() {
   // Calculate pending / required document deadlines
   const activeDeadlines = periods.filter(p => {
     if (!p.isOpen) return false;
+    if (p.type === 'VOLUNTEER_REPORT') return false;
 
     const docTypeObj = docTypes.find(dt => dt.code === p.type);
     if (docTypeObj) {
@@ -84,7 +85,7 @@ export default function StudentDashboardPage() {
       try {
         dtCatIds = docTypeObj.categoryIds ? JSON.parse(docTypeObj.categoryIds) : [];
         if (!Array.isArray(dtCatIds)) dtCatIds = [];
-      } catch {}
+      } catch { }
 
       if (dtCatIds.length > 0 && profile.scholarshipCategoryId && !dtCatIds.includes(profile.scholarshipCategoryId)) {
         return false;
@@ -120,7 +121,7 @@ export default function StudentDashboardPage() {
 
   return (
     <div className="max-w-[1200px] mx-auto space-y-10 pb-20 animate-in fade-in duration-700">
-      
+
       {/* ── 1. Clean Hero Section ──────────────────────────────────── */}
       <section className="relative pt-10 pb-8 flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-gray-200/60">
         <div className="space-y-4 max-w-2xl">
@@ -132,12 +133,12 @@ export default function StudentDashboardPage() {
             Hoş geldin,<br className="hidden md:block" /> {profile.firstName}
           </h1>
           <p className="text-lg text-gray-500 font-medium">
-            {profile.universityName || 'Üniversite belirtilmemiş'} 
-            {profile.faculty && `, ${profile.faculty}`} 
+            {profile.universityName || 'Üniversite belirtilmemiş'}
+            {profile.faculty && `, ${profile.faculty}`}
             {profile.grade && ` · ${profile.grade}. Sınıf`}
           </p>
         </div>
-        
+
         {/* Profile / Program Chip */}
         <div className="flex flex-row md:flex-col items-center md:items-end gap-4 shrink-0">
           <div className="relative group w-20 h-20 rounded-full overflow-hidden bg-white border-2 border-white shadow-xl cursor-pointer">
@@ -151,10 +152,10 @@ export default function StudentDashboardPage() {
             {profile.photoPath ? (
               <img src={`/${profile.photoPath}`} alt={profile.firstName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
             ) : (
-              <img 
-                src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${profile.user?.tcKimlikNo || profile.id}`} 
-                alt="Avatar" 
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+              <img
+                src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${profile.user?.tcKimlikNo || profile.id}`}
+                alt="Avatar"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               />
             )}
             <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none text-center">
@@ -175,15 +176,15 @@ export default function StudentDashboardPage() {
 
       {/* ── 2. Bento Metrics Grid ───────────────────────── */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        
+
         {/* Card 1: Burs Durumu */}
         <div className="bg-white rounded-3xl p-6 border border-gray-200/60 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between aspect-square group">
           <div className="flex justify-between items-start">
             <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center border border-gray-100 group-hover:scale-105 transition-transform">
-              <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 14l9-5-9-5-9 5 9 5z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/></svg>
+              <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 14l9-5-9-5-9 5 9 5z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" /></svg>
             </div>
             <Link to="/student/profile" className="text-gray-400 hover:text-black transition-colors">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
             </Link>
           </div>
           <div>
@@ -194,15 +195,14 @@ export default function StudentDashboardPage() {
         </div>
 
         {/* Card 2: Bekleyen Evraklar */}
-        <div className={`rounded-3xl p-6 border shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between aspect-square group ${
-          activeDeadlines.length > 0 ? 'bg-primary-500 text-white border-primary-600' : 'bg-white border-gray-200/60'
-        }`}>
+        <div className={`rounded-3xl p-6 border shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between aspect-square group ${activeDeadlines.length > 0 ? 'bg-primary-500 text-white border-primary-600' : 'bg-white border-gray-200/60'
+          }`}>
           <div className="flex justify-between items-start">
             <div className={`w-10 h-10 rounded-2xl flex items-center justify-center border group-hover:scale-105 transition-transform ${activeDeadlines.length > 0 ? 'bg-white/15 border-white/20' : 'bg-gray-50 border-gray-100'}`}>
-              <svg className={`w-5 h-5 ${activeDeadlines.length > 0 ? 'text-white' : 'text-gray-700'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              <svg className={`w-5 h-5 ${activeDeadlines.length > 0 ? 'text-white' : 'text-gray-700'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
             </div>
             <Link to="/student/documents" className={`${activeDeadlines.length > 0 ? 'text-white/60 hover:text-white' : 'text-gray-400 hover:text-black'} transition-colors`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
             </Link>
           </div>
           <div>
@@ -220,10 +220,10 @@ export default function StudentDashboardPage() {
         <div className="bg-white rounded-3xl p-6 border border-gray-200/60 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between aspect-square group">
           <div className="flex justify-between items-start">
             <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center border border-gray-100 group-hover:scale-105 transition-transform">
-              <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+              <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
             </div>
             <Link to="/student/mentor" className="text-gray-400 hover:text-black transition-colors">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
             </Link>
           </div>
           <div>
@@ -241,10 +241,10 @@ export default function StudentDashboardPage() {
         <div className="bg-white rounded-3xl p-6 border border-gray-200/60 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between aspect-square group">
           <div className="flex justify-between items-start">
             <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center border border-gray-100 group-hover:scale-105 transition-transform">
-              <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+              <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
             </div>
             <Link to="/student/volunteer-form" className="text-gray-400 hover:text-black transition-colors">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
             </Link>
           </div>
           <div>
@@ -273,10 +273,10 @@ export default function StudentDashboardPage() {
           {eventsToday.length > 1 && (
             <div className="flex gap-2 shrink-0">
               <button onClick={() => setSlideIndex(prev => (prev === 0 ? eventsToday.length - 1 : prev - 1))} className="w-12 h-12 rounded-full border border-white/20 flex items-center justify-center hover:bg-white/10 transition-colors">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
               </button>
               <button onClick={() => setSlideIndex(prev => (prev === eventsToday.length - 1 ? 0 : prev + 1))} className="w-12 h-12 rounded-full border border-white/20 flex items-center justify-center hover:bg-white/10 transition-colors">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </button>
             </div>
           )}
@@ -285,7 +285,7 @@ export default function StudentDashboardPage() {
 
       {/* ── 4. Grid Content (Announcements & Deadlines) ─────────────────────────────── */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
+
         {/* Left (2/3 width): Announcements */}
         <div className="lg:col-span-2 space-y-6">
           <div className="flex items-center justify-between border-b border-gray-200/60 pb-4">
@@ -298,16 +298,16 @@ export default function StudentDashboardPage() {
               <p className="text-gray-500 font-medium">Yeni duyuru bulunmuyor.</p>
             </div>
           ) : (
-            <div className="grid gap-4">
-              {announcements.slice(0, 4).map((ann) => (
-                <div key={ann.id} onClick={() => setSelectedAnn(ann)} className="group cursor-pointer p-6 rounded-3xl bg-white border border-gray-200/60 shadow-sm hover:shadow-md hover:border-gray-300 transition-all duration-300">
+            <div className="grid gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+              {announcements.map((ann) => (
+                <div key={ann.id} onClick={() => setSelectedAnn(ann)} className="group cursor-pointer p-6 rounded-3xl bg-white border border-gray-200/60 shadow-sm hover:shadow-md hover:border-gray-300 transition-all duration-300 overflow-hidden w-full">
                   <div className="flex justify-between items-start gap-4 mb-3">
-                    <h3 className="text-lg font-semibold text-gray-900 tracking-tight group-hover:text-black transition-colors line-clamp-1">{ann.title}</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 tracking-tight group-hover:text-black transition-colors line-clamp-1 break-all">{ann.title}</h3>
                     <span className="text-xs font-medium text-gray-400 shrink-0 bg-gray-50 px-2.5 py-1 rounded-full border border-gray-100">
                       {format(new Date(ann.createdAt), 'dd MMM yyyy', { locale: tr })}
                     </span>
                   </div>
-                  <p className="text-gray-500 text-sm line-clamp-2 leading-relaxed">{ann.content}</p>
+                  <p className="text-gray-500 text-sm line-clamp-2 leading-relaxed break-all">{ann.content}</p>
                 </div>
               ))}
             </div>
@@ -323,15 +323,15 @@ export default function StudentDashboardPage() {
 
           {activeDeadlines.length === 0 ? (
             <div className="p-8 rounded-3xl bg-gray-50/50 border border-gray-100 flex flex-col items-center justify-center text-center h-48">
-              <svg className="w-8 h-8 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7"/></svg>
-              <p className="text-gray-500 font-medium text-sm">Bekleyen evrak yok.<br/>Her şey yolunda.</p>
+              <svg className="w-8 h-8 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" /></svg>
+              <p className="text-gray-500 font-medium text-sm">Bekleyen evrak yok.<br />Her şey yolunda.</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
               {activeDeadlines.map((period) => {
                 const daysLeft = period.endDate ? differenceInDays(new Date(period.endDate), new Date()) : null;
                 const isUrgent = daysLeft !== null && daysLeft <= 5;
-                
+
                 return (
                   <div key={period.id} className="p-5 rounded-3xl bg-white border border-gray-200/60 shadow-sm flex flex-col">
                     <div className="flex justify-between items-start mb-2">
@@ -366,11 +366,11 @@ export default function StudentDashboardPage() {
                 <h3 className="text-2xl font-semibold text-gray-900 tracking-tight leading-tight">{selectedAnn.title}</h3>
               </div>
               <button onClick={() => setSelectedAnn(null)} className="w-10 h-10 rounded-full bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-500 transition-colors shrink-0">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="p-8 md:p-10 max-h-[60vh] overflow-y-auto">
-              <div className="text-gray-600 leading-relaxed whitespace-pre-wrap font-medium">
+            <div className="p-8 md:p-10 max-h-[60vh] overflow-y-auto overflow-x-hidden custom-scrollbar">
+              <div className="text-gray-600 leading-relaxed whitespace-pre-wrap font-medium break-words">
                 {selectedAnn.content}
               </div>
             </div>

@@ -100,6 +100,27 @@ async function saveDocumentWithApproval(
 
   const stored = await storageService.save(req.file.buffer, req.file.originalname, req.file.mimetype);
 
+  // If there's an existing PENDING document of the same type (and period, if applicable), delete it first
+  // so the admin only sees the latest one.
+  const existingPendingDocs = await prisma.document.findMany({
+    where: {
+      studentProfileId: profileId,
+      type: docData.type,
+      status: 'PENDING',
+      periodId: docData.periodId || null,
+    },
+    select: { id: true }
+  });
+
+  if (existingPendingDocs.length > 0) {
+    await prisma.document.deleteMany({
+      where: {
+        id: { in: existingPendingDocs.map(d => d.id) }
+      }
+    });
+    // ApprovableChange records will be automatically deleted because of CASCADE on documentId
+  }
+
   const document = await prisma.document.create({
     data: {
       studentProfileId: profileId,

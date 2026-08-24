@@ -47,6 +47,7 @@ import {
   graduateStudents,
   revertGraduation,
   exportGraduatesReport,
+  deleteDocument,
 } from '../controllers/admin.controller';
 import { upload } from '../middleware/upload.middleware';
 import multer from 'multer';
@@ -123,4 +124,7 @@ adminRouter.post('/announcements', requireAdmin, createAnnouncement);
 adminRouter.patch('/announcements/:id', requireAdmin, updateAnnouncement);
 adminRouter.delete('/announcements/:id', requireAdmin, deleteAnnouncement);
 
+// Documents
 adminRouter.get('/documents/download-zip', requireAdminOrReviewer, downloadDocumentsZip);
+adminRouter.delete('/documents/:id', requireAdmin, deleteDocument);
+
