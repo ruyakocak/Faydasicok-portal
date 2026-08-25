@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import type { StudentProfile, Document as DocFile, DocumentPeriod, AuditLog } from '../types';
 import { studentApi, documentApi, auditApi, adminApi } from '../api';
@@ -1547,55 +1548,57 @@ export function ActivityTab({ profileId }: ActivityTabProps) {
 
     const keys = Array.from(new Set([...Object.keys(oldObj), ...Object.keys(newObj)]));
 
-    return (
-      <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50 shrink-0">
+    return createPortal(
+      <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[9999] flex flex-col items-center justify-center p-4 sm:p-6 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl flex flex-col overflow-hidden animate-scale-in max-h-[90vh]">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-white shrink-0">
             <div>
-              <h2 className="text-lg font-bold text-gray-900">İşlem Detayları</h2>
-              <p className="text-sm text-gray-500 mt-0.5">{generateActionSummary(selectedLog)}</p>
+              <h2 className="text-xl font-bold text-gray-900">İşlem Detayları</h2>
+              <p className="text-sm text-gray-500 mt-1">{generateActionSummary(selectedLog)}</p>
             </div>
-            <button onClick={() => setSelectedLog(null)} className="text-gray-400 hover:text-gray-600 transition-colors p-2 -mr-2">
+            <button onClick={() => setSelectedLog(null)} className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700 flex items-center justify-center transition-colors">
               <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
           </div>
           
-          <div className="p-6 overflow-y-auto flex-1 min-h-0">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Değişen Veriler</h3>
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200 text-gray-500">
-                  <tr>
-                    <th className="px-4 py-2 font-medium">Alan</th>
-                    <th className="px-4 py-2 font-medium">Eski Değer</th>
-                    <th className="px-4 py-2 font-medium">Yeni Değer</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {keys.map((k) => (
-                    <tr key={k} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-2.5 font-medium text-gray-900">{fieldTranslations[k] || k}</td>
-                      <td className="px-4 py-2.5 text-gray-500 break-all">{formatValue(k, oldObj[k])}</td>
-                      <td className={`px-4 py-2.5 break-all ${newObj[k] !== oldObj[k] ? 'text-primary-600 font-medium' : 'text-gray-500'}`}>
-                        {formatValue(k, newObj[k])}
-                      </td>
+          <div className="p-0 sm:p-6 overflow-y-auto flex-1 min-h-0 bg-gray-50/30">
+            <div className="bg-white sm:rounded-xl sm:border border-gray-200 overflow-hidden shadow-sm h-full flex flex-col">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm min-w-[600px]">
+                  <thead className="bg-gray-50/80 border-b border-gray-200 text-gray-600 uppercase tracking-wider text-[11px] font-semibold">
+                    <tr>
+                      <th className="px-6 py-4 w-1/3">Alan</th>
+                      <th className="px-6 py-4 w-1/3">Eski Değer</th>
+                      <th className="px-6 py-4 w-1/3">Yeni Değer</th>
                     </tr>
-                  ))}
-                  {keys.length === 0 && (
-                     <tr>
-                       <td colSpan={3} className="px-4 py-6 text-center text-gray-500">Değişen yapısal bir veri bulunmuyor.</td>
-                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {keys.map((k) => (
+                      <tr key={k} className="hover:bg-gray-50/50 transition-colors group">
+                        <td className="px-6 py-3.5 font-semibold text-gray-700">{fieldTranslations[k] || k}</td>
+                        <td className="px-6 py-3.5 text-gray-500 break-words group-hover:text-gray-700 transition-colors">{formatValue(k, oldObj[k])}</td>
+                        <td className={`px-6 py-3.5 break-words font-medium ${newObj[k] !== oldObj[k] ? 'text-primary-600' : 'text-gray-500'}`}>
+                          {formatValue(k, newObj[k])}
+                        </td>
+                      </tr>
+                    ))}
+                    {keys.length === 0 && (
+                       <tr>
+                         <td colSpan={3} className="px-6 py-12 text-center text-gray-500 font-medium">Değişen yapısal bir veri bulunmuyor.</td>
+                       </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end shrink-0">
-            <button onClick={() => setSelectedLog(null)} className="btn-secondary">Kapat</button>
+          <div className="px-6 py-4 border-t border-gray-100 bg-white shrink-0 flex justify-end">
+            <button onClick={() => setSelectedLog(null)} className="btn-secondary px-6 py-2">Kapat</button>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     );
   };
 

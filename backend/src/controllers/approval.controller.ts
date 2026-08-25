@@ -336,3 +336,30 @@ export async function bulkApprove(req: Request, res: Response, next: NextFunctio
     next(err);
   }
 }
+
+// ── Bulk Reject ───────────────────────────────────────────────────────
+export async function bulkReject(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { ids, reviewNote } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) throw new AppError(400, 'ID listesi zorunludur.');
+    if (!reviewNote?.trim()) throw new AppError(400, 'Red sebebi zorunludur.');
+
+    let rejected = 0;
+    let failed = 0;
+
+    for (const id of ids) {
+      try {
+        const fakeReq = { ...req, params: { id }, body: { rejectionNote: reviewNote } } as unknown as Request;
+        const fakeRes = { json: () => {} } as any;
+        await rejectChange(fakeReq, fakeRes, () => {});
+        rejected++;
+      } catch {
+        failed++;
+      }
+    }
+
+    res.json({ message: `${rejected} reddedildi, ${failed} başarısız.`, rejected, failed });
+  } catch (err) {
+    next(err);
+  }
+}

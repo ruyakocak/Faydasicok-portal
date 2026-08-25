@@ -124,6 +124,12 @@ export default function ApprovalQueueTab() {
   const [rejectionNote, setRejectionNote] = useState('');
   const [rejecting, setRejecting] = useState(false);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<string | null>(null);
+
+  const [isBulkRejectModalOpen, setIsBulkRejectModalOpen] = useState(false);
+  const [bulkRejectionNote, setBulkRejectionNote] = useState('');
+  const [bulkRejecting, setBulkRejecting] = useState(false);
+  const [viewRejectionNote, setViewRejectionNote] = useState<string | null>(null);
 
   useEffect(() => {
     adminApi.listPeriods().then(setPeriods).catch(console.error);
@@ -181,9 +187,10 @@ export default function ApprovalQueueTab() {
 
   function toggleAll() {
     if (!result) return;
-    const allIds = result.data.map(c => c.id);
-    if (selected.size === allIds.length) setSelected(new Set());
-    else setSelected(new Set(allIds));
+    const pendingIds = result.data.filter(c => c.status === 'PENDING').map(c => c.id);
+    if (pendingIds.length === 0) return;
+    if (selected.size === pendingIds.length) setSelected(new Set());
+    else setSelected(new Set(pendingIds));
   }
 
   async function handleBulkApprove() {
@@ -193,6 +200,29 @@ export default function ApprovalQueueTab() {
     toast.success(`${approved} öğe onaylandı${failed ? `, ${failed} başarısız` : ''}`);
     setSelected(new Set());
     load();
+  }
+
+  async function handleBulkRejectSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected.size) return;
+    if (!bulkRejectionNote.trim()) {
+      toast.error('Lütfen bir red gerekçesi belirtiniz.');
+      return;
+    }
+    setBulkRejecting(true);
+    try {
+      const ids = [...selected];
+      const { rejected, failed } = await approvalApi.bulkReject(ids, bulkRejectionNote.trim());
+      toast.success(`${rejected} öğe reddedildi${failed ? `, ${failed} başarısız` : ''}`);
+      setIsBulkRejectModalOpen(false);
+      setBulkRejectionNote('');
+      setSelected(new Set());
+      load();
+    } catch {
+      // Handled by axios interceptor
+    } finally {
+      setBulkRejecting(false);
+    }
   }
 
   async function handleApprove(id: string) {
@@ -222,18 +252,21 @@ export default function ApprovalQueueTab() {
     }
   }
 
-  async function handleDeleteDocument(documentId: string) {
-    if (!window.confirm('Bu belgeyi sistemden tamamen silmek istediğinize emin misiniz? (Bu işlem geri alınamaz)')) {
-      return;
-    }
+  function handleDeleteDocument(documentId: string) {
+    setDocumentToDelete(documentId);
+  }
+
+  async function confirmDeleteDocument() {
+    if (!documentToDelete) return;
     try {
-      setDeletingDocumentId(documentId);
-      await adminApi.deleteDocument(documentId);
+      setDeletingDocumentId(documentToDelete);
+      await adminApi.deleteDocument(documentToDelete);
       toast.success('Belge başarıyla silindi.');
-      if (previewDocument?.document?.id === documentId) {
+      if (previewDocument?.document?.id === documentToDelete) {
         setDrawerOpen(false);
         setPreviewDocument(null);
       }
+      setDocumentToDelete(null);
       load();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Belge silinirken hata oluştu');
@@ -423,16 +456,28 @@ export default function ApprovalQueueTab() {
             </select>
           )}
 
-          {selected.size > 0 && statusFilter === 'PENDING' && (
-            <div className="ml-auto">
-              <button onClick={handleBulkApprove} className="btn-primary btn-sm flex items-center gap-1.5 shadow-xs text-xs">
-                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/></svg>
-                Seçilenleri Onayla ({selected.size})
-              </button>
-            </div>
-          )}
         </div>
       </div>
+
+      {/* ── Bulk Actions Bar ── */}
+      {selected.size > 0 && (
+        <div className="bg-primary-50 border border-primary-200 rounded-xl p-3 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-primary-200 text-primary-800 flex items-center justify-center text-xs font-bold">{selected.size}</span>
+            <span className="text-sm font-semibold text-primary-800">kayıt seçildi</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={handleBulkApprove} className="btn-primary btn-sm flex items-center gap-1.5 shadow-xs text-xs">
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/></svg>
+              Seçilenleri Onayla
+            </button>
+            <button onClick={() => setIsBulkRejectModalOpen(true)} className="btn-secondary btn-sm flex items-center gap-1.5 shadow-xs text-xs border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100">
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              Seçilenleri Reddet
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Table ── */}
       <div className="card overflow-hidden">
@@ -450,11 +495,14 @@ export default function ApprovalQueueTab() {
             <table className="data-table">
               <thead>
                 <tr>
-                  {statusFilter === 'PENDING' && (
-                    <th className="w-8">
-                      <input type="checkbox" onChange={toggleAll} checked={selected.size === result.data.length} className="rounded border-gray-300 text-primary-500" />
-                    </th>
-                  )}
+                  <th className="w-8">
+                    <input 
+                      type="checkbox" 
+                      onChange={toggleAll} 
+                      checked={result.data.filter(d => d.status === 'PENDING').length > 0 && selected.size === result.data.filter(d => d.status === 'PENDING').length} 
+                      className="rounded border-gray-300 text-primary-500" 
+                    />
+                  </th>
                   <th>Bursiyer</th>
                   <th className="text-center">Kategori</th>
 
@@ -474,23 +522,22 @@ export default function ApprovalQueueTab() {
                   )}
 
                   <th>Tarih</th>
-                  {statusFilter === 'PENDING' && <th>İşlem</th>}
-                  {statusFilter !== 'PENDING' && <th>Durum</th>}
+                  <th>Durum / İşlem</th>
                 </tr>
               </thead>
               <tbody>
                 {result.data.map(change => (
                   <tr key={change.id}>
-                    {statusFilter === 'PENDING' && (
-                      <td>
+                    <td>
+                      {change.status === 'PENDING' && (
                         <input
                           type="checkbox"
                           checked={selected.has(change.id)}
                           onChange={() => toggleSelect(change.id)}
                           className="rounded border-gray-300 text-primary-500"
                         />
-                      </td>
-                    )}
+                      )}
+                    </td>
                     <td className="whitespace-nowrap">
                       <Link
                         to={`/admin/students/${change.studentProfileId}`}
@@ -575,56 +622,60 @@ export default function ApprovalQueueTab() {
                       {format(new Date(change.createdAt), 'dd MMM yyyy HH:mm', { locale: tr })}
                     </td>
 
-                    {statusFilter === 'PENDING' && (
-                      <td>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {queueMode === 'DOCUMENT' && change.document?.filePath && (
+                    <td className="w-48 pr-4">
+                      {change.status === 'PENDING' ? (
+                        <div className="flex flex-col gap-1.5">
+                          <span className="badge badge-gray text-yellow-700 bg-yellow-50 w-fit">Onay Bekliyor</span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {queueMode === 'DOCUMENT' && change.document?.filePath && (
+                              <button
+                                onClick={() => { setPreviewDocument(change); setDrawerOpen(true); }}
+                                className="px-2.5 py-1 text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                              >
+                                İncele
+                              </button>
+                            )}
                             <button
-                              onClick={() => { setPreviewDocument(change); setDrawerOpen(true); }}
-                              className="px-2.5 py-1 text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                              onClick={() => handleApprove(change.id)}
+                              className="px-2.5 py-1 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
+                              title="Onayla"
                             >
-                              İncele
+                              ✓ Onayla
                             </button>
-                          )}
-                          <button
-                            onClick={() => handleApprove(change.id)}
-                            className="px-2.5 py-1 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
-                            title="Onayla"
-                          >
-                            ✓ Onayla
-                          </button>
-                          <button
-                            onClick={() => { setRejectingChange(change); setRejectionNote(''); }}
-                            className="px-2.5 py-1 text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors"
-                            title="Reddet"
-                          >
-                            ✗ Reddet
-                          </button>
-                          {queueMode === 'DOCUMENT' && change.document && change.document.id && (
                             <button
-                              onClick={() => handleDeleteDocument(change.document!.id!)}
-                              disabled={deletingDocumentId === change.document!.id}
-                              className="px-2.5 py-1 text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"
-                              title="Belgeyi Sil"
+                              onClick={() => { setRejectingChange(change); setRejectionNote(''); }}
+                              className="px-2.5 py-1 text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors"
+                              title="Reddet"
                             >
-                              Sil
+                              ✗ Reddet
                             </button>
-                          )}
+                            {queueMode === 'DOCUMENT' && change.document && change.document.id && (
+                              <button
+                                onClick={() => handleDeleteDocument(change.document!.id!)}
+                                disabled={deletingDocumentId === change.document!.id}
+                                className="px-2.5 py-1 text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"
+                                title="Belgeyi Sil"
+                              >
+                                Sil
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </td>
-                    )}
-
-                    {statusFilter !== 'PENDING' && (
-                      <td className="w-32 pr-6">
+                      ) : (
                         <div className="flex flex-col items-start gap-1">
-                          {change.status === 'PENDING' ? (
-                            <span className="badge badge-gray text-yellow-700 bg-yellow-50">Onay Bekliyor</span>
-                          ) : (
-                            <span className={`badge ${change.status === 'APPROVED' ? 'badge-approved' : 'badge-gray text-rose-700 bg-rose-50 border border-rose-200'}`}>
-                              {change.status === 'APPROVED' ? 'Onaylandı' : 'Reddedildi'}
-                            </span>
+                          <span className={`badge ${change.status === 'APPROVED' ? 'badge-approved' : 'badge-gray text-rose-700 bg-rose-50 border border-rose-200'}`}>
+                            {change.status === 'APPROVED' ? 'Onaylandı' : 'Reddedildi'}
+                          </span>
+                          {change.reviewNote && (
+                            <button
+                              onClick={() => setViewRejectionNote(change.reviewNote || null)}
+                              className="mt-1 px-2 py-0.5 text-[10px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded transition-colors flex items-center gap-1"
+                              title="Red gerekçesini görüntüle"
+                            >
+                              <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                              Red Sebebini Gör
+                            </button>
                           )}
-                          {change.reviewNote && <div className="text-[11px] text-rose-700 font-medium">{change.reviewNote}</div>}
                           {queueMode === 'DOCUMENT' && change.document && change.document.id && (
                             <button
                               onClick={() => handleDeleteDocument(change.document!.id!)}
@@ -635,8 +686,8 @@ export default function ApprovalQueueTab() {
                             </button>
                           )}
                         </div>
-                      </td>
-                    )}
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -673,7 +724,7 @@ export default function ApprovalQueueTab() {
 
       {/* ── Rejection Note Modal ── */}
       {rejectingChange && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in border border-gray-200">
             <div className="p-5 bg-rose-50 border-b border-rose-100 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -730,6 +781,139 @@ export default function ApprovalQueueTab() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* ── Bulk Reject Modal ── */}
+      {isBulkRejectModalOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in border border-gray-200">
+            <div className="p-5 bg-rose-50 border-b border-rose-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 font-bold">
+                  !
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm">Toplu Reddet</h3>
+                  <p className="text-[11px] text-rose-700">
+                    Seçili {selected.size} kayıt reddedilecek.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsBulkRejectModalOpen(false)}
+                className="w-7 h-7 rounded-lg hover:bg-rose-200/50 text-gray-400 hover:text-gray-700 flex items-center justify-center transition-colors text-lg"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleBulkRejectSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="form-label text-xs">
+                  Red Gerekçesi <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  className="form-input text-xs"
+                  rows={4}
+                  required
+                  placeholder="Seçili tüm belgeler/profiller için ortak ret gerekçesi..."
+                  value={bulkRejectionNote}
+                  onChange={e => setBulkRejectionNote(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkRejectModalOpen(false)}
+                  className="btn-secondary flex-1 text-xs"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  disabled={bulkRejecting}
+                  className="btn-sm bg-rose-600 hover:bg-rose-700 text-white font-semibold flex-1 text-xs rounded-lg transition-colors flex items-center justify-center"
+                >
+                  {bulkRejecting ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Toplu Reddet'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── View Rejection Note Modal ── */}
+      {viewRejectionNote && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-scale-in border border-gray-200">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900 text-sm">Red Gerekçesi</h3>
+              <button
+                onClick={() => setViewRejectionNote(null)}
+                className="w-7 h-7 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 flex items-center justify-center transition-colors text-lg"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="bg-rose-50 border border-rose-100 rounded-lg p-3 text-sm text-rose-800 whitespace-pre-wrap break-words">
+                {viewRejectionNote}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end bg-gray-50/50">
+              <button
+                onClick={() => setViewRejectionNote(null)}
+                className="btn-secondary text-xs"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Document Delete Confirmation Modal ── */}
+      {documentToDelete && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-scale-in border border-gray-200">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 font-bold">
+                  !
+                </div>
+                <h3 className="font-bold text-gray-900 text-sm">Belgeyi Sil</h3>
+              </div>
+              <button
+                onClick={() => setDocumentToDelete(null)}
+                className="w-7 h-7 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 flex items-center justify-center transition-colors text-lg"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600">
+                Bu belgeyi sistemden tamamen silmek istediğinize emin misiniz? <br />
+                <span className="font-medium text-rose-600 block mt-2">Bu işlem geri alınamaz.</span>
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 bg-gray-50/50">
+              <button
+                onClick={() => setDocumentToDelete(null)}
+                className="btn-secondary text-xs flex-1"
+                disabled={deletingDocumentId !== null}
+              >
+                İptal
+              </button>
+              <button
+                onClick={confirmDeleteDocument}
+                disabled={deletingDocumentId !== null}
+                className="btn-sm bg-rose-600 hover:bg-rose-700 text-white font-semibold flex-1 text-xs rounded-lg transition-colors flex items-center justify-center"
+              >
+                {deletingDocumentId !== null ? <span className="spinner border-white/30 border-t-white w-4 h-4" /> : 'Evet, Sil'}
+              </button>
+            </div>
           </div>
         </div>
       )}

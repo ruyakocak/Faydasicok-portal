@@ -31,6 +31,7 @@ export async function getAuditLogs(req: Request, res: Response, next: NextFuncti
       where.OR = [
         { entityId: studentProfileId as string },
         { entityType: 'ApprovableChange', entityId: { in: await getChangeIdsForProfile(studentProfileId as string) } },
+        { entityType: 'Document', entityId: { in: await getDocumentIdsForProfile(studentProfileId as string) } },
       ];
     }
 
@@ -79,4 +80,12 @@ async function getChangeIdsForProfile(profileId: string): Promise<string[]> {
     select: { id: true },
   });
   return changes.map((c) => c.id);
+}
+
+async function getDocumentIdsForProfile(profileId: string): Promise<string[]> {
+  const docs = await prisma.document.findMany({
+    where: { studentProfileId: profileId },
+    select: { id: true },
+  });
+  return docs.map((d) => d.id);
 }

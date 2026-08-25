@@ -127,12 +127,14 @@ export interface MentorProfile {
   phone?: string;
   email?: string;
   photoPath?: string;
+  maxCapacity: number;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
   _count?: {
     students: number;
   };
-  students?: { id: string; firstName: string; lastName: string; universityName?: string | null }[];
+  students?: { id: string; firstName: string; lastName: string; universityName?: string | null; photoPath?: string | null; department?: string | null }[];
 }
 
 export interface DocumentTypeConfig {

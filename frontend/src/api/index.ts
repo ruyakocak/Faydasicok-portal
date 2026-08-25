@@ -124,6 +124,9 @@ export const approvalApi = {
 
   bulkApprove: (ids: string[]) =>
     api.post('/approvals/bulk-approve', { ids }).then((r) => r.data),
+
+  bulkReject: (ids: string[], reviewNote: string) =>
+    api.post('/approvals/bulk-reject', { ids, reviewNote }).then((r) => r.data),
 };
 
 // ── Admin ─────────────────────────────────────────────────────────────
@@ -260,6 +263,12 @@ export const adminApi = {
 
   listMentors: () =>
     api.get('/admin/mentors').then((r) => r.data),
+
+  getMentorStats: () =>
+    api.get('/admin/mentor-stats').then((r) => r.data),
+
+  exportMentorMatches: () =>
+    api.get('/admin/mentor-matches-export', { responseType: 'blob' }).then(r => r.data),
 
   createMentor: (formData: FormData) =>
     api.post('/admin/mentors', formData).then((r) => r.data),

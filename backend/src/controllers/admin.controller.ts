@@ -70,7 +70,7 @@ function schedulePeriodEmail(periodId: string, delayMs: number = 300000) {
 export async function getDashboard(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const [totalStudents, pendingChanges, openDocPeriods, recentLogs, thisMonthDocs] = await Promise.all([
-      prisma.studentProfile.count(),
+      prisma.studentProfile.count({ where: { studentStatus: 'ACTIVE' } }),
       prisma.approvableChange.count({ where: { status: 'PENDING' } }),
       prisma.documentPeriod.findMany({
         where: {
@@ -1089,7 +1089,7 @@ export async function listMentors(req: Request, res: Response, next: NextFunctio
     const mentors = await prisma.mentorProfile.findMany({
       include: {
         _count: { select: { students: true } },
-        students: { select: { id: true, firstName: true, lastName: true, universityName: true } }
+        students: { select: { id: true, firstName: true, lastName: true, universityName: true, photoPath: true, department: true } }
       },
       orderBy: { firstName: 'asc' },
     });
@@ -1105,7 +1105,7 @@ export async function createMentor(req: Request, res: Response, next: NextFuncti
     if (req.user!.role !== Role.ADMIN) {
       throw new AppError(403, 'Bu işlem için yetkiniz yok.');
     }
-    const { firstName, lastName, title, company, phone, email } = req.body;
+    const { firstName, lastName, title, company, phone, email, maxCapacity, isActive } = req.body;
     if (!firstName || !lastName) {
       throw new AppError(400, 'Ad ve soyad zorunludur.');
     }
@@ -1125,6 +1125,8 @@ export async function createMentor(req: Request, res: Response, next: NextFuncti
         phone: phone || null,
         email: email || null,
         photoPath: photoPath || null,
+        maxCapacity: maxCapacity ? parseInt(maxCapacity) : 5,
+        isActive: isActive !== undefined ? (isActive === 'true' || isActive === true) : true,
       },
     });
 
@@ -1153,6 +1155,8 @@ export async function updateMentor(req: Request, res: Response, next: NextFuncti
       photoPath = stored.filePath;
     }
 
+    const { maxCapacity, isActive } = req.body;
+
     const updated = await prisma.mentorProfile.update({
       where: { id },
       data: {
@@ -1163,6 +1167,8 @@ export async function updateMentor(req: Request, res: Response, next: NextFuncti
         phone: phone !== undefined ? phone : mentor.phone,
         email: email !== undefined ? email : mentor.email,
         photoPath,
+        maxCapacity: maxCapacity !== undefined ? parseInt(maxCapacity) : mentor.maxCapacity,
+        isActive: isActive !== undefined ? (isActive === 'true' || isActive === true) : mentor.isActive,
       },
     });
 
@@ -1212,8 +1218,15 @@ export async function assignMentor(req: Request, res: Response, next: NextFuncti
 
     if (mentorId) {
       // Assigning a mentor
-      const mentor = await prisma.mentorProfile.findUnique({ where: { id: mentorId } });
+      const mentor = await prisma.mentorProfile.findUnique({
+        where: { id: mentorId },
+        include: { _count: { select: { students: true } } },
+      });
       if (!mentor) throw new AppError(404, 'Mentör bulunamadı.');
+      if (!mentor.isActive) throw new AppError(400, 'Bu mentör pasif durumdadır, öğrenci atanamaz.');
+      if (mentor._count.students >= mentor.maxCapacity) {
+        throw new AppError(400, `Bu mentörün kapasitesi dolu (${mentor._count.students}/${mentor.maxCapacity}).`);
+      }
     }
 
     const updatedStudent = await prisma.studentProfile.update({
@@ -1260,6 +1273,111 @@ export async function assignMentor(req: Request, res: Response, next: NextFuncti
     }
 
     res.json(updatedStudent);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Mentor Stats ────────────────────────────────────────────────────
+export async function getMentorStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const mentors = await prisma.mentorProfile.findMany({
+      include: { _count: { select: { students: true } } },
+    });
+
+    const totalMentors = mentors.length;
+    const activeMentors = mentors.filter(m => m.isActive).length;
+    const totalAssignedStudents = mentors.reduce((sum, m) => sum + m._count.students, 0);
+    const totalCapacity = mentors.filter(m => m.isActive).reduce((sum, m) => sum + m.maxCapacity, 0);
+    const availableSlots = mentors.filter(m => m.isActive).reduce((sum, m) => sum + Math.max(0, m.maxCapacity - m._count.students), 0);
+    const mentorsWithStudents = mentors.filter(m => m._count.students > 0).length;
+
+    res.json({
+      totalMentors,
+      activeMentors,
+      totalAssignedStudents,
+      totalCapacity,
+      availableSlots,
+      matchRate: totalMentors > 0 ? Math.round((mentorsWithStudents / totalMentors) * 100) : 0,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Export Mentor Matches Report ─────────────────────────────────────
+export async function exportMentorMatches(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const studentsWithMentors = await prisma.studentProfile.findMany({
+      where: { mentorId: { not: null } },
+      include: {
+        user: { select: { tcKimlikNo: true } },
+        mentor: { select: { firstName: true, lastName: true } }
+      },
+      orderBy: [
+        { mentor: { firstName: 'asc' } },
+        { mentor: { lastName: 'asc' } },
+        { firstName: 'asc' },
+      ]
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Faydasıçok Eğitim Vakfı';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Mentör Eşleşmeleri');
+    
+    sheet.columns = [
+      { header: 'Bursiyer TC Kimlik', key: 'tc', width: 20 },
+      { header: 'Mentör Ad Soyad', key: 'mentorName', width: 30 },
+      { header: 'Bursiyer Ad Soyad', key: 'studentName', width: 30 },
+    ];
+
+    function maskTC(tc: string | null | undefined): string {
+      if (!tc || tc.length < 4) return '***';
+      return tc.substring(0, 2) + '*'.repeat(tc.length - 4) + tc.substring(tc.length - 2);
+    }
+
+    studentsWithMentors.forEach(s => {
+      sheet.addRow({
+        tc: maskTC(s.user?.tcKimlikNo),
+        mentorName: s.mentor ? `${s.mentor.firstName} ${s.mentor.lastName}` : '',
+        studentName: `${s.firstName} ${s.lastName}`,
+      });
+    });
+
+    sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
+    sheet.properties.defaultRowHeight = 22;
+
+    const headerRow = sheet.getRow(1);
+    headerRow.height = 28;
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4F46E5' }, // Indigo-600
+      };
+      cell.font = {
+        name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' },
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+
+    sheet.eachRow((row, rowNum) => {
+      if (rowNum === 1) return;
+      row.eachCell(cell => {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.border = {
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+        };
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=mentor_eslesmeleri.xlsx');
+
+    await workbook.xlsx.write(res);
+    res.end();
   } catch (err) {
     next(err);
   }

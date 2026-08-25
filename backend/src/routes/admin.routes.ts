@@ -27,6 +27,8 @@ import {
   updateMentor,
   deleteMentor,
   assignMentor,
+  getMentorStats,
+  exportMentorMatches,
   exportStudentsReport,
   listDocumentTypes,
   createDocumentType,
@@ -102,6 +104,8 @@ adminRouter.delete('/users/:id', requireAdmin, deleteUser);
 
 // Mentors
 adminRouter.get('/mentors', requireAdminOrReviewer, listMentors);
+adminRouter.get('/mentor-stats', requireAdminOrReviewer, getMentorStats);
+adminRouter.get('/mentor-matches-export', requireAdminOrReviewer, exportMentorMatches);
 adminRouter.post('/mentors', requireAdmin, upload.single('file'), createMentor);
 adminRouter.patch('/mentors/:id', requireAdmin, upload.single('file'), updateMentor);
 adminRouter.delete('/mentors/:id', requireAdmin, deleteMentor);

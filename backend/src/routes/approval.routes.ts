@@ -5,6 +5,7 @@ import {
   approveChange,
   rejectChange,
   bulkApprove,
+  bulkReject,
 } from '../controllers/approval.controller';
 
 export const approvalRouter = Router();
@@ -14,3 +15,4 @@ approvalRouter.get('/queue', getApprovalQueue);
 approvalRouter.post('/:id/approve', approveChange);
 approvalRouter.post('/:id/reject', rejectChange);
 approvalRouter.post('/bulk-approve', bulkApprove);
+approvalRouter.post('/bulk-reject', bulkReject);

@@ -102,13 +102,13 @@ export default function AdminLayout() {
       {/* Sidebar */}
       <aside className={`w-56 bg-white/60 backdrop-blur-2xl border-r border-white/50 flex flex-col fixed inset-y-0 left-0 z-40 shadow-[0_8px_32px_0_rgba(31,38,135,0.05)] transition-transform duration-200 ease-in-out lg:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         {/* Logo */}
-        <div className="px-4 h-[72px] flex items-center gap-2 border-b border-white/50 bg-white/30 backdrop-blur-md overflow-hidden">
-          <div className="h-8 flex-shrink-0 flex items-center cursor-pointer" onClick={() => navigate('/admin/dashboard')}>
-            <img src="/logo.png" alt="Logo" className="h-full object-contain drop-shadow-sm" />
+        <div className="flex flex-col items-center justify-center px-4 pt-4 pb-3 border-b border-white/50 bg-white/30 backdrop-blur-md overflow-hidden">
+          <div className="h-10 w-auto flex-shrink-0 flex items-center justify-center cursor-pointer" onClick={() => navigate('/admin/dashboard')}>
+            <img src="/logo.png" alt="Logo" className="h-full w-auto object-contain drop-shadow-sm" />
           </div>
-          <div className="text-[11px] font-extrabold text-slate-500 uppercase flex items-center justify-center leading-tight tracking-wide whitespace-normal break-words">
+          <span className="text-xs font-semibold text-slate-500 tracking-wider uppercase mt-2.5 whitespace-nowrap text-center">
             YÖNETİM PANELİ
-          </div>
+          </span>
         </div>
 
         {/* Navigation */}

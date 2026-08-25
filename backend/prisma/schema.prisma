@@ -378,14 +378,16 @@ model Event {
 // ─────────────────────────────────────────────
 
 model MentorProfile {
-  id        String  @id @default(cuid())
-  firstName String
-  lastName  String
-  title     String?
-  company   String?
-  phone     String?
-  email     String?
-  photoPath String?
+  id          String  @id @default(cuid())
+  firstName   String
+  lastName    String
+  title       String?
+  company     String?
+  phone       String?
+  email       String?
+  photoPath   String?
+  maxCapacity Int     @default(5)
+  isActive    Boolean @default(true)
 
   students StudentProfile[]
   notes    Note[]
