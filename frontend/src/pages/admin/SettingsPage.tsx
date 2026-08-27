@@ -17,6 +17,9 @@ export default function SettingsPage() {
     secure: false,
   });
 
+  const [retentionYears, setRetentionYears] = useState(5);
+  const [savingRetention, setSavingRetention] = useState(false);
+
   const [testEmail, setTestEmail] = useState('');
 
   useEffect(() => {
@@ -26,9 +29,15 @@ export default function SettingsPage() {
   const fetchSettings = async () => {
     try {
       setLoading(true);
-      const data = await adminApi.getSmtpSettings();
-      if (data) {
-        setSmtpSettings(data);
+      const [smtpData, retentionData] = await Promise.all([
+        adminApi.getSmtpSettings(),
+        adminApi.getRetentionSettings().catch(() => ({ retentionYears: 5 })) // default fallback
+      ]);
+      if (smtpData) {
+        setSmtpSettings(smtpData);
+      }
+      if (retentionData) {
+        setRetentionYears(retentionData.retentionYears);
       }
     } catch (error: any) {
       toast.error('Ayarlar yüklenirken bir hata oluştu.');
@@ -47,6 +56,19 @@ export default function SettingsPage() {
       toast.error(error.response?.data?.error || 'Ayarlar kaydedilemedi.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveRetention = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSavingRetention(true);
+      await adminApi.saveRetentionSettings({ retentionYears });
+      toast.success('Veri saklama süresi başarıyla kaydedildi.');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Saklama süresi kaydedilemedi.');
+    } finally {
+      setSavingRetention(false);
     }
   };
 
@@ -211,6 +233,50 @@ export default function SettingsPage() {
                     <Save className="w-5 h-5" />
                   )}
                   Ayarları Kaydet
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mt-6">
+            <div className="p-6 border-b border-gray-100 bg-gray-50/50">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-primary" />
+                Veri Saklama Politikası (KVKK/GDPR)
+              </h2>
+            </div>
+            
+            <form onSubmit={handleSaveRetention} className="p-6 space-y-6">
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Mezun olan öğrencilerin kişisel verileri (KVKK/GDPR kapsamında) ve sisteme yükledikleri belgeler belirli bir süre sonra otomatik olarak silinir ve profilleri anonimleştirilir (üniversite, bölüm vb. istatistiki amaçlarla tutulur). Bu süreyi yıl cinsinden belirleyebilirsiniz.
+                </p>
+                <div className="space-y-2 max-w-sm">
+                  <label className="text-sm font-medium text-gray-700">Mezuniyet Sonrası Veri Saklama Süresi (Yıl)</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    max="100"
+                    value={retentionYears}
+                    onChange={(e) => setRetentionYears(parseInt(e.target.value) || 5)}
+                    className="w-full rounded-xl border-gray-300 shadow-sm focus:border-primary focus:ring-primary transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={savingRetention}
+                  className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 font-medium"
+                >
+                  {savingRetention ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  ) : (
+                    <Save className="w-5 h-5" />
+                  )}
+                  Saklama Süresini Kaydet
                 </button>
               </div>
             </form>

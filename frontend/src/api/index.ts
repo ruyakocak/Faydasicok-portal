@@ -304,6 +304,11 @@ export const adminApi = {
     api.post('/admin/settings/smtp', data).then((r) => r.data),
   testSmtpSettings: (data: { to: string }) =>
     api.post('/admin/settings/smtp/test', data).then((r) => r.data),
+
+  getRetentionSettings: () =>
+    api.get('/admin/settings/retention').then((r) => r.data),
+  saveRetentionSettings: (data: any) =>
+    api.post('/admin/settings/retention', data).then((r) => r.data),
 };
 
 // ── Audit Logs ────────────────────────────────────────────────────────

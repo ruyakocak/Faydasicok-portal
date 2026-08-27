@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
+import { logger } from '../lib/logger';
+
 export class AppError extends Error {
   constructor(
     public statusCode: number,
@@ -51,6 +53,6 @@ export function errorHandler(
   }
 
   // Log unexpected errors
-  console.error('Unexpected error:', err);
+  logger.error(`Unexpected error: ${err.message}`, { stack: err.stack, err });
   res.status(500).json({ error: err.message || 'Sunucu hatası oluştu.' });
 }

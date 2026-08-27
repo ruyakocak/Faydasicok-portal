@@ -170,6 +170,7 @@ model StudentProfile {
   mentorExpectation String? // Nasıl Bir Mentör İster
 
   isInitialDocsExempt Boolean  @default(false) // True for existing students who don't need to submit onboarding docs
+  isAnonymized        Boolean  @default(false) // True if student data has been anonymized due to retention policy
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

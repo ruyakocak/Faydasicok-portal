@@ -118,10 +118,13 @@ adminRouter.patch('/scholarship-categories/:id', requireAdmin, updateScholarship
 adminRouter.delete('/scholarship-categories/:id', requireAdmin, deleteScholarshipCategory);
 
 // Settings - admin only
-import { getSmtpSettings, saveSmtpSettings, testSmtpSettings } from '../controllers/settings.controller';
+import { getSmtpSettings, saveSmtpSettings, testSmtpSettings, getRetentionSettings, saveRetentionSettings } from '../controllers/settings.controller';
 adminRouter.get('/settings/smtp', requireAdmin, getSmtpSettings);
 adminRouter.post('/settings/smtp', requireAdmin, saveSmtpSettings);
 adminRouter.post('/settings/smtp/test', requireAdmin, testSmtpSettings);
+
+adminRouter.get('/settings/retention', requireAdmin, getRetentionSettings);
+adminRouter.post('/settings/retention', requireAdmin, saveRetentionSettings);
 // Announcements
 adminRouter.get('/announcements', requireAdminOrReviewer, listAnnouncements);
 adminRouter.post('/announcements', requireAdmin, createAnnouncement);

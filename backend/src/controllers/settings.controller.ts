@@ -46,6 +46,43 @@ export const saveSmtpSettings = async (req: Request, res: Response) => {
   }
 };
 
+// Get Retention Settings
+export const getRetentionSettings = async (req: Request, res: Response) => {
+  try {
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: 'retention_years' }
+    });
+
+    const years = setting ? parseInt(setting.value, 10) : 5;
+    res.status(200).json({ retentionYears: years });
+  } catch (error) {
+    console.error('Error fetching retention settings:', error);
+    res.status(500).json({ error: 'Ayarlar getirilirken hata oluştu.' });
+  }
+};
+
+// Save Retention Settings
+export const saveRetentionSettings = async (req: Request, res: Response) => {
+  try {
+    const { retentionYears } = req.body;
+    
+    if (typeof retentionYears !== 'number' || retentionYears < 1) {
+      return res.status(400).json({ error: 'Geçerli bir yıl giriniz.' });
+    }
+
+    await prisma.systemSetting.upsert({
+      where: { key: 'retention_years' },
+      update: { value: retentionYears.toString() },
+      create: { key: 'retention_years', value: retentionYears.toString() }
+    });
+
+    res.status(200).json({ message: 'Veri saklama süresi başarıyla kaydedildi.' });
+  } catch (error) {
+    console.error('Error saving retention settings:', error);
+    res.status(500).json({ error: 'Ayarlar kaydedilirken hata oluştu.' });
+  }
+};
+
 // Test SMTP Settings
 export const testSmtpSettings = async (req: Request, res: Response) => {
   try {

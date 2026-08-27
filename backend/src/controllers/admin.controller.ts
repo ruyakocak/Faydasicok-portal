@@ -2,11 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import { parse } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 import bcrypt from 'bcrypt';
-import crypto from 'crypto';
 import ExcelJS from 'exceljs';
 import AdmZip from 'adm-zip';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
 import { format } from 'date-fns';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
@@ -18,6 +18,7 @@ import {
   sendMentorAssignedEmail,
 } from '../lib/email.service';
 import { seedStandardDocumentTypes } from '../utils/seed_docs';
+import { getDiff } from '../utils/diff';
 
 
 const BCRYPT_ROUNDS = 12;
@@ -38,7 +39,7 @@ function schedulePeriodEmail(periodId: string, delayMs: number = 300000) {
     periodEmailTimeouts.delete(periodId);
     try {
       const p = await prisma.documentPeriod.findUnique({ where: { id: periodId } });
-      if (!p || !p.isOpen) return; // if deleted or closed within 5 mins, skip
+      if (!p?.isOpen) return; // if deleted or closed within 5 mins, skip
 
       const targetCatIds: string[] | null = p.categoryIds ? JSON.parse(p.categoryIds) : null;
       const students = await prisma.studentProfile.findMany({
@@ -144,7 +145,7 @@ export async function listStudents(req: Request, res: Response, next: NextFuncti
       ];
     }
     if (university) where.universityName = { contains: university as string, mode: 'insensitive' };
-    if (grade) where.grade = parseInt(grade as string);
+    if (grade) where.grade = Number.parseInt(grade as string);
     if (studentStatus) {
       where.studentStatus = studentStatus;
     } else {
@@ -276,7 +277,7 @@ export async function bulkRemindStudents(req: Request, res: Response, next: Next
     const missingEmails: string[] = [];
 
     for (const p of profiles) {
-      const targetEmail = (p.email && p.email.trim()) || (p.user?.email && p.user.email.trim());
+      const targetEmail = p.email?.trim() || p.user?.email?.trim();
       const studentName = `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Bursiyer';
 
       if (targetEmail) {
@@ -339,7 +340,7 @@ export async function createStudent(req: Request, res: Response, next: NextFunct
       throw new AppError(400, 'Bu TC Kimlik No ile kayıtlı bir kullanıcı zaten var.');
     }
 
-    const password = Math.floor(100000 + Math.random() * 900000).toString();
+    const password = crypto.randomInt(100000, 1000000).toString();
     const passwordHash = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
@@ -378,48 +379,100 @@ export async function createStudent(req: Request, res: Response, next: NextFunct
   }
 }
 
+function formatStudentProfileData(data: any): any {
+  const profileData: any = { ...data };
+
+  if (profileData.scholarshipCategoryId === '') {
+    profileData.scholarshipCategoryId = null;
+  }
+
+  // Format boolean fields properly if sent as string
+  ['fatherAlive', 'motherAlive', 'isInitialDocsExempt'].forEach(key => {
+    if (profileData[key] !== undefined) {
+      profileData[key] = profileData[key] === true || profileData[key] === 'true' || profileData[key] === 'Evet';
+    }
+  });
+
+  // Parse numeric fields
+  ['grade', 'fatherAge', 'fatherIncome', 'motherAge', 'motherIncome', 'familyMemberCount', 'siblingCount', 'siblingsInEducation', 'highSchoolGradYear', 'graduationYear', 'universityStartYear', 'universityPlacementRank'].forEach(key => {
+    if (profileData[key] !== undefined) {
+      profileData[key] = profileData[key] === '' ? null : Number(profileData[key]);
+    }
+  });
+
+  // Parse date fields
+  ['birthDate', 'scholarshipDate'].forEach(key => {
+    if (profileData[key] !== undefined) {
+      profileData[key] = profileData[key] ? new Date(profileData[key]) : null;
+    }
+  });
+
+  return profileData;
+}
+
 // ── Update Student Profile (Admin direct edit) ────────────────────────
+async function validateSicilNoIsUnique(sicilNo: string, currentProfileId: string) {
+  if (sicilNo && sicilNo.trim() !== '') {
+    const existingSicil = await prisma.studentProfile.findFirst({
+      where: { sicilNo: sicilNo.trim(), id: { not: currentProfileId } }
+    });
+    if (existingSicil) {
+      throw new AppError(400, 'Bu Sicil No başka bir öğrenci tarafından kullanılıyor.');
+    }
+  }
+}
+
+async function syncStudentEmail(emailRaw: any, userId: string): Promise<string | null> {
+  const cleanEmail = typeof emailRaw === 'string' && emailRaw.trim() !== ''
+    ? emailRaw.trim()
+    : null;
+
+  if (cleanEmail) {
+    const existingUserWithEmail = await prisma.user.findFirst({
+      where: { email: cleanEmail, id: { not: userId } }
+    });
+    if (existingUserWithEmail) {
+      throw new AppError(400, 'Bu e-posta adresi sistemde başka bir hesap tarafından kullanılmaktadır.');
+    }
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { email: cleanEmail }
+  });
+
+  return cleanEmail;
+}
+
+async function logStudentProfileUpdate(oldProfile: any, updatedProfile: any, req: Request) {
+  if (!oldProfile) return;
+  const diff = getDiff(oldProfile, updatedProfile);
+  if (!diff) return;
+
+  await prisma.auditLog.create({
+    data: {
+      userId: req.user!.userId,
+      action: AuditAction.UPDATE,
+      module: 'Student',
+      entityId: updatedProfile.id,
+      entityType: 'StudentProfile',
+      oldValue: JSON.stringify(diff.oldData),
+      newValue: JSON.stringify(diff.newData),
+      ipAddress: req.ip || req.headers['x-forwarded-for']?.toString(),
+    }
+  });
+}
+
 export async function updateStudentProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params; // StudentProfile ID
     const data = req.body;
 
-    // Convert string empty values to null or valid data
-    const profileData: any = { ...data };
+    const profileData = formatStudentProfileData(data);
 
-    if (profileData.scholarshipCategoryId === '') {
-      profileData.scholarshipCategoryId = null;
-    }
+    await validateSicilNoIsUnique(profileData.sicilNo, id);
 
-    // Format boolean fields properly if sent as string
-    ['fatherAlive', 'motherAlive', 'isInitialDocsExempt'].forEach(key => {
-      if (profileData[key] !== undefined) {
-        profileData[key] = profileData[key] === true || profileData[key] === 'true' || profileData[key] === 'Evet';
-      }
-    });
-
-    // Parse numeric fields
-    ['grade', 'fatherAge', 'fatherIncome', 'motherAge', 'motherIncome', 'familyMemberCount', 'siblingCount', 'siblingsInEducation', 'highSchoolGradYear', 'graduationYear', 'universityStartYear', 'universityPlacementRank'].forEach(key => {
-      if (profileData[key] !== undefined) {
-        profileData[key] = profileData[key] === '' ? null : Number(profileData[key]);
-      }
-    });
-
-    // Parse date fields
-    ['birthDate', 'scholarshipDate'].forEach(key => {
-      if (profileData[key] !== undefined) {
-        profileData[key] = profileData[key] ? new Date(profileData[key]) : null;
-      }
-    });
-
-    if (profileData.sicilNo && profileData.sicilNo.trim() !== '') {
-      const existingSicil = await prisma.studentProfile.findFirst({
-        where: { sicilNo: profileData.sicilNo.trim(), id: { not: id } }
-      });
-      if (existingSicil) {
-        throw new AppError(400, 'Bu Sicil No başka bir öğrenci tarafından kullanılıyor.');
-      }
-    }
+    const oldProfile = await prisma.studentProfile.findUnique({ where: { id } });
 
     const updated = await prisma.studentProfile.update({
       where: { id },
@@ -428,37 +481,10 @@ export async function updateStudentProfile(req: Request, res: Response, next: Ne
 
     // Sync email to User table and StudentProfile properly if provided
     if (profileData.email !== undefined) {
-      const cleanEmail = profileData.email && typeof profileData.email === 'string' && profileData.email.trim() !== ''
-        ? profileData.email.trim()
-        : null;
-
-      profileData.email = cleanEmail;
-
-      if (cleanEmail) {
-        const existingUserWithEmail = await prisma.user.findFirst({
-          where: { email: cleanEmail, id: { not: updated.userId } }
-        });
-        if (existingUserWithEmail) {
-          throw new AppError(400, 'Bu e-posta adresi sistemde başka bir hesap tarafından kullanılmaktadır.');
-        }
-      }
-
-      await prisma.user.update({
-        where: { id: updated.userId },
-        data: { email: cleanEmail }
-      });
+      profileData.email = await syncStudentEmail(profileData.email, updated.userId);
     }
 
-    await prisma.auditLog.create({
-      data: {
-        userId: req.user!.userId,
-        action: AuditAction.UPDATE,
-        module: 'Student',
-        entityId: id,
-        entityType: 'StudentProfile',
-        newValue: JSON.stringify(profileData),
-      }
-    });
+    await logStudentProfileUpdate(oldProfile, updated, req);
 
     res.json(updated);
   } catch (err) {
@@ -559,7 +585,7 @@ export async function bulkCreateStudents(req: Request, res: Response, next: Next
       }
 
       // Generate random 6-digit numeric password
-      const password = Math.floor(100000 + Math.random() * 900000).toString();
+      const password = crypto.randomInt(100000, 1000000).toString();
       const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
       const isNew = req.body.isNewStudent !== undefined ? req.body.isNewStudent : true;
 
@@ -596,6 +622,7 @@ export async function bulkCreateStudents(req: Request, res: Response, next: Next
 
         results.push({ tcKimlikNo: tc, firstName: 'Bursiyer', lastName: 'Adayı', password, status: 'created' });
       } catch (e) {
+        console.error(`Error creating user with TC ${tc}:`, e);
         results.push({ tcKimlikNo: tc, firstName: '', lastName: '', password: '', status: 'error', error: 'Veritabanına eklenemedi' });
       }
     }
@@ -606,13 +633,22 @@ export async function bulkCreateStudents(req: Request, res: Response, next: Next
     }
 
     // Generate result CSV for file upload
-    const csvData = results.map((r) => ({
-      'TC Kimlik No': r.tcKimlikNo,
-      'Ad': r.firstName,
-      'Soyad': r.lastName,
-      'Şifre': r.status === 'created' ? r.password : '',
-      'Durum': r.status === 'created' ? 'Oluşturuldu' : r.status === 'existing' ? 'Zaten Kayıtlı' : `Hata: ${r.error}`,
-    }));
+    const csvData = results.map((r) => {
+      let durum = `Hata: ${r.error}`;
+      if (r.status === 'created') {
+        durum = 'Oluşturuldu';
+      } else if (r.status === 'existing') {
+        durum = 'Zaten Kayıtlı';
+      }
+
+      return {
+        'TC Kimlik No': r.tcKimlikNo,
+        'Ad': r.firstName,
+        'Soyad': r.lastName,
+        'Şifre': r.status === 'created' ? r.password : '',
+        'Durum': durum,
+      };
+    });
 
     const csv = stringify(csvData, { header: true });
 
@@ -817,9 +853,45 @@ export async function deleteSemester(req: Request, res: Response, next: NextFunc
   }
 }
 
+const getFinalCategoryIds = (dt: any, categoryIds: string[]): string[] => {
+  let nativeCats: string[] = [];
+  if (dt?.categoryIds) {
+    try { nativeCats = JSON.parse(dt.categoryIds); } catch { }
+  }
+
+  if (nativeCats.length === 0) {
+    return categoryIds.length > 0 ? [...categoryIds] : [];
+  }
+
+  if (categoryIds.length > 0) {
+    return nativeCats.filter((id: string) => categoryIds.includes(id));
+  }
+  
+  return nativeCats;
+};
+
+const updatePeriodsWithCategories = async (oldLabel: string, dataToUpdate: any, categoryIds: string[]): Promise<number> => {
+  const periodsToUpdate = await prisma.documentPeriod.findMany({ where: { label: oldLabel } });
+  const docTypes = await prisma.documentTypeConfig.findMany();
+
+  for (const p of periodsToUpdate) {
+    const dt = docTypes.find(d => d.code === p.type);
+    const finalCatIds = getFinalCategoryIds(dt, categoryIds);
+
+    await prisma.documentPeriod.update({
+      where: { id: p.id },
+      data: {
+        ...dataToUpdate,
+        categoryIds: finalCatIds.length > 0 ? JSON.stringify(finalCatIds) : null,
+      },
+    });
+  }
+  return periodsToUpdate.length;
+};
+
 export async function updateSemester(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { oldLabel, label, semester, academicYear, startDate, endDate, grade, grades, categoryIds, isVolunteerFormOpen } = req.body;
+    const { oldLabel, label, categoryIds } = req.body;
     if (!oldLabel) throw new AppError(400, 'Güncellenecek dönemin adı (oldLabel) gerekli.');
 
     // If changing label, ensure new label is not conflicting if it's different
@@ -831,48 +903,17 @@ export async function updateSemester(req: Request, res: Response, next: NextFunc
     }
 
     const dataToUpdate: any = {};
-    if (label !== undefined) dataToUpdate.label = label;
-    if (semester !== undefined) dataToUpdate.semester = semester;
-    if (academicYear !== undefined) dataToUpdate.academicYear = academicYear;
-    if (startDate !== undefined) dataToUpdate.startDate = startDate;
-    if (endDate !== undefined) dataToUpdate.endDate = endDate;
-    if (grade !== undefined) dataToUpdate.grade = grade;
-    if (grades !== undefined) dataToUpdate.grades = grades;
-    if (isVolunteerFormOpen !== undefined) dataToUpdate.isVolunteerFormOpen = isVolunteerFormOpen;
+    const fields = ['label', 'semester', 'academicYear', 'startDate', 'endDate', 'grade', 'grades', 'isVolunteerFormOpen'];
+    for (const field of fields) {
+      if (req.body[field] !== undefined) {
+        dataToUpdate[field] = req.body[field];
+      }
+    }
 
     let updatedCount = 0;
 
     if (categoryIds !== undefined) {
-      // If we are updating categories, we cannot just updateMany.
-      // We must intersect the new semester categories with each document's native categories.
-      const periodsToUpdate = await prisma.documentPeriod.findMany({ where: { label: oldLabel } });
-      const docTypes = await prisma.documentTypeConfig.findMany();
-
-      for (const p of periodsToUpdate) {
-        const dt = docTypes.find(d => d.code === p.type);
-        let nativeCats: string[] = [];
-        if (dt && dt.categoryIds) {
-          try { nativeCats = JSON.parse(dt.categoryIds); } catch { }
-        }
-
-        let finalCatIds = categoryIds.length > 0 ? [...categoryIds] : [];
-        if (nativeCats.length > 0) {
-          if (categoryIds.length > 0) {
-            finalCatIds = nativeCats.filter(id => categoryIds.includes(id));
-          } else {
-            finalCatIds = nativeCats;
-          }
-        }
-
-        await prisma.documentPeriod.update({
-          where: { id: p.id },
-          data: {
-            ...dataToUpdate,
-            categoryIds: finalCatIds.length > 0 ? JSON.stringify(finalCatIds) : null,
-          },
-        });
-      }
-      updatedCount = periodsToUpdate.length;
+      updatedCount = await updatePeriodsWithCategories(oldLabel, dataToUpdate, categoryIds);
     } else {
       const updated = await prisma.documentPeriod.updateMany({
         where: { label: oldLabel },
@@ -1058,7 +1099,7 @@ export async function resetStudentPassword(req: Request, res: Response, next: Ne
     });
     if (!user) throw new AppError(404, 'Öğrenci kullanıcısı bulunamadı.');
 
-    const newPassword = Math.floor(100000 + Math.random() * 900000).toString();
+    const newPassword = crypto.randomInt(100000, 1000000).toString();
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
 
     await prisma.user.update({
@@ -1125,7 +1166,7 @@ export async function createMentor(req: Request, res: Response, next: NextFuncti
         phone: phone || null,
         email: email || null,
         photoPath: photoPath || null,
-        maxCapacity: maxCapacity ? parseInt(maxCapacity) : 5,
+        maxCapacity: maxCapacity ? Number.parseInt(maxCapacity, 10) : 5,
         isActive: isActive !== undefined ? (isActive === 'true' || isActive === true) : true,
       },
     });
@@ -1167,7 +1208,7 @@ export async function updateMentor(req: Request, res: Response, next: NextFuncti
         phone: phone !== undefined ? phone : mentor.phone,
         email: email !== undefined ? email : mentor.email,
         photoPath,
-        maxCapacity: maxCapacity !== undefined ? parseInt(maxCapacity) : mentor.maxCapacity,
+        maxCapacity: maxCapacity !== undefined ? Number.parseInt(maxCapacity) : mentor.maxCapacity,
         isActive: isActive !== undefined ? (isActive === 'true' || isActive === true) : mentor.isActive,
       },
     });
@@ -1242,7 +1283,9 @@ export async function assignMentor(req: Request, res: Response, next: NextFuncti
         module: 'Student',
         entityId: studentId,
         entityType: 'StudentProfile',
-        newValue: `Mentor assigned: ${mentorId || 'None'}`,
+        newValue: updatedStudent.mentor 
+          ? `Mentor assigned: ${updatedStudent.mentor.firstName} ${updatedStudent.mentor.lastName}` 
+          : 'Mentor assigned: None',
       },
     });
 
@@ -1383,6 +1426,289 @@ export async function exportMentorMatches(req: Request, res: Response, next: Nex
   }
 }
 
+
+function applyProfessionalStyle(sheet: any, headerColorArgb = 'FF1E3A8A') {
+  sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
+  sheet.properties.defaultRowHeight = 26;
+
+  const headerRow = sheet.getRow(1);
+  headerRow.height = 32;
+  headerRow.eachCell((cell: any) => {
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: headerColorArgb },
+    };
+    cell.font = {
+      name: 'Calibri',
+      size: 11,
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+    };
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false };
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'FF94A3B8' } },
+      left: { style: 'thin', color: { argb: 'FF94A3B8' } },
+      bottom: { style: 'medium', color: { argb: 'FF0F172A' } },
+      right: { style: 'thin', color: { argb: 'FF94A3B8' } },
+    };
+  });
+
+  sheet.eachRow((row: any, rowNumber: number) => {
+    if (rowNumber === 1) return;
+    row.height = 24;
+    const isEven = rowNumber % 2 === 0;
+    row.eachCell((cell: any) => {
+      cell.font = { name: 'Calibri', size: 10 };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+      if (isEven) {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF8FAFC' },
+        };
+      }
+    });
+  });
+}
+
+function buildAllStudentsSheet(workbook: any, students: any[], statusTranslations: Record<string, string>, format: any) {
+  const allStudentsSheet = workbook.addWorksheet('Tüm Bursiyerler');
+  allStudentsSheet.columns = [
+    { header: 'Sicil No', key: 'sicilNo', width: 40 },
+    { header: 'Program', key: 'program', width: 25 },
+    { header: 'Adı', key: 'firstName', width: 20 },
+    { header: 'Soyadı', key: 'lastName', width: 20 },
+    { header: 'Cinsiyet', key: 'gender', width: 15 },
+    { header: 'TCKN', key: 'tc', width: 20 },
+    { header: 'IBAN', key: 'iban', width: 35 },
+    { header: 'Email', key: 'email', width: 35 },
+    { header: 'Telefon', key: 'phone', width: 20 },
+    { header: 'Otomatik İnci Adı', key: 'inciName', width: 25 },
+    { header: 'Doğum Tarihi', key: 'birthDate', width: 20 },
+    { header: 'Aile İkamet Şehri', key: 'familyCity', width: 25 },
+    { header: 'Anne/Baba Sağ', key: 'parentsStatus', width: 25 },
+    { header: 'Referans Bilgisi / Hasçelik Çalışanı vb.', key: 'referenceInfo', width: 40 },
+    { header: 'Aile İletişim Telefonu', key: 'familyPhone', width: 25 },
+    { header: 'Okulu', key: 'universityName', width: 35 },
+    { header: 'Bölümü', key: 'department', width: 30 },
+    { header: 'Sınıfı', key: 'grade', width: 15 },
+    { header: 'Okul Başlangıç Yılı', key: 'universityStartYear', width: 20 },
+    { header: 'Üniversite Yerleştirme Sırası', key: 'universityPlacementRank', width: 25 },
+    { header: 'Üni.Haz.Okudu mu?', key: 'hadPrepClass', width: 20 },
+    { header: 'Okul Şehri', key: 'universityCity', width: 20 },
+    { header: 'Konaklama', key: 'accommodationType', width: 25 },
+    { header: 'Bursiyer Sözleşmesini İmzaladı mı?', key: 'isContractSigned', width: 25 },
+    { header: 'Son Durumu', key: 'studentStatus', width: 20 },
+    { header: 'Askı Baslangıcı', key: 'suspensionStartDate', width: 20 },
+    { header: 'Askı Sonu', key: 'suspensionEndDate', width: 20 },
+    { header: 'Askı notu', key: 'suspensionNote', width: 30 },
+    { header: "Erasmus\'a Gidiş Tarihi", key: 'erasmusStartDate', width: 20 },
+    { header: "Erasmus\'dan Dönüş Tarihi", key: 'erasmusEndDate', width: 20 },
+    { header: 'Erasmus Ülkesi/ Okulu', key: 'erasmusSchoolCountry', width: 25 },
+    { header: 'Mezun Şehri', key: 'graduateCity', width: 20 },
+    { header: 'Mezun Şirketi', key: 'graduateCompany', width: 25 },
+    { header: 'Linkedin Bağlantı', key: 'linkedinUrl', width: 35 },
+    { header: 'MZN NOT', key: 'graduateNote', width: 30 },
+    { header: 'İlgi Alanları', key: 'interests', width: 35 },
+    { header: 'Nasıl Bir Mentör İster', key: 'mentorExpectation', width: 35 }
+  ];
+
+  students.forEach((s) => {
+    allStudentsSheet.addRow({
+      userType: s.userType || '',
+      sicilNo: s.sicilNo || '',
+      program: s.scholarshipCategory?.name || s.program || 'Tanımsız / Genel',
+      firstName: s.firstName || '',
+      lastName: s.lastName || '',
+      gender: s.gender || '',
+      tc: s.user?.tcKimlikNo || '',
+      iban: s.iban || '',
+      email: s.user?.email || s.email || '',
+      phone: s.phone || '',
+      inciName: s.inciName || '',
+      birthDate: s.birthDate ? format(new Date(s.birthDate), 'dd.MM.yyyy') : '',
+      familyCity: s.familyCity || '',
+      parentsStatus: s.parentsStatus || '',
+      referenceInfo: s.referenceInfo || '',
+      familyPhone: s.familyPhone || '',
+      universityName: s.universityName || '',
+      department: s.department || '',
+      grade: s.grade || '',
+      universityStartYear: s.universityStartYear || '',
+      universityPlacementRank: s.universityPlacementRank || '',
+      hadPrepClass: s.hadPrepClass || '',
+      universityCity: s.universityCity || '',
+      accommodationType: s.accommodationType || '',
+      isContractSigned: s.isContractSigned ? 'Evet' : 'Hayır',
+      studentStatus: statusTranslations[s.studentStatus] || s.studentStatus || '—',
+      suspensionStartDate: s.suspensionStartDate ? format(new Date(s.suspensionStartDate), 'dd.MM.yyyy') : '',
+      suspensionEndDate: s.suspensionEndDate ? format(new Date(s.suspensionEndDate), 'dd.MM.yyyy') : '',
+      suspensionNote: s.suspensionNote || '',
+      erasmusStartDate: s.erasmusStartDate ? format(new Date(s.erasmusStartDate), 'dd.MM.yyyy') : '',
+      erasmusEndDate: s.erasmusEndDate ? format(new Date(s.erasmusEndDate), 'dd.MM.yyyy') : '',
+      erasmusSchoolCountry: s.erasmusSchoolCountry || '',
+      graduateCity: s.graduateCity || '',
+      graduateCompany: s.graduateCompany || '',
+      linkedinUrl: s.linkedinUrl || '',
+      graduateNote: s.graduateNote || '',
+      interests: s.interests || '',
+      mentorExpectation: s.mentorExpectation || '',
+    });
+  });
+
+  applyProfessionalStyle(allStudentsSheet, 'FF1E3A8A');
+}
+
+function buildMissingDocsSheet(workbook: any, students: any[], activePeriods: any[]) {
+  const missingDocsSheet = workbook.addWorksheet('Eksik Belgeli Öğrenciler');
+  missingDocsSheet.columns = [
+    { header: 'T.C. Kimlik No', key: 'tc', width: 16 },
+    { header: 'Adı', key: 'firstName', width: 16 },
+    { header: 'Soyadı', key: 'lastName', width: 16 },
+    { header: 'Bursiyer Kategorisi', key: 'category', width: 24 },
+    { header: 'Üniversite', key: 'uni', width: 30 },
+    { header: 'Bölüm', key: 'dept', width: 28 },
+    { header: 'Sınıf', key: 'grade', width: 10 },
+    { header: 'Telefon', key: 'phone', width: 16 },
+    { header: 'E-Posta', key: 'email', width: 28 },
+    { header: 'Eksik Belge / Dönem', key: 'missingDoc', width: 32 },
+  ];
+
+  if (activePeriods.length > 0) {
+    students.forEach((s) => {
+      if (s.studentStatus !== 'GRADUATED' && s.studentStatus !== 'PASSIVE') {
+        activePeriods.forEach((period) => {
+          const hasDoc = s.documents.some(
+            (d: any) => d.periodId === period.id && (d.status === 'APPROVED' || d.status === 'PENDING')
+          );
+          if (!hasDoc) {
+            missingDocsSheet.addRow({
+              tc: s.user?.tcKimlikNo || '',
+              firstName: s.firstName || '',
+              lastName: s.lastName || '',
+              category: s.scholarshipCategory?.name || 'Genel',
+              uni: s.universityName || '',
+              dept: s.department || '',
+              grade: s.grade ? `${s.grade}. Sınıf` : '',
+              phone: s.phone || '',
+              email: s.user?.email || s.email || '',
+              missingDoc: `${period.label} (${period.type})`,
+            });
+          }
+        });
+      }
+    });
+  } else {
+    missingDocsSheet.addRow({
+      tc: '—',
+      firstName: 'Aktif evrak yükleme dönemi bulunmuyor.',
+    });
+  }
+
+  applyProfessionalStyle(missingDocsSheet, 'FFB91C1C'); // Crimson Red Header
+}
+
+function buildStatsSheet(workbook: any, students: any[], statusTranslations: Record<string, string>) {
+  const statsSheet = workbook.addWorksheet('Özet İstatistikler');
+  statsSheet.columns = [
+    { header: 'Grup / Boyut', key: 'group', width: 24 },
+    { header: 'Kategori / Değer', key: 'value', width: 36 },
+    { header: 'Öğrenci Sayısı', key: 'count', width: 16 },
+    { header: 'Yüzde (%)', key: 'percent', width: 14 },
+  ];
+
+  const categoryStats: Record<string, number> = {};
+  const statusStats: Record<string, number> = {};
+  const uniStats: Record<string, number> = {};
+  const deptStats: Record<string, number> = {};
+  let withMentor = 0;
+  let withoutMentor = 0;
+
+  const totalStudents = students.length;
+
+  students.forEach((s) => {
+    const cat = s.scholarshipCategory?.name || 'Tanımsız / Genel';
+    const status = statusTranslations[s.studentStatus] || s.studentStatus || 'Bilinmiyor';
+    const uni = s.universityName || 'Belirtilmemiş';
+    const dept = s.department || 'Belirtilmemiş';
+
+    categoryStats[cat] = (categoryStats[cat] || 0) + 1;
+    statusStats[status] = (statusStats[status] || 0) + 1;
+    uniStats[uni] = (uniStats[uni] || 0) + 1;
+    deptStats[dept] = (deptStats[dept] || 0) + 1;
+
+    if (s.mentorId) withMentor++;
+    else withoutMentor++;
+  });
+
+  // Add Category Stats
+  Object.entries(categoryStats).sort((a: any, b: any) => b[1] - a[1]).forEach(([val, count]: any) => {
+    statsSheet.addRow({
+      group: 'Bursiyer Kategorisi',
+      value: val,
+      count,
+      percent: totalStudents ? `%${((count / totalStudents) * 100).toFixed(1)}` : '0',
+    });
+  });
+  statsSheet.addRow({});
+
+  // Add Status Stats
+  Object.entries(statusStats).sort((a: any, b: any) => b[1] - a[1]).forEach(([val, count]: any) => {
+    statsSheet.addRow({
+      group: 'Bursiyerlik Durumu',
+      value: val,
+      count,
+      percent: totalStudents ? `%${((count / totalStudents) * 100).toFixed(1)}` : '0',
+    });
+  });
+  statsSheet.addRow({});
+
+  // Mentorship Stats
+  statsSheet.addRow({
+    group: 'Mentörlük Eşleşmesi',
+    value: 'Mentörü Olan Bursiyerler',
+    count: withMentor,
+    percent: totalStudents ? `%${((withMentor / totalStudents) * 100).toFixed(1)}` : '0',
+  });
+  statsSheet.addRow({
+    group: 'Mentörlük Eşleşmesi',
+    value: 'Mentör Bekleyen Bursiyerler',
+    count: withoutMentor,
+    percent: totalStudents ? `%${((withoutMentor / totalStudents) * 100).toFixed(1)}` : '0',
+  });
+  statsSheet.addRow({});
+
+  // University Stats
+  Object.entries(uniStats).sort((a: any, b: any) => b[1] - a[1]).forEach(([val, count]: any) => {
+    statsSheet.addRow({
+      group: 'Üniversite Dağılımı',
+      value: val,
+      count,
+      percent: totalStudents ? `%${((count / totalStudents) * 100).toFixed(1)}` : '0',
+    });
+  });
+  statsSheet.addRow({});
+
+  // Department Stats (Top 15)
+  Object.entries(deptStats).sort((a: any, b: any) => b[1] - a[1]).slice(0, 15).forEach(([val, count]: any) => {
+    statsSheet.addRow({
+      group: 'Bölüm Dağılımı (İlk 15)',
+      value: val,
+      count,
+      percent: totalStudents ? `%${((count / totalStudents) * 100).toFixed(1)}` : '0',
+    });
+  });
+
+  applyProfessionalStyle(statsSheet, 'FF047857'); // Emerald Green Header
+}
+
 // ── Export Students Report ───────────────────────────────────────────
 export async function exportStudentsReport(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -1401,15 +1727,13 @@ export async function exportStudentsReport(req: Request, res: Response, next: Ne
       ];
     }
     if (university) where.universityName = { contains: university as string, mode: 'insensitive' };
-    if (grade) where.grade = parseInt(grade as string);
+    if (grade) where.grade = Number.parseInt(grade as string, 10);
 
     if (studentStatus) {
       where.studentStatus = studentStatus;
-    } else {
-      if (includeGraduates !== 'true') {
+    } else if (includeGraduates !== 'true') {
         where.studentStatus = { not: 'GRADUATED' };
       }
-    }
 
     if (enrollmentStatus) where.enrollmentStatus = enrollmentStatus;
     if (scholarshipGroup) where.scholarshipCategoryId = scholarshipGroup;
@@ -1454,290 +1778,9 @@ export async function exportStudentsReport(req: Request, res: Response, next: Ne
       INCOMPLETE: 'İlk Kayıt / Eksik',
     };
 
-    function applyProfessionalStyle(sheet: ExcelJS.Worksheet, headerColorArgb = 'FF1E3A8A') {
-      sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
-      sheet.properties.defaultRowHeight = 26;
-
-      const headerRow = sheet.getRow(1);
-      headerRow.height = 32;
-      headerRow.eachCell((cell) => {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: headerColorArgb },
-        };
-        cell.font = {
-          name: 'Calibri',
-          size: 11,
-          bold: true,
-          color: { argb: 'FFFFFFFF' },
-        };
-        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false };
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FF94A3B8' } },
-          left: { style: 'thin', color: { argb: 'FF94A3B8' } },
-          bottom: { style: 'medium', color: { argb: 'FF0F172A' } },
-          right: { style: 'thin', color: { argb: 'FF94A3B8' } },
-        };
-      });
-
-      sheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
-        row.height = 24;
-        const isEven = rowNumber % 2 === 0;
-        row.eachCell((cell) => {
-          cell.font = { name: 'Calibri', size: 10 };
-          cell.alignment = { vertical: 'middle', horizontal: 'center' };
-          cell.border = {
-            top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-            left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-            bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-            right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-          };
-          if (isEven) {
-            cell.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFF8FAFC' },
-            };
-          }
-        });
-      });
-    }
-
-    // ───────────────────────────────────────────────
-    // 1. TÜM BURSİYERLER DETAYLI SAYFASI
-    // ───────────────────────────────────────────────
-    const allStudentsSheet = workbook.addWorksheet('Tüm Bursiyerler');
-    allStudentsSheet.columns = [
-      { header: 'Sicil No', key: 'sicilNo', width: 40 },
-      { header: 'Program', key: 'program', width: 25 },
-      { header: 'Adı', key: 'firstName', width: 20 },
-      { header: 'Soyadı', key: 'lastName', width: 20 },
-      { header: 'Cinsiyet', key: 'gender', width: 15 },
-      { header: 'TCKN', key: 'tc', width: 20 },
-      { header: 'IBAN', key: 'iban', width: 35 },
-      { header: 'Email', key: 'email', width: 35 },
-      { header: 'Telefon', key: 'phone', width: 20 },
-      { header: 'Otomatik İnci Adı', key: 'inciName', width: 25 },
-      { header: 'Doğum Tarihi', key: 'birthDate', width: 20 },
-      { header: 'Aile İkamet Şehri', key: 'familyCity', width: 25 },
-      { header: 'Anne/Baba Sağ', key: 'parentsStatus', width: 25 },
-      { header: 'Referans Bilgisi / Hasçelik Çalışanı vb.', key: 'referenceInfo', width: 40 },
-      { header: 'Aile İletişim Telefonu', key: 'familyPhone', width: 25 },
-      { header: 'Okulu', key: 'universityName', width: 35 },
-      { header: 'Bölümü', key: 'department', width: 30 },
-      { header: 'Sınıfı', key: 'grade', width: 15 },
-      { header: 'Okul Başlangıç Yılı', key: 'universityStartYear', width: 20 },
-      { header: 'Üniversite Yerleştirme Sırası', key: 'universityPlacementRank', width: 25 },
-      { header: 'Üni.Haz.Okudu mu?', key: 'hadPrepClass', width: 20 },
-      { header: 'Okul Şehri', key: 'universityCity', width: 20 },
-      { header: 'Konaklama', key: 'accommodationType', width: 25 },
-      { header: 'Bursiyer Sözleşmesini İmzaladı mı?', key: 'isContractSigned', width: 25 },
-      { header: 'Son Durumu', key: 'studentStatus', width: 20 },
-      { header: 'Askı Baslangıcı', key: 'suspensionStartDate', width: 20 },
-      { header: 'Askı Sonu', key: 'suspensionEndDate', width: 20 },
-      { header: 'Askı notu', key: 'suspensionNote', width: 30 },
-      { header: 'Erasmus\'a Gidiş Tarihi', key: 'erasmusStartDate', width: 20 },
-      { header: 'Erasmus\'dan Dönüş Tarihi', key: 'erasmusEndDate', width: 20 },
-      { header: 'Erasmus Ülkesi/ Okulu', key: 'erasmusSchoolCountry', width: 25 },
-      { header: 'Mezun Şehri', key: 'graduateCity', width: 20 },
-      { header: 'Mezun Şirketi', key: 'graduateCompany', width: 25 },
-      { header: 'Linkedin Bağlantı', key: 'linkedinUrl', width: 35 },
-      { header: 'MZN NOT', key: 'graduateNote', width: 30 },
-      { header: 'İlgi Alanları', key: 'interests', width: 35 },
-      { header: 'Nasıl Bir Mentör İster', key: 'mentorExpectation', width: 35 }
-    ];
-
-    students.forEach((s) => {
-      allStudentsSheet.addRow({
-        userType: s.userType || '',
-        sicilNo: s.sicilNo || '',
-        program: s.scholarshipCategory?.name || s.program || 'Tanımsız / Genel',
-        firstName: s.firstName || '',
-        lastName: s.lastName || '',
-        gender: s.gender || '',
-        tc: s.user?.tcKimlikNo || '',
-        iban: s.iban || '',
-        email: s.user?.email || s.email || '',
-        phone: s.phone || '',
-        inciName: s.inciName || '',
-        birthDate: s.birthDate ? format(new Date(s.birthDate), 'dd.MM.yyyy') : '',
-        familyCity: s.familyCity || '',
-        parentsStatus: s.parentsStatus || '',
-        referenceInfo: s.referenceInfo || '',
-        familyPhone: s.familyPhone || '',
-        universityName: s.universityName || '',
-        department: s.department || '',
-        grade: s.grade || '',
-        universityStartYear: s.universityStartYear || '',
-        universityPlacementRank: s.universityPlacementRank || '',
-        hadPrepClass: s.hadPrepClass || '',
-        universityCity: s.universityCity || '',
-        accommodationType: s.accommodationType || '',
-        isContractSigned: s.isContractSigned ? 'Evet' : 'Hayır',
-        studentStatus: statusTranslations[s.studentStatus] || s.studentStatus || '—',
-        suspensionStartDate: s.suspensionStartDate ? format(new Date(s.suspensionStartDate), 'dd.MM.yyyy') : '',
-        suspensionEndDate: s.suspensionEndDate ? format(new Date(s.suspensionEndDate), 'dd.MM.yyyy') : '',
-        suspensionNote: s.suspensionNote || '',
-        erasmusStartDate: s.erasmusStartDate ? format(new Date(s.erasmusStartDate), 'dd.MM.yyyy') : '',
-        erasmusEndDate: s.erasmusEndDate ? format(new Date(s.erasmusEndDate), 'dd.MM.yyyy') : '',
-        erasmusSchoolCountry: s.erasmusSchoolCountry || '',
-        graduateCity: s.graduateCity || '',
-        graduateCompany: s.graduateCompany || '',
-        linkedinUrl: s.linkedinUrl || '',
-        graduateNote: s.graduateNote || '',
-        interests: s.interests || '',
-        mentorExpectation: s.mentorExpectation || '',
-      });
-    });
-
-    applyProfessionalStyle(allStudentsSheet, 'FF1E3A8A');
-
-    // ───────────────────────────────────────────────
-    // 2. EKSİK BELGELİ ÖĞRENCİLER SAYFASI
-    // ───────────────────────────────────────────────
-    const missingDocsSheet = workbook.addWorksheet('Eksik Belgeli Öğrenciler');
-    missingDocsSheet.columns = [
-      { header: 'T.C. Kimlik No', key: 'tc', width: 16 },
-      { header: 'Adı', key: 'firstName', width: 16 },
-      { header: 'Soyadı', key: 'lastName', width: 16 },
-      { header: 'Bursiyer Kategorisi', key: 'category', width: 24 },
-      { header: 'Üniversite', key: 'uni', width: 30 },
-      { header: 'Bölüm', key: 'dept', width: 28 },
-      { header: 'Sınıf', key: 'grade', width: 10 },
-      { header: 'Telefon', key: 'phone', width: 16 },
-      { header: 'E-Posta', key: 'email', width: 28 },
-      { header: 'Eksik Belge / Dönem', key: 'missingDoc', width: 32 },
-    ];
-
-    if (activePeriods.length > 0) {
-      students.forEach((s) => {
-        if (s.studentStatus !== 'GRADUATED' && s.studentStatus !== 'PASSIVE') {
-          activePeriods.forEach((period) => {
-            const hasDoc = s.documents.some(
-              (d) => d.periodId === period.id && (d.status === 'APPROVED' || d.status === 'PENDING')
-            );
-            if (!hasDoc) {
-              missingDocsSheet.addRow({
-                tc: s.user?.tcKimlikNo || '',
-                firstName: s.firstName || '',
-                lastName: s.lastName || '',
-                category: s.scholarshipCategory?.name || 'Genel',
-                uni: s.universityName || '',
-                dept: s.department || '',
-                grade: s.grade ? `${s.grade}. Sınıf` : '',
-                phone: s.phone || '',
-                email: s.user?.email || s.email || '',
-                missingDoc: `${period.label} (${period.type})`,
-              });
-            }
-          });
-        }
-      });
-    } else {
-      missingDocsSheet.addRow({
-        tc: '—',
-        firstName: 'Aktif evrak yükleme dönemi bulunmuyor.',
-      });
-    }
-
-    applyProfessionalStyle(missingDocsSheet, 'FFB91C1C'); // Crimson Red Header
-
-    // ───────────────────────────────────────────────
-    // 3. ÖZET İSTATİSTİKLER SAYFASI
-    // ───────────────────────────────────────────────
-    const statsSheet = workbook.addWorksheet('Özet İstatistikler');
-    statsSheet.columns = [
-      { header: 'Grup / Boyut', key: 'group', width: 24 },
-      { header: 'Kategori / Değer', key: 'value', width: 36 },
-      { header: 'Öğrenci Sayısı', key: 'count', width: 16 },
-      { header: 'Yüzde (%)', key: 'percent', width: 14 },
-    ];
-
-    const categoryStats: Record<string, number> = {};
-    const statusStats: Record<string, number> = {};
-    const uniStats: Record<string, number> = {};
-    const deptStats: Record<string, number> = {};
-    let withMentor = 0;
-    let withoutMentor = 0;
-
-    const totalStudents = students.length;
-
-    students.forEach((s) => {
-      const cat = s.scholarshipCategory?.name || 'Tanımsız / Genel';
-      const status = statusTranslations[s.studentStatus] || s.studentStatus || 'Bilinmiyor';
-      const uni = s.universityName || 'Belirtilmemiş';
-      const dept = s.department || 'Belirtilmemiş';
-
-      categoryStats[cat] = (categoryStats[cat] || 0) + 1;
-      statusStats[status] = (statusStats[status] || 0) + 1;
-      uniStats[uni] = (uniStats[uni] || 0) + 1;
-      deptStats[dept] = (deptStats[dept] || 0) + 1;
-
-      if (s.mentorId) withMentor++;
-      else withoutMentor++;
-    });
-
-    // Add Category Stats
-    Object.entries(categoryStats).sort((a, b) => b[1] - a[1]).forEach(([val, count]) => {
-      statsSheet.addRow({
-        group: 'Bursiyer Kategorisi',
-        value: val,
-        count,
-        percent: totalStudents ? `%${((count / totalStudents) * 100).toFixed(1)}` : '0',
-      });
-    });
-    statsSheet.addRow({});
-
-    // Add Status Stats
-    Object.entries(statusStats).sort((a, b) => b[1] - a[1]).forEach(([val, count]) => {
-      statsSheet.addRow({
-        group: 'Bursiyerlik Durumu',
-        value: val,
-        count,
-        percent: totalStudents ? `%${((count / totalStudents) * 100).toFixed(1)}` : '0',
-      });
-    });
-    statsSheet.addRow({});
-
-    // Mentorship Stats
-    statsSheet.addRow({
-      group: 'Mentörlük Eşleşmesi',
-      value: 'Mentörü Olan Bursiyerler',
-      count: withMentor,
-      percent: totalStudents ? `%${((withMentor / totalStudents) * 100).toFixed(1)}` : '0',
-    });
-    statsSheet.addRow({
-      group: 'Mentörlük Eşleşmesi',
-      value: 'Mentör Bekleyen Bursiyerler',
-      count: withoutMentor,
-      percent: totalStudents ? `%${((withoutMentor / totalStudents) * 100).toFixed(1)}` : '0',
-    });
-    statsSheet.addRow({});
-
-    // University Stats
-    Object.entries(uniStats).sort((a, b) => b[1] - a[1]).forEach(([val, count]) => {
-      statsSheet.addRow({
-        group: 'Üniversite Dağılımı',
-        value: val,
-        count,
-        percent: totalStudents ? `%${((count / totalStudents) * 100).toFixed(1)}` : '0',
-      });
-    });
-    statsSheet.addRow({});
-
-    // Department Stats (Top 15)
-    Object.entries(deptStats).sort((a, b) => b[1] - a[1]).slice(0, 15).forEach(([val, count]) => {
-      statsSheet.addRow({
-        group: 'Bölüm Dağılımı (İlk 15)',
-        value: val,
-        count,
-        percent: totalStudents ? `%${((count / totalStudents) * 100).toFixed(1)}` : '0',
-      });
-    });
-
-    applyProfessionalStyle(statsSheet, 'FF047857'); // Emerald Green Header
+    buildAllStudentsSheet(workbook, students, statusTranslations, format);
+    buildMissingDocsSheet(workbook, students, activePeriods);
+    buildStatsSheet(workbook, students, statusTranslations);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="faydasicok_bursiyer_raporu.xlsx"');
@@ -2064,35 +2107,76 @@ export async function deleteAnnouncement(req: Request, res: Response, next: Next
   }
 }
 
+function buildDocumentFilters(query: any) {
+  const { periodLabel, entity, documentType, status, categoryId, category } = query;
+
+  const docType = (documentType || entity) ? String(documentType || entity) : undefined;
+  const catId = (categoryId || category) ? String(categoryId || category) : undefined;
+  const statusVal = status ? String(status) : undefined;
+
+  const where: any = {};
+
+  // Status filter
+  if (statusVal && statusVal !== 'ALL') {
+    where.status = statusVal;
+  }
+
+  // Document Type filter
+  if (docType && docType !== 'DOCUMENT' && docType !== 'ALL' && !['BANK_INFO', 'PERSONAL_INFO', 'FAMILY_INFO', 'EDUCATION_INFO', 'CONTACT_INFO'].includes(docType)) {
+    where.type = docType;
+  }
+
+  // Period filter
+  if (periodLabel && periodLabel !== 'ALL') {
+    where.period = { label: String(periodLabel) };
+  }
+
+  // Category filter
+  if (catId && catId !== 'ALL') {
+    where.studentProfile = { scholarshipCategoryId: catId };
+  }
+
+  return { where, docType };
+}
+
+function processDocumentsForZip(documents: any[], zip: AdmZip) {
+  let hasFiles = false;
+  const addedFileNames = new Set<string>();
+
+  for (const doc of documents) {
+    const filePath = path.join(__dirname, '../../', doc.filePath);
+    if (!fs.existsSync(filePath)) continue;
+
+    const studentName = `${doc.studentProfile.firstName}_${doc.studentProfile.lastName}`
+      .replace(/[^a-zA-Z0-9_ğüşöçİĞÜŞÖÇ]/g, '_');
+    const tc = doc.studentProfile.user?.tcKimlikNo || doc.studentProfile.id.slice(0, 8);
+    const docTypeName = doc.type;
+    const ext = path.extname(doc.filePath) || '.pdf';
+
+    let zipEntryName = `${studentName}_${tc}_${docTypeName}${ext}`;
+    let counter = 1;
+    while (addedFileNames.has(zipEntryName)) {
+      zipEntryName = `${studentName}_${tc}_${docTypeName}_${counter}${ext}`;
+      counter++;
+    }
+    addedFileNames.add(zipEntryName);
+
+    zip.addLocalFile(filePath, '', zipEntryName);
+    hasFiles = true;
+  }
+
+  return hasFiles;
+}
+
+function getZipFilename(periodLabel: any, docType: any) {
+  const safePeriodName = periodLabel ? `${String(periodLabel).replace(/[^a-zA-Z0-9_ğüşöçİĞÜŞÖÇ]/g, '_')}_` : '';
+  const safeDocTypeName = docType && docType !== 'DOCUMENT' && docType !== 'ALL' ? `${docType}_` : '';
+  return safePeriodName || safeDocTypeName ? `${safePeriodName}${safeDocTypeName}belgeleri.zip` : 'toplu_belgeler.zip';
+}
+
 export async function downloadDocumentsZip(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { periodLabel, entity, documentType, status, categoryId, category } = req.query;
-
-    const docType = (documentType || entity) ? String(documentType || entity) : undefined;
-    const catId = (categoryId || category) ? String(categoryId || category) : undefined;
-    const statusVal = status ? String(status) : undefined;
-
-    const where: any = {};
-
-    // Status filter
-    if (statusVal && statusVal !== 'ALL') {
-      where.status = statusVal;
-    }
-
-    // Document Type filter
-    if (docType && docType !== 'DOCUMENT' && docType !== 'ALL' && !['BANK_INFO', 'PERSONAL_INFO', 'FAMILY_INFO', 'EDUCATION_INFO', 'CONTACT_INFO'].includes(docType)) {
-      where.type = docType;
-    }
-
-    // Period filter
-    if (periodLabel && periodLabel !== 'ALL') {
-      where.period = { label: String(periodLabel) };
-    }
-
-    // Category filter
-    if (catId && catId !== 'ALL') {
-      where.studentProfile = { scholarshipCategoryId: catId };
-    }
+    const { where, docType } = buildDocumentFilters(req.query);
 
     const documents = await prisma.document.findMany({
       where,
@@ -2110,39 +2194,14 @@ export async function downloadDocumentsZip(req: Request, res: Response, next: Ne
     }
 
     const zip = new AdmZip();
-    let hasFiles = false;
-    const addedFileNames = new Set<string>();
-
-    for (const doc of documents) {
-      const filePath = path.join(__dirname, '../../', doc.filePath);
-      if (fs.existsSync(filePath)) {
-        const studentName = `${doc.studentProfile.firstName}_${doc.studentProfile.lastName}`
-          .replace(/[^a-zA-Z0-9_ğüşöçİĞÜŞÖÇ]/g, '_');
-        const tc = doc.studentProfile.user?.tcKimlikNo || doc.studentProfile.id.slice(0, 8);
-        const docTypeName = doc.type;
-        const ext = path.extname(doc.filePath) || '.pdf';
-
-        let zipEntryName = `${studentName}_${tc}_${docTypeName}${ext}`;
-        let counter = 1;
-        while (addedFileNames.has(zipEntryName)) {
-          zipEntryName = `${studentName}_${tc}_${docTypeName}_${counter}${ext}`;
-          counter++;
-        }
-        addedFileNames.add(zipEntryName);
-
-        zip.addLocalFile(filePath, '', zipEntryName);
-        hasFiles = true;
-      }
-    }
+    const hasFiles = processDocumentsForZip(documents, zip);
 
     if (!hasFiles) {
       throw new AppError(404, 'Seçili filtrelere ait dosyalar sunucuda fiziksel olarak bulunamadı.');
     }
 
     const zipBuffer = zip.toBuffer();
-    const safePeriodName = periodLabel ? `${String(periodLabel).replace(/[^a-zA-Z0-9_ğüşöçİĞÜŞÖÇ]/g, '_')}_` : '';
-    const safeDocTypeName = docType && docType !== 'DOCUMENT' && docType !== 'ALL' ? `${docType}_` : '';
-    const filename = `${safePeriodName}${safeDocTypeName}belgeleri.zip` || 'toplu_belgeler.zip';
+    const filename = getZipFilename(req.query.periodLabel, docType);
 
     res.set('Content-Type', 'application/zip');
     res.set('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
@@ -2169,7 +2228,7 @@ export async function listGraduates(req: Request, res: Response, next: NextFunct
       ];
     }
     if (year && year !== 'ALL') {
-      where.graduationYear = parseInt(year as string);
+      where.graduationYear = Number.parseInt(year as string);
     }
     if (categoryId && categoryId !== 'ALL') {
       where.scholarshipCategoryId = categoryId as string;
@@ -2316,7 +2375,7 @@ export async function exportGraduatesReport(req: Request, res: Response, next: N
   try {
     const { year, categoryId } = req.query;
     const where: any = { studentStatus: 'GRADUATED' };
-    if (year && year !== 'ALL') where.graduationYear = parseInt(year as string);
+    if (year && year !== 'ALL') where.graduationYear = Number.parseInt(year as string);
     if (categoryId && categoryId !== 'ALL') where.scholarshipCategoryId = categoryId as string;
 
     const graduates = await prisma.studentProfile.findMany({
@@ -2422,6 +2481,14 @@ export async function exportGraduatesReport(req: Request, res: Response, next: N
 
     graduates.forEach((s) => {
       const mentorFullName = s.mentor ? `${s.mentor.firstName} ${s.mentor.lastName}`.trim() : '—';
+
+      let graduatedAtFormatted = '—';
+      if (s.graduatedAt) {
+        graduatedAtFormatted = format(new Date(s.graduatedAt), 'dd.MM.yyyy HH:mm');
+      } else if (s.updatedAt) {
+        graduatedAtFormatted = format(new Date(s.updatedAt), 'dd.MM.yyyy');
+      }
+
       sheet.addRow({
         userType: s.userType || '',
         sicilNo: s.sicilNo || '',
@@ -2463,7 +2530,7 @@ export async function exportGraduatesReport(req: Request, res: Response, next: N
         interests: s.interests || '',
         mentorExpectation: s.mentorExpectation || '',
         mentorName: mentorFullName,
-        graduatedAt: s.graduatedAt ? format(new Date(s.graduatedAt), 'dd.MM.yyyy HH:mm') : (s.updatedAt ? format(new Date(s.updatedAt), 'dd.MM.yyyy') : '—'),
+        graduatedAt: graduatedAtFormatted,
       });
     });
 
@@ -2564,44 +2631,206 @@ function normalizeHeader(str: string): string {
     .replace(/[^a-z0-9]/g, '');
 }
 
+function parseExcelInt(str: string): number | null {
+  const n = Number.parseInt(str.replace(/\D/g, ''), 10);
+  return Number.isNaN(n) ? null : n;
+}
+
+function parseExcelFloat(str: string): number | null {
+  const f = Number.parseFloat(str.replace(',', '.').replace(/[^\d.]/g, ''));
+  return Number.isNaN(f) ? null : f;
+}
+
+function parseExcelDate(value: any, str: string): Date | null {
+  if (value instanceof Date) return value;
+  if (/^\d{1,2}[./-]\d{1,2}[./-]\d{4}$/.test(str)) {
+    const parts = str.split(/[./-]/);
+    const day = Number.parseInt(parts[0], 10);
+    const month = Number.parseInt(parts[1], 10) - 1;
+    const year = Number.parseInt(parts[2], 10);
+    const d = new Date(year, month, day);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(str);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function parseExcelBoolean(str: string): boolean {
+  const lower = str.toLowerCase();
+  if (['evet', 'yes', 'true', '1', 'e'].includes(lower)) return true;
+  if (['hayır', 'hayir', 'no', 'false', '0', 'h'].includes(lower)) return false;
+  return false;
+}
+
 function parseExcelCellValue(value: any, type: string): any {
   if (value === undefined || value === null || value === '') return null;
   const str = String(value).trim();
   if (str === '') return null;
 
   switch (type) {
-    case 'int': {
-      const n = parseInt(str.replace(/\\D/g, ''), 10);
-      return isNaN(n) ? null : n;
-    }
-    case 'float': {
-      const f = parseFloat(str.replace(',', '.').replace(/[^\\d.]/g, ''));
-      return isNaN(f) ? null : f;
-    }
-    case 'date': {
-      if (value instanceof Date) return value;
-      if (/^\\d{1,2}[./-]\\d{1,2}[./-]\\d{4}$/.test(str)) {
-        const parts = str.split(/[./-]/);
-        const day = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const year = parseInt(parts[2], 10);
-        const d = new Date(year, month, day);
-        return isNaN(d.getTime()) ? null : d;
-      }
-      const d = new Date(str);
-      return isNaN(d.getTime()) ? null : d;
-    }
-    case 'boolean': {
-      const lower = str.toLowerCase();
-      if (['evet', 'yes', 'true', '1', 'e'].includes(lower)) return true;
-      if (['hayır', 'hayir', 'no', 'false', '0', 'h'].includes(lower)) return false;
-      return false;
-    }
+    case 'int':
+      return parseExcelInt(str);
+    case 'float':
+      return parseExcelFloat(str);
+    case 'date':
+      return parseExcelDate(value, str);
+    case 'boolean':
+      return parseExcelBoolean(str);
     default:
       return str;
   }
 }
 
+
+// ── Excel Import Helpers ──────────────────────────────────────────────
+
+interface ExcelImportContext {
+  tcColNum: number;
+  firstNameColNum: number | null;
+  lastNameColNum: number | null;
+  colToMapping: Map<number, ExcelColumnDef>;
+  categoryCache: Map<string, string>;
+  scholarshipCategoryId: string | null;
+  isNewStudent: boolean;
+}
+
+function buildColumnMapping(headerRow: ExcelJS.Row): Omit<ExcelImportContext, 'categoryCache' | 'scholarshipCategoryId' | 'isNewStudent'> {
+  const colToMapping = new Map<number, ExcelColumnDef>();
+  let tcColNum: number | null = null;
+  let firstNameColNum: number | null = null;
+  let lastNameColNum: number | null = null;
+
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    const rawHeader = String(cell.value || '').trim();
+    const norm = normalizeHeader(rawHeader);
+    if (!norm) return;
+
+    for (const colDef of EXCEL_COLUMN_MAP) {
+      const matchesCanonical = normalizeHeader(colDef.header) === norm;
+      const matchesAlias = colDef.aliases.some(a => norm.includes(normalizeHeader(a)) || normalizeHeader(a).includes(norm));
+      if (matchesCanonical || matchesAlias) {
+        colToMapping.set(colNumber, colDef);
+        if (colDef.dbField === 'tcKimlikNo') tcColNum = colNumber;
+        if (colDef.dbField === 'firstName') firstNameColNum = colNumber;
+        if (colDef.dbField === 'lastName') lastNameColNum = colNumber;
+        break;
+      }
+    }
+  });
+
+  if (!tcColNum) throw new AppError(400, 'Excel dosyasında "TC Kimlik No" sütunu bulunamadı.');
+
+  return { colToMapping, tcColNum, firstNameColNum, lastNameColNum };
+}
+
+async function processProgramField(parsed: string, profileData: any, context: ExcelImportContext): Promise<string | null> {
+  const cleanProgram = parsed.trim();
+  profileData.program = cleanProgram;
+  const normProgram = normalizeHeader(cleanProgram);
+  
+  if (context.categoryCache.has(normProgram)) {
+    return context.categoryCache.get(normProgram)!;
+  } 
+  
+  try {
+    const newCat = await prisma.scholarshipCategory.create({ data: { name: cleanProgram, isActive: true } });
+    context.categoryCache.set(normProgram, newCat.id);
+    return newCat.id;
+  } catch {
+    const existingCat = await prisma.scholarshipCategory.findFirst({ where: { name: cleanProgram } });
+    if (existingCat) {
+      context.categoryCache.set(normProgram, existingCat.id);
+      return existingCat.id;
+    }
+  }
+  return null;
+}
+
+function processStudentStatus(parsed: string, profileData: any) {
+  const normStatus = normalizeHeader(parsed);
+  if (['aktif', 'active'].includes(normStatus)) profileData.studentStatus = 'ACTIVE';
+  else if (['mezun', 'graduated'].includes(normStatus)) profileData.studentStatus = 'GRADUATED';
+  else if (['pasif', 'passive'].includes(normStatus)) profileData.studentStatus = 'PASSIVE';
+  else if (['tamamlanmadi', 'incomplete'].includes(normStatus)) profileData.studentStatus = 'INCOMPLETE';
+  else profileData.studentStatus = parsed;
+}
+
+async function processExcelRow(row: ExcelJS.Row, rowIdx: number, context: ExcelImportContext): Promise<any> {
+  const tcRaw = row.getCell(context.tcColNum).value;
+  const tc = String(tcRaw || '').trim().replace(/\D/g, '');
+  if (!tc) return null; // Skip empty rows
+
+  const firstName = context.firstNameColNum ? String(row.getCell(context.firstNameColNum).value || '').trim() : '';
+  const lastName = context.lastNameColNum ? String(row.getCell(context.lastNameColNum).value || '').trim() : '';
+
+  if (tc.length !== 11) {
+    return { row: rowIdx, tcKimlikNo: tc, firstName, lastName, password: '', status: 'error', error: 'Geçersiz TC formatı (11 hane olmalı)' };
+  }
+
+  const existing = await prisma.user.findUnique({ where: { tcKimlikNo: tc } });
+  if (existing) {
+    return { row: rowIdx, tcKimlikNo: tc, firstName, lastName, password: '', status: 'existing' };
+  }
+
+  let rowCategoryId = context.scholarshipCategoryId;
+  const profileData: any = {
+    firstName: firstName || '',
+    lastName: lastName || '',
+    studentStatus: 'ACTIVE',
+    isInitialDocsExempt: !context.isNewStudent,
+  };
+
+  let emailValue: string | null = null;
+
+  for (const [colNum, colDef] of context.colToMapping.entries()) {
+    if (colDef.section !== 'profile') continue;
+    const cellValue = row.getCell(colNum).value;
+    const parsed = parseExcelCellValue(cellValue, colDef.type);
+    
+    if (parsed !== null && parsed !== undefined) {
+      if (colDef.dbField === 'program' && typeof parsed === 'string' && parsed.trim() !== '') {
+        const newCategoryId = await processProgramField(parsed, profileData, context);
+        if (newCategoryId) rowCategoryId = newCategoryId;
+      } else if (colDef.dbField === 'studentStatus' && typeof parsed === 'string') {
+        processStudentStatus(parsed, profileData);
+      } else {
+        profileData[colDef.dbField] = parsed;
+      }
+
+      if (colDef.dbField === 'email') emailValue = String(parsed).trim();
+    }
+  }
+
+  profileData.scholarshipCategoryId = rowCategoryId || context.scholarshipCategoryId || null;
+
+  const password = crypto.randomInt(100000, 1000000).toString();
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  try {
+    if (emailValue) {
+      const existingEmail = await prisma.user.findFirst({ where: { email: emailValue } });
+      if (existingEmail) {
+        emailValue = null;
+        profileData.email = null;
+      }
+    }
+
+    await prisma.user.create({
+      data: {
+        tcKimlikNo: tc,
+        passwordHash,
+        role: Role.STUDENT,
+        isActive: true,
+        forcePasswordChange: true,
+        email: emailValue,
+        studentProfile: { create: profileData },
+      },
+    });
+    return { row: rowIdx, tcKimlikNo: tc, firstName, lastName, password, status: 'created' };
+  } catch (e: any) {
+    return { row: rowIdx, tcKimlikNo: tc, firstName, lastName, password: '', status: 'error', error: e.message || 'Veritabanına eklenemedi' };
+  }
+}
 
 export async function importStudentsFromExcel(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -2616,30 +2845,7 @@ export async function importStudentsFromExcel(req: Request, res: Response, next:
     if (!worksheet || worksheet.rowCount < 2) throw new AppError(400, 'Excel dosyası boş veya geçersiz.');
 
     const headerRow = worksheet.getRow(1);
-    const colToMapping = new Map<number, ExcelColumnDef>();
-    let tcColNum: number | null = null;
-    let firstNameColNum: number | null = null;
-    let lastNameColNum: number | null = null;
-
-    headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      const rawHeader = String(cell.value || '').trim();
-      const norm = normalizeHeader(rawHeader);
-      if (!norm) return;
-
-      for (const colDef of EXCEL_COLUMN_MAP) {
-        const matchesCanonical = normalizeHeader(colDef.header) === norm;
-        const matchesAlias = colDef.aliases.some(a => norm.includes(normalizeHeader(a)) || normalizeHeader(a).includes(norm));
-        if (matchesCanonical || matchesAlias) {
-          colToMapping.set(colNumber, colDef);
-          if (colDef.dbField === 'tcKimlikNo') tcColNum = colNumber;
-          if (colDef.dbField === 'firstName') firstNameColNum = colNumber;
-          if (colDef.dbField === 'lastName') lastNameColNum = colNumber;
-          break;
-        }
-      }
-    });
-
-    if (!tcColNum) throw new AppError(400, 'Excel dosyasında "TC Kimlik No" sütunu bulunamadı.');
+    const mappingResult = buildColumnMapping(headerRow);
 
     const categoryCache = new Map<string, string>();
     const allCategories = await prisma.scholarshipCategory.findMany();
@@ -2647,106 +2853,19 @@ export async function importStudentsFromExcel(req: Request, res: Response, next:
       categoryCache.set(normalizeHeader(cat.name), cat.id);
     }
 
+    const context: ExcelImportContext = {
+      ...mappingResult,
+      categoryCache,
+      scholarshipCategoryId,
+      isNewStudent
+    };
+
     const results: Array<any> = [];
 
     for (let rowIdx = 2; rowIdx <= worksheet.rowCount; rowIdx++) {
       const row = worksheet.getRow(rowIdx);
-      const tcRaw = row.getCell(tcColNum).value;
-      const tc = String(tcRaw || '').trim().replace(/\\D/g, '');
-      if (!tc) continue;
-
-      const firstName = firstNameColNum ? String(row.getCell(firstNameColNum).value || '').trim() : '';
-      const lastName = lastNameColNum ? String(row.getCell(lastNameColNum).value || '').trim() : '';
-
-      if (tc.length !== 11) {
-        results.push({ row: rowIdx, tcKimlikNo: tc, firstName, lastName, password: '', status: 'error', error: 'Geçersiz TC formatı (11 hane olmalı)' });
-        continue;
-      }
-
-      const existing = await prisma.user.findUnique({ where: { tcKimlikNo: tc } });
-      if (existing) {
-        results.push({ row: rowIdx, tcKimlikNo: tc, firstName, lastName, password: '', status: 'existing' });
-        continue;
-      }
-
-      let rowCategoryId = scholarshipCategoryId;
-      const profileData: any = {
-        firstName: firstName || '',
-        lastName: lastName || '',
-        studentStatus: 'ACTIVE',
-        isInitialDocsExempt: !isNewStudent,
-      };
-
-      let emailValue: string | null = null;
-
-      for (const [colNum, colDef] of colToMapping.entries()) {
-        if (colDef.section !== 'profile') continue;
-        const cellValue = row.getCell(colNum).value;
-        const parsed = parseExcelCellValue(cellValue, colDef.type);
-        if (parsed !== null && parsed !== undefined) {
-          if (colDef.dbField === 'program' && typeof parsed === 'string' && parsed.trim() !== '') {
-            const cleanProgram = parsed.trim();
-            profileData.program = cleanProgram;
-            const normProgram = normalizeHeader(cleanProgram);
-            if (categoryCache.has(normProgram)) {
-              rowCategoryId = categoryCache.get(normProgram)!;
-            } else {
-              try {
-                const newCat = await prisma.scholarshipCategory.create({ data: { name: cleanProgram, isActive: true } });
-                categoryCache.set(normProgram, newCat.id);
-                rowCategoryId = newCat.id;
-              } catch {
-                const existingCat = await prisma.scholarshipCategory.findFirst({ where: { name: cleanProgram } });
-                if (existingCat) {
-                  categoryCache.set(normProgram, existingCat.id);
-                  rowCategoryId = existingCat.id;
-                }
-              }
-            }
-          } else if (colDef.dbField === 'studentStatus' && typeof parsed === 'string') {
-            const normStatus = normalizeHeader(parsed);
-            if (['aktif', 'active'].includes(normStatus)) profileData.studentStatus = 'ACTIVE';
-            else if (['mezun', 'graduated'].includes(normStatus)) profileData.studentStatus = 'GRADUATED';
-            else if (['pasif', 'passive'].includes(normStatus)) profileData.studentStatus = 'PASSIVE';
-            else if (['tamamlanmadi', 'incomplete'].includes(normStatus)) profileData.studentStatus = 'INCOMPLETE';
-            else profileData.studentStatus = parsed;
-          } else {
-            profileData[colDef.dbField] = parsed;
-          }
-
-          if (colDef.dbField === 'email') emailValue = String(parsed).trim();
-        }
-      }
-
-      profileData.scholarshipCategoryId = rowCategoryId || scholarshipCategoryId || null;
-
-      const password = Math.floor(100000 + Math.random() * 900000).toString();
-      const passwordHash = await bcrypt.hash(password, 10);
-
-      try {
-        if (emailValue) {
-          const existingEmail = await prisma.user.findFirst({ where: { email: emailValue } });
-          if (existingEmail) {
-            emailValue = null;
-            profileData.email = null;
-          }
-        }
-
-        const user = await prisma.user.create({
-          data: {
-            tcKimlikNo: tc,
-            passwordHash,
-            role: Role.STUDENT,
-            isActive: true,
-            forcePasswordChange: true,
-            email: emailValue,
-            studentProfile: { create: profileData },
-          },
-        });
-        results.push({ row: rowIdx, tcKimlikNo: tc, firstName, lastName, password, status: 'created' });
-      } catch (e: any) {
-        results.push({ row: rowIdx, tcKimlikNo: tc, firstName, lastName, password: '', status: 'error', error: e.message || 'Veritabanına eklenemedi' });
-      }
+      const result = await processExcelRow(row, rowIdx, context);
+      if (result) results.push(result);
     }
 
     res.json({
