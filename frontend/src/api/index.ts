@@ -221,8 +221,8 @@ export const adminApi = {
   updatePeriod: (id: string, data: Omit<Partial<DocumentPeriod>, 'categoryIds' | 'grades'> & { categoryIds?: string[]; grades?: number[] }) =>
     api.patch(`/admin/periods/${id}`, data).then((r) => r.data),
 
-  deletePeriod: (id: string) =>
-    api.delete(`/admin/periods/${id}`).then((r) => r.data),
+  deletePeriod: (id: string, force: boolean = false) =>
+    api.delete(`/admin/periods/${id}`, { params: { force } }).then((r) => r.data),
 
   updateSemester: (data: { oldLabel: string; label?: string; semester?: string; academicYear?: string; startDate?: string | null; endDate?: string | null; grades?: number[]; categoryIds?: string[]; isVolunteerFormOpen?: boolean }) =>
     api.patch('/admin/semesters', data).then((r) => r.data),
@@ -284,6 +284,14 @@ export const adminApi = {
 
   listDocumentTypes: () =>
     api.get('/admin/document-types').then((r) => r.data),
+
+  uploadDocumentTypeTemplate: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post<{ templatePath: string; templateName: string }>('/admin/document-types/upload-template', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data);
+  },
 
   createDocumentType: (data: any) =>
     api.post('/admin/document-types', data).then((r) => r.data),

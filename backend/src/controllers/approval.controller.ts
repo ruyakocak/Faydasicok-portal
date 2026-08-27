@@ -178,6 +178,26 @@ export async function approveChange(req: Request, res: Response, next: NextFunct
         }
       }
 
+      // Enhance audit log with student details and document info
+      const profile = await tx.studentProfile.findUnique({
+        where: { id: change.studentProfileId },
+        select: { firstName: true, lastName: true, user: { select: { tcKimlikNo: true, username: true } } }
+      });
+      let studentName = 'Bilinmeyen Öğrenci';
+      if (profile) {
+        if (profile.firstName && profile.lastName) studentName = `${profile.firstName} ${profile.lastName}`;
+        else if (profile.user?.tcKimlikNo) studentName = profile.user.tcKimlikNo;
+        else if (profile.user?.username) studentName = profile.user.username;
+      }
+
+      let richNewValue: any = { studentName, actionValue: change.newValue };
+      if (change.entityType === ApprovableEntityType.DOCUMENT) {
+        richNewValue.documentType = change.fieldName;
+        richNewValue.filePath = change.newValue; // For documents, newValue stores filePath
+      } else {
+        richNewValue.fieldName = change.fieldName;
+      }
+
       // Audit log
       await tx.auditLog.create({
         data: {
@@ -187,7 +207,7 @@ export async function approveChange(req: Request, res: Response, next: NextFunct
           entityId: change.id,
           entityType: 'ApprovableChange',
           oldValue: change.oldValue,
-          newValue: change.newValue,
+          newValue: JSON.stringify(richNewValue),
           approverId: req.user!.userId,
         },
       });
@@ -259,6 +279,26 @@ export async function rejectChange(req: Request, res: Response, next: NextFuncti
         });
       }
 
+      // Enhance audit log with student details and document info
+      const profile = await tx.studentProfile.findUnique({
+        where: { id: change.studentProfileId },
+        select: { firstName: true, lastName: true, user: { select: { tcKimlikNo: true, username: true } } }
+      });
+      let studentName = 'Bilinmeyen Öğrenci';
+      if (profile) {
+        if (profile.firstName && profile.lastName) studentName = `${profile.firstName} ${profile.lastName}`;
+        else if (profile.user?.tcKimlikNo) studentName = profile.user.tcKimlikNo;
+        else if (profile.user?.username) studentName = profile.user.username;
+      }
+
+      let richNewValue: any = { studentName, actionValue: change.newValue, rejectNote: rejectionNote };
+      if (change.entityType === ApprovableEntityType.DOCUMENT) {
+        richNewValue.documentType = change.fieldName;
+        richNewValue.filePath = change.newValue; // For documents, newValue stores filePath
+      } else {
+        richNewValue.fieldName = change.fieldName;
+      }
+
       await tx.auditLog.create({
         data: {
           userId: req.user!.userId,
@@ -267,7 +307,7 @@ export async function rejectChange(req: Request, res: Response, next: NextFuncti
           entityId: change.id,
           entityType: 'ApprovableChange',
           oldValue: change.oldValue,
-          newValue: change.newValue,
+          newValue: JSON.stringify(richNewValue),
           approverId: req.user!.userId,
         },
       });

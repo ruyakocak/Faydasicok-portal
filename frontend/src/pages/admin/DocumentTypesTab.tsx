@@ -33,6 +33,7 @@ export default function DocumentTypesTab() {
     isStatic: boolean;
     isRequired: boolean;
     hasTemplate: boolean;
+    templatePath: string;
     templateName: string;
     order: number;
     customFields: CustomField[];
@@ -45,11 +46,13 @@ export default function DocumentTypesTab() {
     isStatic: false,
     isRequired: true,
     hasTemplate: false,
+    templatePath: '',
     templateName: '',
     order: 0,
     customFields: [],
     categoryIds: [],
   });
+  const [uploadingTemplate, setUploadingTemplate] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -124,6 +127,7 @@ export default function DocumentTypesTab() {
       isStatic: item.isStatic ?? false,
       isRequired: item.isRequired !== false,
       hasTemplate: item.hasTemplate ?? false,
+      templatePath: item.templatePath || '',
       templateName: item.templateName || '',
       order: item.order || 0,
       customFields: parsedFields,
@@ -141,12 +145,41 @@ export default function DocumentTypesTab() {
       isStatic: false,
       isRequired: true,
       hasTemplate: false,
+      templatePath: '',
       templateName: '',
       order: types.length + 1,
       customFields: [],
       categoryIds: [],
     });
     setShowModal(true);
+  }
+
+  async function handleTemplateFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingTemplate(true);
+    try {
+      const res = await adminApi.uploadDocumentTypeTemplate(file);
+      setForm(f => ({
+        ...f,
+        templatePath: res.templatePath,
+        templateName: f.templateName || res.templateName,
+      }));
+      toast.success('Şablon dosyası başarıyla yüklendi.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Şablon dosyası yüklenemedi.');
+    } finally {
+      setUploadingTemplate(false);
+      e.target.value = '';
+    }
+  }
+
+  function handleRemoveTemplate() {
+    setForm(f => ({
+      ...f,
+      templatePath: '',
+      templateName: '',
+    }));
   }
 
   function addField() {
@@ -203,6 +236,7 @@ export default function DocumentTypesTab() {
         isStatic: form.isStatic,
         isRequired: form.isRequired,
         hasTemplate: form.hasTemplate,
+        templatePath: form.templatePath || null,
         templateName: form.templateName || null,
         order: Number(form.order) || 0,
         customFields: JSON.stringify(form.customFields),
@@ -349,9 +383,24 @@ export default function DocumentTypesTab() {
                 <p className="text-xs text-gray-600 mb-3 min-h-[2.5rem] line-clamp-2">{t.description || 'Açıklama belirtilmemiş.'}</p>
                 
                 {t.hasTemplate && (
-                  <div className="mb-3 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-800 flex items-center gap-1.5">
-                    <span>📄</span>
-                    <span className="font-medium text-[11px] truncate">İmzalanacak Şablon: {t.templateName || 'Belirtilmedi'}</span>
+                  <div className="mb-3 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-800 flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span>📄</span>
+                      <span className="font-medium text-[11px] truncate">
+                        İmzalanacak Şablon: {t.templateName || (t.templatePath ? 'Yüklendi' : 'Belirtilmedi')}
+                      </span>
+                    </div>
+                    {t.templatePath && (
+                      <a
+                        href={t.templatePath.startsWith('http') ? t.templatePath : `${import.meta.env.VITE_API_URL || ''}/${t.templatePath.replace(/^\/+/, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        download={t.templateName || `${t.name}_Sablonu`}
+                        className="text-[10px] text-emerald-700 hover:text-emerald-900 underline font-semibold flex-shrink-0"
+                      >
+                        İndir
+                      </a>
+                    )}
                   </div>
                 )}
 
@@ -478,14 +527,86 @@ export default function DocumentTypesTab() {
                   </label>
 
                   {form.hasTemplate && (
-                    <div className="pl-7 pt-2">
-                      <label className="form-label text-xs">Şablon Dosya Adı / Başlığı</label>
-                      <input
-                        className="form-input text-xs"
-                        value={form.templateName}
-                        onChange={e => setForm(f => ({ ...f, templateName: e.target.value }))}
-                        placeholder="Örn: Bursiyer_Taahhutnamesi.pdf"
-                      />
+                    <div className="pl-7 pt-2 space-y-3 bg-white p-3 rounded-lg border border-emerald-200">
+                      <div>
+                        <label className="form-label text-xs font-semibold text-emerald-900 mb-1.5 block">
+                          Şablon Dosyası (Öğrencilerin İndireceği Dosya)
+                        </label>
+                        
+                        {form.templatePath ? (
+                          <div className="flex items-center justify-between p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-lg">
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="text-emerald-700 text-lg">📑</span>
+                              <div>
+                                <p className="text-xs font-semibold text-emerald-900 truncate">
+                                  {form.templateName || 'Yüklenmiş Şablon'}
+                                </p>
+                                <a
+                                  href={form.templatePath.startsWith('http') ? form.templatePath : `${import.meta.env.VITE_API_URL || ''}/${form.templatePath.replace(/^\/+/, '')}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[11px] text-emerald-700 hover:underline inline-flex items-center gap-1"
+                                >
+                                  Önizle / İndir
+                                </a>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="px-2 py-1 text-xs bg-white text-emerald-800 border border-emerald-300 hover:bg-emerald-50 rounded cursor-pointer transition-colors">
+                                Değiştir
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                                  onChange={handleTemplateFileUpload}
+                                  disabled={uploadingTemplate}
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                onClick={handleRemoveTemplate}
+                                className="px-2 py-1 text-xs bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded transition-colors"
+                              >
+                                Kaldır
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <label className={`flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                            uploadingTemplate ? 'bg-gray-100 border-gray-300' : 'bg-emerald-50/40 hover:bg-emerald-50 border-emerald-300'
+                          }`}>
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                              onChange={handleTemplateFileUpload}
+                              disabled={uploadingTemplate}
+                            />
+                            {uploadingTemplate ? (
+                              <div className="flex items-center gap-2 text-xs text-gray-600">
+                                <span className="spinner border-emerald-600/30 border-t-emerald-600 w-4 h-4" />
+                                <span>Şablon yükleniyor...</span>
+                              </div>
+                            ) : (
+                              <>
+                                <svg viewBox="0 0 24 24" className="w-7 h-7 text-emerald-600 mb-1" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                <span className="text-xs font-semibold text-emerald-800">Şablon Dosyası Yüklemek İçin Tıklayın</span>
+                                <span className="text-[11px] text-gray-500 mt-0.5">PDF, Word (.doc, .docx) veya Görsel</span>
+                              </>
+                            )}
+                          </label>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="form-label text-xs">Şablon Başlığı / Dosya Adı</label>
+                        <input
+                          className="form-input text-xs"
+                          value={form.templateName}
+                          onChange={e => setForm(f => ({ ...f, templateName: e.target.value }))}
+                          placeholder="Örn: Bursiyer_Taahhutnamesi.pdf"
+                        />
+                      </div>
                     </div>
                   )}
 

@@ -3,7 +3,7 @@ import { auditApi } from '../../api';
 import type { AuditLog, PaginatedResponse } from '../../types';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
-import { generateActionSummary, tryParseJSON, fieldTranslations, formatValue, actionLabels } from '../../utils/audit';
+import { generateActionSummary, tryParseJSON, fieldTranslations, formatValue, actionLabels, moduleLabels } from '../../utils/audit';
 
 export default function AuditLogPage() {
   const [result, setResult] = useState<PaginatedResponse<AuditLog> | null>(null);
@@ -14,6 +14,7 @@ export default function AuditLogPage() {
   const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -30,6 +31,27 @@ export default function AuditLogPage() {
   }, [moduleFilter, actionFilter, startDate, endDate, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  const renderFieldValue = (key: string, val: any) => {
+    if (val === undefined || val === null || val === '') return '—';
+    if (key === 'filePath' && typeof val === 'string') {
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      const url = val.startsWith('http') ? val : `${baseUrl}/${val.replace(/^\/+/, '')}`;
+      return (
+        <span 
+          className="text-primary-600 font-semibold hover:underline flex items-center gap-1 w-max cursor-pointer"
+          onClick={() => setPreviewUrl(url)}
+        >
+          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          Belgeyi Gör
+        </span>
+      );
+    }
+    if (key === 'rejectNote' && typeof val === 'string') {
+       return <div className="bg-red-50 text-red-700 p-2.5 rounded-lg border border-red-100 text-xs font-medium leading-relaxed max-w-sm">{val}</div>;
+    }
+    return formatValue(key, val);
+  };
 
   // Handle detailed view rendering
   const renderLogDetails = () => {
@@ -54,7 +76,7 @@ export default function AuditLogPage() {
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50 shrink-0">
             <div>
               <h2 className="text-lg font-bold text-gray-900">İşlem Detayları</h2>
-              <p className="text-sm text-gray-500 mt-0.5">{generateActionSummary(selectedLog)}</p>
+              <p className="text-sm text-gray-500 mt-0.5">{generateActionSummary(selectedLog, setPreviewUrl)}</p>
             </div>
             <button onClick={() => setSelectedLog(null)} className="text-gray-400 hover:text-gray-600 transition-colors p-2 -mr-2">
               <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -73,7 +95,7 @@ export default function AuditLogPage() {
               </div>
               <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
                 <span className="block text-xs font-medium text-gray-500 mb-1">İşlem / Modül</span>
-                <span className="font-semibold text-gray-900">{actionLabels[selectedLog.action] || selectedLog.action} / {selectedLog.module}</span>
+                <span className="font-semibold text-gray-900">{actionLabels[selectedLog.action] || selectedLog.action} / {moduleLabels[selectedLog.module] || selectedLog.module}</span>
               </div>
               <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
                 <span className="block text-xs font-medium text-gray-500 mb-1">Onaylayan (Varsa)</span>
@@ -95,9 +117,9 @@ export default function AuditLogPage() {
                   {keys.map((k) => (
                     <tr key={k} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-2.5 font-medium text-gray-900">{fieldTranslations[k] || k}</td>
-                      <td className="px-4 py-2.5 text-gray-500 break-all">{formatValue(k, oldObj[k])}</td>
+                      <td className="px-4 py-2.5 text-gray-500 break-all">{renderFieldValue(k, oldObj[k])}</td>
                       <td className={`px-4 py-2.5 break-all ${newObj[k] !== oldObj[k] ? 'text-primary-600 font-medium' : 'text-gray-500'}`}>
-                        {formatValue(k, newObj[k])}
+                        {renderFieldValue(k, newObj[k])}
                       </td>
                     </tr>
                   ))}
@@ -113,6 +135,67 @@ export default function AuditLogPage() {
           
           <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end shrink-0">
             <button onClick={() => setSelectedLog(null)} className="btn-secondary">Kapat</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderDocumentViewerModal = () => {
+    if (!previewUrl) return null;
+    const isPdf = previewUrl.toLowerCase().endsWith('.pdf');
+    const isImage = previewUrl.match(/\.(jpeg|jpg|gif|png)$/i);
+
+    return (
+      <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">
+        <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-sm" onClick={() => setPreviewUrl(null)} />
+        
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] overflow-hidden flex flex-col relative transform animate-scale-in">
+          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 shrink-0">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <svg viewBox="0 0 24 24" className="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                Belge Önizleme
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5 ml-7">
+                Değişiklik Geçmişi Arşivi
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <a href={previewUrl} download="Belge" className="text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
+                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                İndir
+              </a>
+              <a href={previewUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
+                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                Yeni Sekme
+              </a>
+              <button onClick={() => setPreviewUrl(null)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto bg-gray-100 flex flex-col relative min-h-0">
+            {isPdf ? (
+              <iframe src={previewUrl} className="absolute inset-0 w-full h-full border-0" title="PDF Önizleme" />
+            ) : isImage ? (
+              <div className="flex items-center justify-center p-6 h-full">
+                <img src={previewUrl} alt="Belge Önizleme" className="max-w-full max-h-full rounded-lg shadow-md object-contain" />
+              </div>
+            ) : (
+              <div className="text-center mt-20">
+                <p className="text-gray-500 mb-4">Bu dosya türü doğrudan önizlenemiyor.</p>
+                <div className="flex items-center justify-center gap-3">
+                  <a href={previewUrl} download="Belge" className="btn-primary">
+                    Belgeyi İndir
+                  </a>
+                  <a href={previewUrl} target="_blank" rel="noreferrer" className="btn-secondary">
+                    Yeni Sekmede Aç
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -200,7 +283,7 @@ export default function AuditLogPage() {
                       <span className="badge-gray text-xs">{log.user?.role}</span>
                     </td>
                     <td className="text-sm text-gray-800 font-medium">
-                      {generateActionSummary(log)}
+                      {generateActionSummary(log, setPreviewUrl)}
                     </td>
                     <td className="text-right pr-6">
                       <button 
@@ -231,6 +314,7 @@ export default function AuditLogPage() {
       </div>
 
       {renderLogDetails()}
+      {renderDocumentViewerModal()}
     </div>
   );
 }

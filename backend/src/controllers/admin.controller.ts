@@ -843,7 +843,7 @@ export async function deleteSemester(req: Request, res: Response, next: NextFunc
         module: 'Semester',
         entityId: label,
         entityType: 'DocumentPeriodGroup',
-        newValue: JSON.stringify({ deleted: true, count: periods.length, forceDeletedDocs: documentCount }),
+        newValue: JSON.stringify({ deleted: true, periodLabel: label, count: periods.length, deletedDocsCount: documentCount, forceDeleted: documentCount > 0 }),
       },
     });
 
@@ -942,6 +942,7 @@ export async function updateSemester(req: Request, res: Response, next: NextFunc
 export async function deletePeriod(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
+    const force = req.query.force === 'true';
 
     // Check if any documents belong to this period
     const documentCount = await prisma.document.count({
@@ -949,7 +950,38 @@ export async function deletePeriod(req: Request, res: Response, next: NextFuncti
     });
 
     if (documentCount > 0) {
-      throw new AppError(400, 'Bu belge talebine yüklenmiş öğrenci belgeleri bulunmaktadır. Önce bu belgeleri silmeli veya talebi kapatmalısınız.');
+      if (!force) {
+        throw new AppError(400, 'Bu belge talebine yüklenmiş öğrenci belgeleri bulunmaktadır. Önce bu belgeleri silmeli veya zorla silme seçeneğini işaretlemelisiniz.');
+      }
+
+      // Find documents to delete files from storage
+      const documents = await prisma.document.findMany({
+        where: { periodId: id },
+        select: { id: true, filePath: true }
+      });
+
+      const docIds = documents.map(d => d.id);
+
+      // Delete files from storage
+      for (const doc of documents) {
+        if (doc.filePath) {
+          try {
+            await storageService.delete(doc.filePath);
+          } catch (err) {
+            console.error(`Belge silinemedi (ID: ${doc.id}, Yol: ${doc.filePath}):`, err);
+          }
+        }
+      }
+
+      // Delete ApprovableChanges
+      await prisma.approvableChange.deleteMany({
+        where: { documentId: { in: docIds } }
+      });
+
+      // Delete Documents
+      await prisma.document.deleteMany({
+        where: { periodId: id }
+      });
     }
 
     const period = await prisma.documentPeriod.delete({
@@ -963,7 +995,13 @@ export async function deletePeriod(req: Request, res: Response, next: NextFuncti
         module: 'DocumentPeriod',
         entityId: period.id,
         entityType: 'DocumentPeriod',
-        newValue: JSON.stringify({ deleted: true, label: period.label, type: period.type }),
+        newValue: JSON.stringify({
+          deleted: true,
+          periodLabel: period.label,
+          documentType: period.type,
+          deletedDocsCount: documentCount,
+          forceDeleted: documentCount > 0
+        }),
       },
     });
 
@@ -1894,6 +1932,19 @@ export async function initStandardDocumentTypes(req: Request, res: Response, nex
     });
 
     res.json({ message: 'Standart belge türleri oluşturuldu ve mevcut bursiyerler muaf olarak işaretlendi.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function uploadDocumentTemplate(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!req.file) throw new AppError(400, 'Şablon dosyası bulunamadı.');
+    const stored = await storageService.save(req.file.buffer, req.file.originalname, req.file.mimetype);
+    res.json({
+      templatePath: stored.filePath,
+      templateName: stored.originalFileName,
+    });
   } catch (err) {
     next(err);
   }

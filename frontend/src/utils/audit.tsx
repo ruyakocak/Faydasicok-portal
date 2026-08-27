@@ -1,6 +1,5 @@
 import type { AuditLog } from '../types';
 import React from 'react';
-import { Link } from 'react-router-dom';
 
 export const actionLabels: Record<string, string> = {
   CREATE: 'Oluşturuldu',
@@ -85,6 +84,21 @@ export const fieldTranslations: Record<string, string> = {
   fatherIncome: 'Baba Geliri',
   motherIncome: 'Anne Geliri',
   homeOwnership: 'Ev Durumu',
+  
+  // New Enhanced Log Fields
+  filePath: 'Dosya / Belge',
+  studentName: 'İlgili Öğrenci',
+  documentType: 'Belge Türü',
+  rejectNote: 'Ret Sebebi (Not)',
+  periodLabel: 'Dönem Adı',
+  actionValue: 'Gerçekleşen Değer',
+  deletedDocsCount: 'Silinen Öğrenci Evrak Sayısı',
+  forceDeletedDocs: 'Zorla Silinen Evrak Sayısı',
+  forceDeleted: 'Zorla (Kalıcı) Silme',
+  sentCount: 'Başarıyla Gönderilen Hatırlatma',
+  totalRequested: 'Seçilen Hedef Kişi Sayısı',
+  isBulkReminder: 'Toplu Hatırlatma İşlemi',
+  retentionYears: 'Veri Saklama Süresi (Yıl)',
 };
 
 export function formatValue(key: string, val: any) {
@@ -105,38 +119,25 @@ export function tryParseJSON(val: string | null | undefined) {
   }
 }
 
-export function generateActionSummary(log: AuditLog): React.ReactNode {
+export function generateActionSummary(log: AuditLog, onPreview?: (url: string) => void): React.ReactNode {
   const newVal = tryParseJSON(log.newValue);
   const isStudent = log.user?.role === 'STUDENT';
-  
-  let studentName: React.ReactNode = 'Bir kullanıcı';
-  if (isStudent) {
-    if (log.user?.studentProfile?.id) {
-      const nameText = log.user.studentProfile.firstName 
-        ? `${log.user.studentProfile.firstName} ${log.user.studentProfile.lastName}`
-        : log.user.tcKimlikNo || log.user.username || 'Öğrenci';
-      studentName = <Link to={`/admin/students/${log.user.studentProfile.id}`} className="text-gray-900 font-semibold hover:underline">{nameText}</Link>;
-    } else {
-      studentName = log.user?.tcKimlikNo || log.user?.username || 'Bir kullanıcı';
-    }
-  }
+  const studentName = newVal?.studentName || log.user?.tcKimlikNo || 'Bilinmeyen Öğrenci';
+  const adminName = log.user?.username || log.user?.email;
 
-  const adminName = !isStudent 
-    ? (log.user?.username || log.user?.email || 'Sistem Yöneticisi') 
-    : null;
-  
   if (log.module === 'DocumentPeriod') {
-    if (log.action === 'CREATE') return `Yeni dönem oluşturuldu${newVal?.label ? ` (${newVal.label})` : ''}`;
+    if (log.action === 'CREATE') return `Yeni evrak talebi açıldı${newVal?.label ? ` (${newVal.label})` : ''}`;
+    if (log.action === 'DELETE') return `${newVal?.periodLabel || 'Bir dönem'} için "${newVal?.documentType || 'Evrak Talebi'}" kalıcı olarak silindi.`;
     if (log.action === 'UPDATE') {
-      if (newVal?.isOpen === true) return 'Dönem erişime açıldı';
-      if (newVal?.isOpen === false) return 'Dönem erişime kapatıldı';
-      return 'Dönem bilgileri güncellendi';
+      if (newVal?.isOpen === true) return 'Evrak talebi erişime açıldı';
+      if (newVal?.isOpen === false) return 'Evrak talebi erişime kapatıldı';
+      return 'Evrak talebi güncellendi';
     }
   }
   
-  if (log.module === 'Semester') {
+  if (log.module === 'Semester' || log.module === 'DocumentPeriodGroup') {
     if (log.action === 'UPDATE') return 'Dönem grubu (Semester) güncellendi';
-    if (log.action === 'DELETE') return 'Dönem grubu silindi';
+    if (log.action === 'DELETE') return `${newVal?.periodLabel || 'Bir dönem'} tüm evraklarıyla birlikte kalıcı olarak silindi.`;
   }
 
   if (log.module === 'Auth' || log.module === 'User') {
@@ -148,7 +149,17 @@ export function generateActionSummary(log: AuditLog): React.ReactNode {
     if (log.action === 'CREATE') return 'Öğrenci hesabı oluşturuldu';
     if (log.action === 'UPDATE') {
       if (log.newValue === 'Photo Updated') return 'Öğrenci fotoğrafı güncellendi';
+      if (newVal?.isBulkReminder) return `${newVal.totalRequested || 'Tüm'} öğrenciye toplu evrak hatırlatma e-postası gönderildi.`;
       return 'Öğrenci profili güncellendi';
+    }
+  }
+
+  if (log.module === 'Settings') {
+    if (log.action === 'UPDATE') {
+      if (log.entityId === 'smtp_settings') return 'E-posta (SMTP) ayarları güncellendi.';
+      if (log.entityId === 'retention_years') return 'Veri saklama süresi (Retention) güncellendi.';
+      if (log.entityId === 'VOLUNTEER_FORM_SCHEMA') return 'Gönüllülük formu şablon ayarları güncellendi.';
+      return 'Sistem ayarları güncellendi.';
     }
   }
   
@@ -156,17 +167,37 @@ export function generateActionSummary(log: AuditLog): React.ReactNode {
     if (log.action === 'CREATE') return <>{isStudent ? studentName : (adminName || 'Bir kullanıcı')}, sisteme yeni bir Gönüllülük Formu doldurdu.</>;
   }
 
+  const renderLink = (text: string, path: string) => {
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+    const url = path.startsWith('http') ? path : `${baseUrl}/${path.replace(/^\/+/, '')}`;
+    return (
+      <span 
+        className="text-primary-600 font-semibold hover:underline cursor-pointer" 
+        onClick={(e) => {
+          e.stopPropagation();
+          if (onPreview) { e.preventDefault(); onPreview(url); }
+          else { window.open(url, '_blank'); }
+        }}
+      >
+        {text}
+      </span>
+    );
+  };
+
   if (log.module === 'Document' || log.action === 'UPLOAD') {
-    return <>{isStudent ? studentName : (adminName || 'Bir kullanıcı')}, sisteme yeni bir evrak yükledi.</>;
+    const docText = newVal?.documentType || newVal?.raw || 'yeni bir evrak';
+    const docNode = newVal?.filePath ? renderLink(docText, newVal.filePath) : `"${docText}"`;
+    return <>{isStudent ? studentName : (adminName || 'Bir kullanıcı')}, sisteme {docNode} yükledi.</>;
   }
   
   if (log.module === 'DOCUMENT' || log.module === 'ApprovableChange') {
-    if (log.action === 'APPROVE') return <>{isStudent ? <>{studentName} profili veya evrakı onaylandı.</> : `${adminName} bir işlemi onayladı.`}</>;
-    if (log.action === 'REJECT') return <>{isStudent ? <>{studentName} profili veya evrakı reddedildi.</> : `${adminName} bir işlemi reddetti.`}</>;
+    const docText = newVal?.documentType || newVal?.raw || 'evrakı/profili';
+    const docNode = newVal?.filePath ? renderLink(docText, newVal.filePath) : docText;
+      
+    if (log.action === 'APPROVE') return <>{newVal?.studentName || studentName} kişisinin {docNode} onaylandı.</>;
+    if (log.action === 'REJECT') return <>{newVal?.studentName || studentName} kişisinin {docNode} reddedildi.</>;
   }
 
   const actionStr = actionLabels[log.action] || log.action;
-  const moduleStr = moduleLabels[log.module] || log.module;
-
-  return `${actionStr} (${moduleStr})`;
+  return `${isStudent ? studentName : (adminName || 'Bir kullanıcı')}, sisteme ${actionStr} işlemi yaptı.`;
 }

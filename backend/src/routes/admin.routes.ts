@@ -35,6 +35,7 @@ import {
   updateDocumentType,
   deleteDocumentType,
   initStandardDocumentTypes,
+  uploadDocumentTemplate,
   listScholarshipCategories,
   createScholarshipCategory,
   updateScholarshipCategory,
@@ -92,6 +93,7 @@ adminRouter.post('/semesters/delete', requireAdmin, deleteSemester);
 // Document Type Configs — admin only
 adminRouter.get('/document-types', requireAdminOrReviewer, listDocumentTypes);
 adminRouter.post('/document-types/init-standard', requireAdmin, initStandardDocumentTypes);
+adminRouter.post('/document-types/upload-template', requireAdmin, upload.single('file'), uploadDocumentTemplate);
 adminRouter.post('/document-types', requireAdmin, createDocumentType);
 adminRouter.patch('/document-types/:id', requireAdmin, updateDocumentType);
 adminRouter.delete('/document-types/:id', requireAdmin, deleteDocumentType);

@@ -829,6 +829,20 @@ export function DocumentsTab({ profile, documents, periods, onUpload, readOnly }
     : 100;
 
   function handleDownloadTemplate(dt: any) {
+    if (dt.templatePath) {
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      const fileUrl = dt.templatePath.startsWith('http') ? dt.templatePath : `${baseUrl}/${dt.templatePath.replace(/^\/+/, '')}`;
+      const a = document.createElement('a');
+      a.href = fileUrl;
+      a.download = dt.templateName || `${dt.name}_Sablonu`;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success('Şablon belgesi indiriliyor...');
+      return;
+    }
+
     const isTaahhut = dt.code === 'TAAHHUTNAME';
     const isAydinlatma = dt.code === 'AYDINLATMA_METNI';
 
@@ -1146,6 +1160,18 @@ _____________________________
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      {dt.hasTemplate && (
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadTemplate(dt)}
+                          className="btn-secondary btn-sm text-xs flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100"
+                          title="İmzalanacak boş şablonu indirir"
+                        >
+                          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+                          Şablonu İndir
+                        </button>
+                      )}
+
                       {!readOnly && period && isOpen && (
                         <PeriodUploadButton
                           periods={[period]}
@@ -1153,6 +1179,7 @@ _____________________________
                           docType={dt}
                           onUploaded={onUpload}
                           isUploaded={isUploaded}
+                          onDownloadTemplate={() => handleDownloadTemplate(dt)}
                         />
                       )}
                     </div>
@@ -1174,6 +1201,7 @@ _____________________________
             setActiveUploadDocType(null);
             onUpload?.();
           }}
+          onDownloadTemplate={() => handleDownloadTemplate(activeUploadDocType)}
         />
       )}
 
@@ -1252,11 +1280,12 @@ _____________________________
   );
 }
 
-function StaticUploadModal({ docType, profileId, onClose, onUploaded }: {
+function StaticUploadModal({ docType, profileId, onClose, onUploaded, onDownloadTemplate }: {
   docType: any;
   profileId: string;
   onClose: () => void;
   onUploaded: () => void;
+  onDownloadTemplate?: () => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1302,6 +1331,26 @@ function StaticUploadModal({ docType, profileId, onClose, onUploaded }: {
           {docType.description && (
             <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-900">
               {docType.description}
+            </div>
+          )}
+
+          {docType.hasTemplate && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-emerald-900 min-w-0">
+                <span className="text-lg">📑</span>
+                <div className="truncate">
+                  <p className="font-semibold truncate">İmzalanacak Hazır Şablon</p>
+                  <p className="text-[11px] text-emerald-700 truncate">{docType.templateName || 'Şablon Belgesi'}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onDownloadTemplate}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors shadow-2xs"
+              >
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+                Şablonu İndir
+              </button>
             </div>
           )}
 
@@ -1409,12 +1458,13 @@ function DocumentTable({ docs, docType, onShowRejectionNote }: { docs: DocFile[]
   );
 }
 
-function PeriodUploadButton({ periods = [], profileId, docType, onUploaded, isUploaded }: {
+function PeriodUploadButton({ periods = [], profileId, docType, onUploaded, isUploaded, onDownloadTemplate }: {
   periods?: DocumentPeriod[];
   profileId: string;
   docType: any;
   onUploaded?: () => void;
   isUploaded?: boolean;
+  onDownloadTemplate?: () => void;
 }) {
   const openPeriods = periods.filter(p => p.isOpen);
   const [open, setOpen] = useState(false);
@@ -1461,6 +1511,26 @@ function PeriodUploadButton({ periods = [], profileId, docType, onUploaded, isUp
             </button>
           </div>
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
+            {docType.hasTemplate && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs text-emerald-900 min-w-0">
+                  <span className="text-lg">📑</span>
+                  <div className="truncate">
+                    <p className="font-semibold truncate">İmzalanacak Hazır Şablon</p>
+                    <p className="text-[11px] text-emerald-700 truncate">{docType.templateName || 'Şablon Belgesi'}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onDownloadTemplate}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors shadow-2xs"
+                >
+                  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+                  Şablonu İndir
+                </button>
+              </div>
+            )}
+
             <div>
               <label className="form-label text-xs">Yüklenecek Dönem <span className="text-primary-500">*</span></label>
               <select className="form-select text-xs" value={selectedPeriodId} onChange={e => setSelectedPeriodId(e.target.value)} required>

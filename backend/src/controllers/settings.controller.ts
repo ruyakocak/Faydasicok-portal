@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import nodemailer from 'nodemailer';
+import { AuditAction } from '../types/enums';
 
 const prisma = new PrismaClient();
 
@@ -33,11 +34,28 @@ export const saveSmtpSettings = async (req: Request, res: Response) => {
 
     const newSettings = { host, port, user, pass, from, secure };
 
+    const oldSetting = await prisma.systemSetting.findUnique({ where: { key: 'smtp_settings' } });
+    const oldValue = oldSetting ? JSON.parse(oldSetting.value) : null;
+    
     await prisma.systemSetting.upsert({
       where: { key: 'smtp_settings' },
       update: { value: JSON.stringify(newSettings) },
       create: { key: 'smtp_settings', value: JSON.stringify(newSettings) }
     });
+
+    if (req.user) {
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: AuditAction.UPDATE,
+          module: 'Settings',
+          entityId: 'smtp_settings',
+          entityType: 'SystemSetting',
+          oldValue: oldValue ? JSON.stringify(oldValue) : null,
+          newValue: JSON.stringify(newSettings)
+        }
+      });
+    }
 
     res.status(200).json({ message: 'E-posta ayarları başarıyla kaydedildi.' });
   } catch (error) {
@@ -70,11 +88,27 @@ export const saveRetentionSettings = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Geçerli bir yıl giriniz.' });
     }
 
+    const oldSetting = await prisma.systemSetting.findUnique({ where: { key: 'retention_years' } });
+    
     await prisma.systemSetting.upsert({
       where: { key: 'retention_years' },
       update: { value: retentionYears.toString() },
       create: { key: 'retention_years', value: retentionYears.toString() }
     });
+
+    if (req.user) {
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: AuditAction.UPDATE,
+          module: 'Settings',
+          entityId: 'retention_years',
+          entityType: 'SystemSetting',
+          oldValue: oldSetting ? JSON.stringify({ retentionYears: oldSetting.value }) : null,
+          newValue: JSON.stringify({ retentionYears: retentionYears.toString() })
+        }
+      });
+    }
 
     res.status(200).json({ message: 'Veri saklama süresi başarıyla kaydedildi.' });
   } catch (error) {
@@ -192,11 +226,28 @@ export const saveVolunteerFormSchema = async (req: Request, res: Response) => {
   try {
     const { fields, documents } = req.body;
     const value = JSON.stringify({ fields: fields || [], documents: documents || [] });
+    const oldSetting = await prisma.systemSetting.findUnique({ where: { key: 'VOLUNTEER_FORM_SCHEMA' } });
+    
     await prisma.systemSetting.upsert({
       where: { key: 'VOLUNTEER_FORM_SCHEMA' },
       update: { value },
       create: { key: 'VOLUNTEER_FORM_SCHEMA', value }
     });
+
+    if (req.user) {
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: 'UPDATE',
+          module: 'Settings',
+          entityId: 'VOLUNTEER_FORM_SCHEMA',
+          entityType: 'SystemSetting',
+          oldValue: oldSetting ? oldSetting.value : null,
+          newValue: value
+        }
+      });
+    }
+
     res.status(200).json({ message: 'Form ayarları kaydedildi.' });
   } catch (error) {
     res.status(500).json({ error: 'Form ayarları kaydedilirken hata oluştu.' });

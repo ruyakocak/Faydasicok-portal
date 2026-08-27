@@ -59,6 +59,9 @@ export default function PeriodsTab() {
   // Single period delete state
   const [deletePeriodId, setDeletePeriodId] = useState<string | null>(null);
   const [deletingPeriod, setDeletingPeriod] = useState(false);
+  const [forceDeletePeriod, setForceDeletePeriod] = useState(false);
+
+  const [forceDeleteSemester, setForceDeleteSemester] = useState(false);
 
   // Single period add modal state
   const [showAddPeriod, setShowAddPeriod] = useState(false);
@@ -244,15 +247,11 @@ export default function PeriodsTab() {
     }
   }
 
-  function handleDeleteSemesterClick(label: string) {
-    setDeleteSemesterLabel(label);
-  }
-
   async function confirmDeleteSemester() {
     if (!deleteSemesterLabel) return;
     setDeletingSemester(true);
     try {
-      await adminApi.deleteSemester(deleteSemesterLabel);
+      await adminApi.deleteSemester(deleteSemesterLabel, forceDeleteSemester);
       toast.success('Dönem tüm evraklarıyla birlikte başarıyla silindi.');
       const data = await adminApi.listPeriods();
       setPeriods(data);
@@ -314,8 +313,8 @@ export default function PeriodsTab() {
     if (!deletePeriodId) return;
     setDeletingPeriod(true);
     try {
-      await adminApi.deletePeriod(deletePeriodId);
-      toast.success('Evrak talebi bu dönemden başarıyla kaldırıldı.');
+      await adminApi.deletePeriod(deletePeriodId, forceDeletePeriod);
+      toast.success('Evrak talebi ve tüm ilişkili belgeler başarıyla kaldırıldı.');
       setDeletePeriodId(null);
       await load();
     } catch (err: any) {
@@ -469,7 +468,10 @@ export default function PeriodsTab() {
                           Dönemi Düzenle
                         </button>
                         <button
-                          onClick={() => handleDeleteSemesterClick(selectedSemester)}
+                          onClick={() => {
+                            setDeleteSemesterLabel(selectedSemester);
+                            setForceDeleteSemester(false);
+                          }}
                           className="btn-secondary btn-sm px-3.5 py-2 font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100 flex items-center gap-1"
                         >
                           <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -650,7 +652,10 @@ export default function PeriodsTab() {
                                     <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                   </button>
                                   <button
-                                    onClick={() => setDeletePeriodId(period.id)}
+                                    onClick={() => {
+                                      setDeletePeriodId(period.id);
+                                      setForceDeletePeriod(false);
+                                    }}
                                     className="p-1.5 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-600 transition-colors"
                                     title="Talebi Sil"
                                   >
@@ -870,14 +875,37 @@ export default function PeriodsTab() {
             </div>
 
             {/* Body */}
-            <div className="p-6">
-              <p className="text-sm text-gray-700 mb-4">
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-700">
                 <strong>"{deleteSemesterLabel}"</strong> isimli tüm dönemi ve bu döneme ait evrak isteklerini silmek istediğinize emin misiniz?
               </p>
-              <p className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100">
-                <span className="font-semibold text-amber-600 block mb-1">DİKKAT:</span>
-                Eğer bu döneme daha önce yüklenmiş öğrenci evrakları varsa, sistem veri kaybını önlemek için silme işlemine izin vermeyecektir.
-              </p>
+              
+              <div className="bg-red-50 p-4 rounded-xl border border-red-200">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 text-red-600">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-red-800 text-sm mb-1">DİKKAT: GERİ ALINAMAZ İŞLEM</h4>
+                    <p className="text-xs text-red-700 leading-relaxed mb-3">
+                      Eğer bu döneme daha önce yüklenmiş öğrenci evrakları varsa, normalde sistem veri kaybını önlemek için silme işlemine izin vermez. Ancak aşağıdaki kutucuğu işaretleyerek bu döneme ait <strong>yüklenmiş tüm belgeleri, dosyaları ve geçmişi kalıcı olarak silebilirsiniz.</strong>
+                    </p>
+                    <label className="flex items-start gap-2 cursor-pointer bg-white/50 p-2 rounded-lg border border-red-100 hover:bg-white transition-colors">
+                      <input 
+                        type="checkbox" 
+                        className="mt-0.5 rounded border-red-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                        checked={forceDeleteSemester}
+                        onChange={(e) => setForceDeleteSemester(e.target.checked)}
+                      />
+                      <span className="text-xs font-bold text-red-900 leading-snug">
+                        Tüm riskleri anladım. Dönemi ve içindeki TÜM belgeleri kalıcı olarak silmek istiyorum.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Actions */}
@@ -1013,14 +1041,37 @@ export default function PeriodsTab() {
               </button>
             </div>
 
-            <div className="p-6">
-              <p className="text-sm text-gray-700 mb-4">
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-700">
                 Bu belge talebini bu dönemden kaldırmak istediğinize emin misiniz? Öğrenciler artık bu dönem için bu belgeyi yükleyemeyecektir.
               </p>
-              <p className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100">
-                <span className="font-semibold text-amber-600 block mb-1">DİKKAT:</span>
-                Eğer bu talebe ait öğrencilerin yüklediği onaylı/bekleyen belgeler varsa silme işlemine izin verilmeyecektir.
-              </p>
+              
+              <div className="bg-red-50 p-4 rounded-xl border border-red-200">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 text-red-600">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-red-800 text-sm mb-1">DİKKAT: GERİ ALINAMAZ İŞLEM</h4>
+                    <p className="text-xs text-red-700 leading-relaxed mb-3">
+                      Eğer bu talebe ait öğrencilerin yüklediği evraklar varsa, normalde sistem veri kaybını önlemek için silme işlemine izin vermez. Ancak aşağıdaki kutucuğu işaretleyerek bu talebe ait <strong>yüklenmiş tüm belgeleri, dosyaları ve geçmişi kalıcı olarak silebilirsiniz.</strong>
+                    </p>
+                    <label className="flex items-start gap-2 cursor-pointer bg-white/50 p-2 rounded-lg border border-red-100 hover:bg-white transition-colors">
+                      <input 
+                        type="checkbox" 
+                        className="mt-0.5 rounded border-red-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                        checked={forceDeletePeriod}
+                        onChange={(e) => setForceDeletePeriod(e.target.checked)}
+                      />
+                      <span className="text-xs font-bold text-red-900 leading-snug">
+                        Tüm riskleri anladım. Talebi ve yüklenmiş TÜM belgeleri kalıcı olarak silmek istiyorum.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">

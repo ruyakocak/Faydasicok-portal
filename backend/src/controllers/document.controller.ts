@@ -146,6 +146,29 @@ async function saveDocumentWithApproval(
     },
   });
 
+  // Fetch student profile and period details for rich logging
+  const profileDetails = await prisma.studentProfile.findUnique({
+    where: { id: profileId },
+    select: { firstName: true, lastName: true, user: { select: { tcKimlikNo: true, username: true } } }
+  });
+
+  let studentName = 'Bilinmeyen Öğrenci';
+  if (profileDetails) {
+    if (profileDetails.firstName && profileDetails.lastName) {
+      studentName = `${profileDetails.firstName} ${profileDetails.lastName}`;
+    } else if (profileDetails.user?.tcKimlikNo) {
+      studentName = profileDetails.user.tcKimlikNo;
+    } else if (profileDetails.user?.username) {
+      studentName = profileDetails.user.username;
+    }
+  }
+
+  let periodLabel = '';
+  if (docData.periodId) {
+    const period = await prisma.documentPeriod.findUnique({ where: { id: docData.periodId } });
+    if (period) periodLabel = period.label;
+  }
+
   // Audit log
   await prisma.auditLog.create({
     data: {
@@ -154,7 +177,12 @@ async function saveDocumentWithApproval(
       module: 'Document',
       entityId: document.id,
       entityType: 'Document',
-      newValue: docData.type,
+      newValue: JSON.stringify({
+        documentType: docData.type,
+        studentName,
+        filePath: stored.filePath,
+        periodLabel
+      }),
     },
   });
 
